@@ -46,7 +46,7 @@ services:
       SERVER_PORT: 8000
       IMAGE_VECTORIZE_URL: http://host.docker.internal:9000/vectorize
       QDRANT_URL: http://host.docker.internal:6333
-    command: sh -lc "sed -i 's|^DB_HOST=.*|DB_HOST=db|' .env && sed -i 's|^DB_PORT=.*|DB_PORT=5432|' .env && sed -i 's|^QDRANT_URL=.*|QDRANT_URL=http://host.docker.internal:6333|' .env && sed -i 's|^IMAGE_VECTORIZE_URL=.*|IMAGE_VECTORIZE_URL=http://host.docker.internal:9000/vectorize|' .env && rm -rf public/storage && php artisan storage:link && php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+    command: sh -lc "sed -i 's|^DB_HOST=.*|DB_HOST=db|' .env && sed -i 's|^DB_PORT=.*|DB_PORT=5432|' .env && sed -i 's|^DB_DATABASE=.*|DB_DATABASE=fitandsleek_v2|' .env && sed -i 's|^DB_USERNAME=.*|DB_USERNAME=postgres|' .env && sed -i 's|^DB_PASSWORD=.*|DB_PASSWORD=Norng@123|' .env && sed -i 's|^DB_SSLMODE=.*|DB_SSLMODE=disable|' .env && sed -i 's|^QDRANT_URL=.*|QDRANT_URL=http://host.docker.internal:6333|' .env && sed -i 's|^IMAGE_VECTORIZE_URL=.*|IMAGE_VECTORIZE_URL=http://host.docker.internal:9000/vectorize|' .env && rm -rf public/storage && php artisan storage:link && php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
     networks:
       - default
       - fitandsleek_fullstack_default
@@ -56,6 +56,7 @@ services:
       # Sync PHP source from host (AVIF validation, etc.) without replacing vendor/ from the image
       - ./backend/app:/var/www/html/app
       - ./backend/routes:/var/www/html/routes
+      - ./backend/public:/var/www/html/public
       - ./backend/storage/app/public:/var/www/html/storage/app/public
 
   frontend:

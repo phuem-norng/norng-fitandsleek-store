@@ -9,7 +9,9 @@ const emptyForm = {
   slug: "",
   sort_order: 0,
   is_active: true,
+  logo_source: "local",
   logo: null,
+  logo_url: "",
 };
 
 export default function AdminBrands() {
@@ -93,11 +95,11 @@ export default function AdminBrands() {
   };
 
   const onPickFile = (file) => {
-    setForm((p) => ({ ...p, logo: file }));
+    setForm((p) => ({ ...p, logo: file, logo_source: "local" }));
   };
 
   const onPickFileEdit = (file) => {
-    setEditing((p) => ({ ...p, logo: file }));
+    setEditing((p) => ({ ...p, logo: file, logo_source: "local" }));
   };
 
   const create = async (e) => {
@@ -118,8 +120,13 @@ export default function AdminBrands() {
       if (form.slug) fd.append("slug", form.slug);
       fd.append("sort_order", String(form.sort_order ?? 0));
       fd.append("is_active", form.is_active ? "1" : "0");
-      if (!form.logo) throw new Error("Logo is required");
-      fd.append("logo", form.logo);
+      if (form.logo_source === "url") {
+        if (!form.logo_url?.trim()) throw new Error("Logo URL is required");
+        fd.append("logo_url", form.logo_url.trim());
+      } else {
+        if (!form.logo) throw new Error("Logo is required");
+        fd.append("logo", form.logo);
+      }
 
       const response = await api.post("/admin/brands", fd, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -165,6 +172,7 @@ export default function AdminBrands() {
       sort_order: b.sort_order ?? 0,
       is_active: !!b.is_active,
       logo_url: b.logo_url || null,
+      logo_source: b.logo_url && /^https?:\/\//i.test(b.logo_url) ? "url" : "local",
       logo: null,
     });
   };
@@ -178,7 +186,12 @@ export default function AdminBrands() {
       if (editing.slug) fd.append("slug", editing.slug);
       fd.append("sort_order", String(editing.sort_order ?? 0));
       fd.append("is_active", editing.is_active ? "1" : "0");
-      if (editing.logo) fd.append("logo", editing.logo);
+      if (editing.logo_source === "url") {
+        if (!editing.logo_url?.trim()) throw new Error("Logo URL is required");
+        fd.append("logo_url", editing.logo_url.trim());
+      } else if (editing.logo) {
+        fd.append("logo", editing.logo);
+      }
       // Laravel apiResource uses PUT/PATCH. We use POST + _method for multipart.
       fd.append("_method", "PATCH");
 
@@ -214,14 +227,16 @@ export default function AdminBrands() {
   };
 
   const previewCreate = useMemo(() => {
+    if (form.logo_source === "url" && form.logo_url) return form.logo_url;
     if (!form.logo) return null;
     return URL.createObjectURL(form.logo);
-  }, [form.logo]);
+  }, [form.logo, form.logo_source, form.logo_url]);
 
   const previewEdit = useMemo(() => {
+    if (editing?.logo_source === "url" && editing?.logo_url) return editing.logo_url;
     if (!editing?.logo) return null;
     return URL.createObjectURL(editing.logo);
-  }, [editing?.logo]);
+  }, [editing?.logo, editing?.logo_source, editing?.logo_url]);
 
   const fullSortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -510,14 +525,45 @@ export default function AdminBrands() {
 
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo (PNG/JPG/WebP)</label>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={(e) => onPickFile(e.target.files?.[0] || null)}
-                      className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border file:border-black file:bg-white file:text-black"
-                    />
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Recommended: transparent PNG, height ~80px</p>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo source</label>
+                    <div className="flex items-center gap-4 mb-3">
+                      <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        <input
+                          type="radio"
+                          name="create-logo-source"
+                          checked={form.logo_source === "local"}
+                          onChange={() => setForm((p) => ({ ...p, logo_source: "local", logo_url: "" }))}
+                        />
+                        Upload local file
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        <input
+                          type="radio"
+                          name="create-logo-source"
+                          checked={form.logo_source === "url"}
+                          onChange={() => setForm((p) => ({ ...p, logo_source: "url", logo: null }))}
+                        />
+                        Use image URL
+                      </label>
+                    </div>
+
+                    {form.logo_source === "url" ? (
+                      <input
+                        type="url"
+                        value={form.logo_url}
+                        onChange={(e) => setForm((p) => ({ ...p, logo_url: e.target.value }))}
+                        placeholder="https://example.com/brand-logo.png"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:border-slate-500"
+                      />
+                    ) : (
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+                        className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border file:border-black file:bg-white file:text-black"
+                      />
+                    )}
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Choose local upload or paste a public image URL.</p>
                   </div>
                   <div className="h-24 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                     {previewCreate ? (
@@ -732,13 +778,43 @@ export default function AdminBrands() {
 
               <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Replace logo (optional)</label>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(e) => onPickFileEdit(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border file:border-black file:bg-white file:text-black"
-                  />
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo source</label>
+                  <div className="flex items-center gap-4 mb-3">
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="radio"
+                        name="edit-logo-source"
+                        checked={editing.logo_source === "local"}
+                        onChange={() => setEditing((p) => ({ ...p, logo_source: "local", logo_url: p.logo_url || "" }))}
+                      />
+                      Upload local file
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="radio"
+                        name="edit-logo-source"
+                        checked={editing.logo_source === "url"}
+                        onChange={() => setEditing((p) => ({ ...p, logo_source: "url", logo: null }))}
+                      />
+                      Use image URL
+                    </label>
+                  </div>
+                  {editing.logo_source === "url" ? (
+                    <input
+                      type="url"
+                      value={editing.logo_url || ""}
+                      onChange={(e) => setEditing((p) => ({ ...p, logo_url: e.target.value }))}
+                      placeholder="https://example.com/brand-logo.png"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:border-slate-500"
+                    />
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={(e) => onPickFileEdit(e.target.files?.[0] || null)}
+                      className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border file:border-black file:bg-white file:text-black"
+                    />
+                  )}
                 </div>
                 <div className="h-24 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                   {previewEdit ? (

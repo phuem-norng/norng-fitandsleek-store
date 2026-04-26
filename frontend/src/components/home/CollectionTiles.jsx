@@ -51,20 +51,30 @@ const fallbackTiles = [
   },
 ];
 
+const FALLBACK_TILE_IMAGE = "/placeholder.svg";
+
 function Tile({ title, subtitle, to, image }) {
+  const [imgSrc, setImgSrc] = useState(image || FALLBACK_TILE_IMAGE);
+
+  useEffect(() => {
+    setImgSrc(image || FALLBACK_TILE_IMAGE);
+  }, [image]);
+
   return (
     <Link
       to={to}
       className="group block relative overflow-hidden rounded-2xl bg-white border border-zinc-100 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
     >
       <div className="h-[240px] sm:h-auto sm:aspect-[4/5] bg-zinc-100 overflow-hidden">
-        {image && (
-          <img
-            src={image}
-            alt={title}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
-          />
-        )}
+        <img
+          src={imgSrc}
+          alt={title}
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            setImgSrc(FALLBACK_TILE_IMAGE);
+          }}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent opacity-90" />
       </div>
       <div className="absolute inset-0 flex flex-col justify-between text-white p-3 sm:p-5 md:p-6">

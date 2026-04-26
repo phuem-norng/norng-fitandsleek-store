@@ -298,6 +298,7 @@ export default function Hero() {
   }
 
   const active = slides[i];
+  const fallbackHeroImage = "/placeholder.svg";
 
   // Touch/Swipe handlers
   const handleTouchStart = (e) => {
@@ -355,13 +356,16 @@ export default function Hero() {
               variants={imageVariants}
               className="absolute inset-0"
             >
-              {active.image && (
-                <img
-                  src={active.image}
-                  alt={active.title}
-                  className="absolute inset-0 w-full h-full object-cover object-center"
-                />
-              )}
+              <img
+                src={active.image || fallbackHeroImage}
+                alt={active.title}
+                onError={(e) => {
+                  if (!fallbackHeroImage) return;
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = fallbackHeroImage;
+                }}
+                className="absolute inset-0 w-full h-full object-cover object-center"
+              />
               
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
             </motion.div>
