@@ -98,7 +98,7 @@ export default function NotificationDrawer({
                           Open link
                         </a>
                       ) : null}
-                      <p className="text-[11px] text-zinc-400 mt-2">
+                      <p className="text-xs text-zinc-400 mt-2">
                         {formatTime ? formatTime(item.created_at) : ""}
                       </p>
                     </div>

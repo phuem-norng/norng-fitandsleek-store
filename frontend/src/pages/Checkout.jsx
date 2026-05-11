@@ -408,7 +408,7 @@ export default function Checkout() {
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm text-slate-900 dark:text-white">{addr.label}</span>
                               {addr.is_default && (
-                                <span className="text-[10px] bg-[#dce7e4] dark:bg-[#2f433e] text-[#45645d] dark:text-[#a7beb8] rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide">Default</span>
+                                <span className="text-xs leading-tight bg-[#dce7e4] dark:bg-[#2f433e] text-[#45645d] dark:text-[#a7beb8] rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide">Default</span>
                               )}
                             </div>
                             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -465,16 +465,16 @@ export default function Checkout() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 dark:text-white">{t('paymentMethodBakong') || "KHQR / Bakong"}</span>
-                        <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide">Instant</span>
+                        <span className="text-xs leading-tight bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide">Instant</span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('paymentMethodBakongDesc') || "Scan QR with any Cambodian bank app"}</p>
                       <div className="flex items-center gap-1.5 mt-2.5">
                         {/* KHQR */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-white" style={{ background: "#C0272D" }}>KHQR</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-white" style={{ background: "#C0272D" }}>KHQR</span>
                         {/* Bakong */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-black" style={{ background: "#C88F09" }}>BAKONG</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-black" style={{ background: "#C88F09" }}>BAKONG</span>
                         {/* NBC */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-white" style={{ background: "#1B3A6B" }}>NBC</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-white" style={{ background: "#1B3A6B" }}>NBC</span>
                       </div>
                     </div>
 
@@ -510,18 +510,18 @@ export default function Checkout() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 dark:text-white">{t('paymentMethodCardVisa') || "Credit / Debit Card"}</span>
-                        <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide">Secure</span>
+                        <span className="text-xs leading-tight bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide">Secure</span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t('paymentMethodCardDesc') || "Visa, Mastercard, Amex, UnionPay"}</p>
                       <div className="flex items-center gap-1.5 mt-2.5">
                         {/* Visa */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-white" style={{ background: "#1A1F71" }}>VISA</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-white" style={{ background: "#1A1F71" }}>VISA</span>
                         {/* MC */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-white" style={{ background: "#EB001B" }}>MC</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-white" style={{ background: "#EB001B" }}>MC</span>
                         {/* Amex */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-white" style={{ background: "#2557D6" }}>AMEX</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-white" style={{ background: "#2557D6" }}>AMEX</span>
                         {/* UnionPay */}
-                        <span className="inline-flex items-center h-5 px-2 rounded text-[10px] font-bold text-white" style={{ background: "#DE1F26" }}>UP</span>
+                        <span className="inline-flex items-center h-5 px-2 rounded text-xs leading-tight font-bold text-white" style={{ background: "#DE1F26" }}>UP</span>
                       </div>
                     </div>
 
@@ -683,7 +683,7 @@ export default function Checkout() {
                   <span className="text-base font-bold text-slate-900">{t('total') || "Total"}</span>
                   <span className="text-2xl font-black text-[#567D74]">${grandTotal.toFixed(2)}</span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-xs text-slate-400">
                   {t('taxIncluded') || "All prices inclusive of applicable taxes"}
                 </p>
               </div>
@@ -745,7 +745,7 @@ export default function Checkout() {
 
             {/* accepted payment logos ribbon */}
             <div className="bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-200/70 px-5 py-4">
-              <p className="text-[11px] uppercase tracking-widest text-slate-400 mb-3">We accept</p>
+              <p className="text-xs uppercase tracking-widest text-slate-400 mb-3">We accept</p>
               <div className="flex items-center flex-wrap gap-2">
                 {[
                   { label: "VISA", bg: "#1A1F71", color: "#fff" },
@@ -755,7 +755,7 @@ export default function Checkout() {
                   { label: "KHQR", bg: "#C0272D", color: "#fff" },
                   { label: "BAKONG", bg: "#C88F09", color: "#000" },
                 ].map(({ label, bg, color }) => (
-                  <span key={label} className="inline-flex items-center h-6 px-2.5 rounded text-[11px] font-bold tracking-wide" style={{ background: bg, color }}>
+                  <span key={label} className="inline-flex items-center h-6 px-2.5 rounded text-xs font-bold tracking-wide" style={{ background: bg, color }}>
                     {label}
                   </span>
                 ))}

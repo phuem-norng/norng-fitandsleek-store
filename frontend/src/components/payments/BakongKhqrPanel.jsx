@@ -157,7 +157,7 @@ export default function BakongKhqrPanel({ orderId, amount, currency = "KHR", onS
         <div className="flex items-center justify-between mb-5">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">Amount due</p>
-            <p className="text-3xl font-black text-slate-900 dark:text-white">
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">
               {currency} {Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </p>
           </div>

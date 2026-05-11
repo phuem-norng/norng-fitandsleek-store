@@ -106,9 +106,9 @@ const DialogPopup = React.forwardRef(
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.98 }}
                     transition={defaultTransition}
-                    className="w-[95vw] max-w-[450px]"
+                    className="w-[min(100vw-1rem,28rem)] max-w-[95vw] min-w-0"
                   >
-                    <div className={`${contentBaseClass} ${className}`}>
+                    <div className={`min-w-0 ${contentBaseClass} ${className}`}>
                       {children}
                       {showCloseButton && (
                         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full bg-white/10 backdrop-blur-md p-2 opacity-80 transition-all hover:opacity-100 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:pointer-events-none">

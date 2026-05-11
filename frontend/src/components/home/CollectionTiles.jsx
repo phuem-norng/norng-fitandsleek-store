@@ -70,7 +70,7 @@ function Tile({ title, subtitle, to, image }) {
       </div>
       <div className="absolute inset-0 flex flex-col justify-between text-white p-3 sm:p-5 md:p-6">
         <div>
-          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-[0.14em] sm:tracking-[0.2em] text-white/80 bg-white/15 border border-white/25 rounded-full px-2 sm:px-3 py-1">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.14em] sm:tracking-[0.2em] text-white/80 bg-white/15 border border-white/25 rounded-full px-2 sm:px-3 py-1 leading-tight">
             {subtitle}
           </span>
         </div>
@@ -78,7 +78,7 @@ function Tile({ title, subtitle, to, image }) {
           <h3 className="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight drop-shadow leading-tight">
             {title}
           </h3>
-          <div className="mt-2 sm:mt-3 inline-flex items-center gap-2 text-[10px] sm:text-xs font-semibold text-white/90">
+          <div className="mt-2 sm:mt-3 inline-flex items-center gap-2 text-xs leading-tight sm:text-xs font-semibold text-white/90">
             Explore Collection
             <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 border border-white/30 transition-transform duration-300 group-hover:translate-x-1">
               <svg

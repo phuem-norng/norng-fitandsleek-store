@@ -80,7 +80,7 @@ export default function CartDrawer({ open, onClose }) {
                       <span>· {it.product?.category?.name || "Category"}</span>
                     </div>
                     {(it.size || it.color) && (
-                      <div className="mt-1 text-[11px] text-zinc-500">
+                      <div className="mt-1 text-xs text-zinc-500">
                         {it.size ? `Size: ${it.size}` : ""}
                         {it.size && it.color ? " · " : ""}
                         {it.color ? `Color: ${it.color}` : ""}

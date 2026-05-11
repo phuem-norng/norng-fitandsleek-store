@@ -1,4 +1,4 @@
-/** Shared POS / Barcode & QR receipt counter, saved receipts, and handoff to /admin/pos */
+/** Shared POS / Barcode & QR receipt counter, saved receipts, and handoff to /admin/checkout */
 
 export const RECEIPT_COUNTER_KEY = "fs_pos_receipt_counter_v1";
 export const RECEIPT_SAVED_KEY = "fs_pos_saved_receipts_v1";

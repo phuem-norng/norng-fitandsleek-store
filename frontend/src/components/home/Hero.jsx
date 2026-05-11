@@ -382,7 +382,7 @@ export default function Hero() {
                 {/* Badge with spring animation */}
                 <motion.span 
                   variants={badgeVariants}
-                  className="inline-flex items-center rounded-full bg-white/15 backdrop-blur-sm border border-white/25 px-2 py-0.5 md:px-3 md:py-1 text-[9px] md:text-[10px] lg:text-xs font-semibold uppercase tracking-[0.2em]"
+                  className="inline-flex items-center rounded-full bg-white/15 backdrop-blur-sm border border-white/25 px-2 py-0.5 md:px-3 md:py-1 text-xs font-semibold uppercase tracking-[0.2em] leading-tight"
                 >
                   {active.badge || "Featured"}
                 </motion.span>

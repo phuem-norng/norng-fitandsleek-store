@@ -181,7 +181,7 @@ export default function CartPage() {
             {t('checkout')}
           </Link>
 
-          <p className="mt-3 text-[11px] text-zinc-500">
+          <p className="mt-3 text-xs text-zinc-500">
             {t('checkoutNoteStart')} <code className="font-mono">POST /api/checkout</code> {t('checkoutNoteEnd')}
           </p>
         </div>

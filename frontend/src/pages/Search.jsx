@@ -403,7 +403,7 @@ export default function Search() {
                     }`}
                     onMouseEnter={() => setSelectedSuggestionIndex(index)}
                   >
-                    <div className="text-[15px] text-slate-800 font-medium group-hover:text-zinc-900 transition-colors leading-snug">
+                    <div className="text-base text-slate-800 font-medium group-hover:text-zinc-900 transition-colors leading-snug">
                       {highlightMatch(product.name, localSearchQuery)}
                     </div>
                   </button>

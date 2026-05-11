@@ -34,7 +34,7 @@ function getInitials(label) {
 function Badge({ value }) {
   if (!value) return null;
   return (
-    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-[10px] leading-[18px] text-center animate-pulse">
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-xs leading-tight leading-[18px] text-center animate-pulse">
       {value}
     </span>
   );
@@ -1171,7 +1171,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
                 <Search className="w-5 h-5" />
               </span>
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                <kbd className="hidden sm:inline-flex h-6 items-center rounded-md border border-slate-200 px-2 text-[11px] font-medium text-slate-500">
+                <kbd className="hidden sm:inline-flex h-6 items-center rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-500">
                   Enter
                 </kbd>
               </span>
@@ -1208,7 +1208,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
                             />
                           </span>
                           <div className="min-w-0">
-                            <div className="text-[15px] text-slate-800 font-medium group-hover:text-zinc-900 transition-colors leading-snug truncate">
+                            <div className="text-base text-slate-800 font-medium group-hover:text-zinc-900 transition-colors leading-snug truncate">
                               {highlightMatch(product.name, q)}
                             </div>
                             <div className="text-xs text-slate-500 truncate">

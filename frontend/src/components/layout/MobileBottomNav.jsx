@@ -10,7 +10,7 @@ import NotificationDrawer from "./NotificationDrawer.jsx";
 function Badge({ value }) {
   if (!value) return null;
   return (
-    <span className="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-[10px] leading-[18px] text-center">
+    <span className="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-xs leading-tight leading-[18px] text-center">
       {value}
     </span>
   );
@@ -104,7 +104,7 @@ export default function MobileBottomNav({
                     <Link
                       key={item.key}
                       to={item.to}
-                      className={`relative flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition-all ${
+                      className={`relative flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold transition-all ${
                         active
                           ? "text-zinc-900"
                           : "text-zinc-500 hover:text-zinc-900"
@@ -119,7 +119,7 @@ export default function MobileBottomNav({
                     <button
                       key={item.key}
                       onClick={item.onClick}
-                      className={`relative flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition-all ${
+                      className={`relative flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold transition-all ${
                         active
                           ? "text-zinc-900"
                           : "text-zinc-500 hover:text-zinc-900"

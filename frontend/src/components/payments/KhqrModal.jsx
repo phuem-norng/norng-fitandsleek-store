@@ -38,7 +38,7 @@ const StatusPill = ({ status }) => {
   };
   const { label, cls } = map[status] || map.idle;
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cls}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}`}>
       {label}
     </span>
   );
@@ -126,15 +126,15 @@ export default function KhqrModal({
           {/* amount + timer row */}
           <div className="relative mt-4 flex items-center gap-3">
             <div className="flex-1 rounded-xl bg-black/20 backdrop-blur-sm px-4 py-2.5">
-              <p className="text-[10px] uppercase tracking-widest text-white/60">Amount</p>
+              <p className="text-xs leading-tight uppercase tracking-widest text-white/60">Amount</p>
               <p className="text-lg font-black text-white">{amount ?? "--"} <span className="text-base font-semibold text-white/80">{currency}</span></p>
             </div>
             <div className="rounded-xl bg-black/20 backdrop-blur-sm px-4 py-2.5">
-              <p className="text-[10px] uppercase tracking-widest text-white/60">Expires in</p>
+              <p className="text-xs leading-tight uppercase tracking-widest text-white/60">Expires in</p>
               <p className={`text-lg font-black ${timeLeft < 30 ? "text-amber-300" : "text-white"}`}>{formattedTime}</p>
             </div>
             <div className="rounded-xl bg-black/20 backdrop-blur-sm px-4 py-2.5 flex flex-col items-start">
-              <p className="text-[10px] uppercase tracking-widest text-white/60 mb-1">Status</p>
+              <p className="text-xs leading-tight uppercase tracking-widest text-white/60 mb-1">Status</p>
               <StatusPill status={status} />
             </div>
           </div>
@@ -173,7 +173,7 @@ export default function KhqrModal({
           ].map(({ n, icon, text }) => (
             <div key={n} className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-2.5 text-center">
               <div className="text-lg">{icon}</div>
-              <div className="mt-1 text-[10px] font-bold text-slate-500 dark:text-slate-400" style={{ whiteSpace: "pre-line" }}>{text}</div>
+              <div className="mt-1 text-xs leading-tight font-bold text-slate-500 dark:text-slate-400" style={{ whiteSpace: "pre-line" }}>{text}</div>
             </div>
           ))}
         </div>
@@ -184,7 +184,7 @@ export default function KhqrModal({
             {billNumber && (
               <div className="flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-800 px-3.5 py-2">
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500">Bill No.</p>
+                  <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500">Bill No.</p>
                   <p className="text-sm font-mono text-slate-800 dark:text-slate-100 truncate">{billNumber}</p>
                 </div>
                 <button
@@ -198,7 +198,7 @@ export default function KhqrModal({
             {md5 && (
               <div className="flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-800 px-3.5 py-2">
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500">MD5</p>
+                  <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500">MD5</p>
                   <p className="text-xs font-mono text-slate-600 dark:text-slate-300 truncate">{md5}</p>
                 </div>
                 <button

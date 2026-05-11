@@ -91,7 +91,7 @@ export default function PromoBannerSlider() {
           )}
           <div className="relative z-10 p-4 md:p-6 bg-gradient-to-r from-black/45 via-black/20 to-transparent">
             <div className="max-w-xl text-white">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em]">Promotion</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em]">Promotion</div>
               <h3 className="mt-2 text-lg md:text-2xl font-black">{active.title}</h3>
               {active.subtitle && <p className="mt-1.5 text-xs md:text-sm text-white/90">{active.subtitle}</p>}
               <Link

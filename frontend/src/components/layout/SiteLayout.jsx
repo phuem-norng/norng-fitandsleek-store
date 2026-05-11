@@ -82,7 +82,7 @@ export default function SiteLayout() {
         onOpenNotifications={() => setNotificationsOpen(true)}
         notificationsUnread={notificationsUnread}
       />
-      <main className="flex-1 fs-page-enter pb-28 sm:pb-24 lg:pb-0">
+      <main className="fs-main-content flex-1 fs-page-enter pb-28 sm:pb-24 lg:pb-0 text-base leading-relaxed text-slate-800 antialiased dark:text-slate-100">
         <Outlet />
       </main>
       <Footer />

@@ -29,8 +29,8 @@ import AdminLayout from "./pages/admin/AdminLayout.jsx";
 import AdminProducts from "./pages/admin/Products.jsx";
 import AdminCategories from "./pages/admin/Categories.jsx";
 import AdminBrands from "./pages/admin/Brands.jsx";
-import AdminBarcodeQR from "./pages/admin/BarcodeQR.jsx";
-import AdminPosScan from "./pages/admin/AdminPosScan.jsx";
+import AdminBarcodeQR from "./pages/admin/StockInventory.jsx";
+import AdminPosScan from "./pages/admin/Checkout.jsx";
 import AdminOrders from "./pages/admin/Orders.jsx";
 import AdminInvoicePage from "./pages/admin/Invoice.jsx";
 import AdminCustomers from "./pages/admin/Customers.jsx";
@@ -57,8 +57,6 @@ import AdminPayments from "./pages/admin/Payments.jsx";
 import HomepageSettingsTest from "./pages/HomepageSettingsTest.jsx";
 import PublicHomepageManager from "./pages/PublicHomepageManager.jsx";
 import ExtendedHomepageManager from "./pages/ExtendedHomepageManager.jsx";
-import AdminShipments from "./pages/admin/Shipments.jsx";
-import AdminDrivers from "./pages/admin/Drivers.jsx";
 import AdminReplacementCases from "./pages/admin/ReplacementCases.jsx";
 import PaymentSettings from "./pages/admin/PaymentSettings.jsx";
 import DriverScanPage from "./pages/driver/Scan.jsx";
@@ -122,8 +120,8 @@ function isAdminUser(user) {
 function RequireAdmin({ children }) {
   const { user, booted } = useAuth();
   if (!booted) return (
-    <div className="p-6">
-      <AdminContentSkeleton lines={2} imageHeight={140} className="max-w-4xl mx-auto" />
+    <div className="flex min-h-[100dvh] w-full flex-col p-6">
+      <AdminContentSkeleton lines={2} imageHeight={140} className="mx-auto w-full max-w-4xl flex-1" />
     </div>
   );
   if (!user) return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
@@ -209,13 +207,15 @@ export default function App() {
           <Route index element={<AdminHome />} />
           <Route path="reports" element={<Reports />} />
           <Route path="products" element={<AdminProducts />} />
+          <Route path="inventory" element={<AdminProducts />} />
           <Route path="sales" element={<AdminSales />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="brands" element={<AdminBrands />} />
           <Route path="barcode-qr/new" element={<AdminBarcodeQR />} />
           <Route path="barcode-qr/:id/edit" element={<AdminBarcodeQR />} />
           <Route path="barcode-qr" element={<AdminBarcodeQR />} />
-          <Route path="pos" element={<AdminPosScan />} />
+          <Route path="checkout" element={<AdminPosScan />} />
+          <Route path="pos" element={<Navigate to="/admin/checkout" replace />} />
           <Route path="homepage" element={<HomePageManager />} />
           <Route path="homepage-complete" element={<CompleteHomepageManager />} />
           <Route path="orders" element={<AdminOrders />} />
@@ -231,8 +231,6 @@ export default function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="admin-management" element={<AdminManagement />} />
           <Route path="payments" element={<AdminPayments />} />
-          <Route path="drivers" element={<AdminDrivers />} />
-          <Route path="shipments" element={<AdminShipments />} />
           <Route path="replacement-cases" element={<AdminReplacementCases />} />
           <Route path="payment-settings" element={<PaymentSettings />} />
         </Route>

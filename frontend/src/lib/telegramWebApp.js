@@ -13,7 +13,12 @@ export function initTelegramWebApp() {
   try {
     tg.ready();
     tg.expand();
-    if (typeof tg.requestFullscreen === "function") {
+    // requestFullscreen exists on the SDK before it is actually supported; Bot API 8.0+ only.
+    const canRequestFullscreen =
+      typeof tg.isVersionAtLeast === "function" &&
+      tg.isVersionAtLeast("8.0") &&
+      typeof tg.requestFullscreen === "function";
+    if (canRequestFullscreen) {
       tg.requestFullscreen();
     }
     if (typeof tg.disableVerticalSwipes === "function") {
