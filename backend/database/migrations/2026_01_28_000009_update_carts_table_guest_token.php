@@ -7,21 +7,48 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('carts', function (Blueprint $table) {
-            if (Schema::hasColumn('carts', 'session_id')) {
-                $table->dropColumn('session_id');
+        if (! Schema::hasColumn('carts', 'session_id')) {
+            if (! Schema::hasColumn('carts', 'guest_token')) {
+                Schema::table('carts', function (Blueprint $table) {
+                    $table->string('guest_token')->nullable()->unique();
+                });
             }
-            $table->string('guest_token')->nullable()->unique();
+
+            return;
+        }
+
+        // SQLite: drop index before dropColumn or rebuild fails (carts_session_id_index).
+        Schema::table('carts', function (Blueprint $table) {
+            $table->dropIndex(['session_id']);
         });
+
+        Schema::table('carts', function (Blueprint $table) {
+            $table->dropColumn('session_id');
+        });
+
+        if (! Schema::hasColumn('carts', 'guest_token')) {
+            Schema::table('carts', function (Blueprint $table) {
+                $table->string('guest_token')->nullable()->unique();
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('carts', function (Blueprint $table) {
-            if (Schema::hasColumn('carts', 'guest_token')) {
+        if (Schema::hasColumn('carts', 'guest_token')) {
+            Schema::table('carts', function (Blueprint $table) {
+                $table->dropUnique(['guest_token']);
+            });
+
+            Schema::table('carts', function (Blueprint $table) {
                 $table->dropColumn('guest_token');
-            }
-            $table->uuid('session_id')->nullable()->index();
-        });
+            });
+        }
+
+        if (! Schema::hasColumn('carts', 'session_id')) {
+            Schema::table('carts', function (Blueprint $table) {
+                $table->uuid('session_id')->nullable()->index();
+            });
+        }
     }
 };
