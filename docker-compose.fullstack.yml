@@ -4,11 +4,12 @@ services:
     container_name: fitandsleek_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fitandsleek_v2
+      POSTGRES_DB: fitandsleek_v3
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "Norng@123"
     ports:
-      - "5432:5432"
+      # Host 5433 avoids conflict when another Postgres (e.g. local/other compose) uses 5432.
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -20,7 +21,8 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@fitandsleek.com
       PGADMIN_DEFAULT_PASSWORD: admin123
     ports:
-      - "5050:80"
+      # 5051 avoids conflict when another compose service already binds host 5050.
+      - "5051:80"
     depends_on:
       - db
     volumes:
@@ -38,20 +40,22 @@ services:
       DB_CONNECTION: pgsql
       DB_HOST: db
       DB_PORT: 5432
-      DB_DATABASE: fitandsleek_v2
+      DB_DATABASE: fitandsleek_v3
       DB_USERNAME: postgres
       DB_PASSWORD: "Norng@123"
-      APP_URL: http://localhost:8000
+      APP_URL: http://localhost:8001
       APP_PORT: 8000
       SERVER_PORT: 8000
       IMAGE_VECTORIZE_URL: http://host.docker.internal:9000/vectorize
       QDRANT_URL: http://host.docker.internal:6333
-    command: sh -lc "rm -rf public/storage && php artisan storage:link && php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+    # --no-reload: without it, `artisan serve` clears DB_* etc. for the PHP built-in server child; Docker DB_* must pass through.
+    command: sh -lc "rm -rf public/storage && php artisan storage:link --relative --force && php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000 --no-reload"
     networks:
       - default
       - fitandsleek_fullstack_default
     ports:
-      - "8000:8000"
+      # 8001 avoids conflict when another Laravel/service already binds host 8000.
+      - "8001:8000"
     volumes:
       # Sync PHP source from host (AVIF validation, etc.) without replacing vendor/ from the image
       - ./backend/app:/var/www/html/app
@@ -59,6 +63,7 @@ services:
       - ./backend/database/migrations:/var/www/html/database/migrations
       - ./backend/.env:/var/www/html/.env
       - ./backend/routes:/var/www/html/routes
+      - ./backend/public:/var/www/html/public
       - ./backend/storage/app/public:/var/www/html/storage/app/public
 
   frontend:
@@ -70,12 +75,16 @@ services:
     environment:
       VITE_API_BASE_URL: /api
       VITE_BACKEND_ORIGIN: ""
-      VITE_PROXY_TARGET: http://host.docker.internal:8000
+      # Preview proxy runs inside this container; Laravel is the `backend` service on the compose network.
+      VITE_PROXY_TARGET: http://backend:8000
+      # Serve /storage/* from production when local storage/app/public is empty (set in backend/.env or override here).
+      VITE_STORAGE_MEDIA_ORIGIN: ${VITE_STORAGE_MEDIA_ORIGIN:-${APP_URL:-}}
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     working_dir: /app
-    command: sh -lc "[ -x node_modules/.bin/vite ] || npm install; npm run build; npm run preview -- --host 0.0.0.0 --port 5173"
+    # Always npm install: anonymous node_modules volume can be stale and skip install, breaking vite build.
+    command: sh -lc "npm install --no-audit --no-fund && npm run build && npm run preview -- --host 0.0.0.0 --port 5173"
     ports:
       - "5173:5173"
 
@@ -83,6 +92,8 @@ services:
     image: ngrok/ngrok:latest
     container_name: fitandsleek_ngrok
     restart: unless-stopped
+    profiles:
+      - ngrok
     depends_on:
       - backend
     networks:
@@ -127,6 +138,8 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: fitandsleek_tunnel
     restart: unless-stopped
+    profiles:
+      - cloudflare-token
     depends_on:
       - frontend
       - backend

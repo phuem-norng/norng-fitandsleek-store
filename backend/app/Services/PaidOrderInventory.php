@@ -21,10 +21,30 @@ class PaidOrderInventory
             return null;
         }
 
-        return Category::query()
+        $bySlugOrSku = Category::query()
             ->where('type', self::BARCODE_CATEGORY_TYPE)
-            ->where('slug', $code)
+            ->where(function ($q) use ($code) {
+                $q->whereRaw('LOWER(slug) = LOWER(?)', [$code])
+                    ->orWhere(function ($q2) use ($code) {
+                        $q2->whereNotNull('sku')
+                            ->where('sku', '!=', '')
+                            ->whereRaw('LOWER(sku) = LOWER(?)', [$code]);
+                    });
+            })
             ->first();
+
+        if ($bySlugOrSku) {
+            return $bySlugOrSku;
+        }
+
+        if (ctype_digit($code)) {
+            return Category::query()
+                ->where('type', self::BARCODE_CATEGORY_TYPE)
+                ->where('id', (int) $code)
+                ->first();
+        }
+
+        return null;
     }
 
     /**

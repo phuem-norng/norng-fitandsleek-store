@@ -20,11 +20,10 @@ function Segmented({ label, value, options, onChange }) {
               key={String(opt.value)}
               type="button"
               onClick={() => onChange(opt.value)}
-              className={`flex-1 min-h-[34px] px-1.5 text-[11px] font-semibold rounded-md transition-colors ${
-                active
+              className={`flex-1 min-h-[34px] px-1.5 text-[11px] font-semibold rounded-md transition-colors ${active
                   ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-600"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-              }`}
+                }`}
               title={opt.title}
             >
               {opt.label}
@@ -49,11 +48,13 @@ export default function AdminAppearancePanel() {
     radius,
     contentLayout,
     sidebarMode,
+    customCursor,
     setPreset,
     setScale,
     setRadius,
     setContentLayout,
     setSidebarMode,
+    setCustomCursor,
     saveTheme,
     resetAdminAppearance,
   } = useTheme();
@@ -152,6 +153,16 @@ export default function AdminAppearancePanel() {
         options={[
           { value: "default", label: "Default", title: "Labels + icons" },
           { value: "icon", label: "Icon", title: "Icons only (narrow rail)" },
+        ]}
+      />
+
+      <Segmented
+        label="Mouse pointer"
+        value={customCursor ? "on" : "off"}
+        onChange={(next) => setCustomCursor(next === "on")}
+        options={[
+          { value: "on", label: "On", title: "Use custom dashboard cursor" },
+          { value: "off", label: "Off", title: "Use default system cursor" },
         ]}
       />
 

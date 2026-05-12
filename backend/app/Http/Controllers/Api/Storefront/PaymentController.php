@@ -74,6 +74,17 @@ class PaymentController extends Controller
         // For now, we'll simulate successful verification
         
         DB::transaction(function () use ($payment, $order) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->payment_status === 'paid') {
+                $payment->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                ]);
+
+                return;
+            }
+
             $payment->update([
                 'status' => 'paid',
                 'paid_at' => now(),
@@ -148,6 +159,18 @@ class PaymentController extends Controller
         }
 
         DB::transaction(function () use ($payment, $order, $validated) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->payment_status === 'paid') {
+                $payment->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'reference_code' => 'CARD-' . strtoupper(substr($validated['card_number'], -4)) . '-' . now()->timestamp,
+                ]);
+
+                return;
+            }
+
             $payment->update([
                 'status' => 'paid',
                 'paid_at' => now(),
@@ -318,6 +341,8 @@ class PaymentController extends Controller
 
             if ((int) $responseCode === 0 && ! empty($transaction) && $matchesOrder) {
                 DB::transaction(function () use ($payment, $order, $transaction, $response) {
+                    $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
                     $payment->update([
                         'status' => 'paid',
                         'paid_at' => now(),
@@ -332,6 +357,7 @@ class PaymentController extends Controller
                         ]);
                         $this->clearUserCart((int) $order->user_id);
 
+                        $order->load('items.product');
                         PaidOrderInventory::applyForOrder($order);
                     }
                 });
@@ -392,22 +418,39 @@ class PaymentController extends Controller
         $status = data_get($data, 'status') ?? data_get($data, 'data.status');
         $status = $this->normalizeKhqrStatus($status);
 
-        $payment->update([
-            'status' => $status,
-            'paid_at' => $status === 'paid' ? now() : null,
-            'raw_response' => $data,
-        ]);
+        if ($status === 'paid' && $payment->order_id) {
+            DB::transaction(function () use ($payment, $status, $data) {
+                $payment->update([
+                    'status' => $status,
+                    'paid_at' => now(),
+                    'raw_response' => $data,
+                ]);
 
-        if ($status === 'paid' && $payment->order && $payment->order->payment_status !== 'paid') {
-            $order = $payment->order->load('items.product');
-            $order->update([
-                'payment_status' => 'paid',
-                'status' => 'processing',
+                $order = Order::query()->whereKey($payment->order_id)->lockForUpdate()->first();
+                if (! $order) {
+                    return;
+                }
+
+                if ($order->payment_status === 'paid') {
+                    return;
+                }
+
+                $order->update([
+                    'payment_status' => 'paid',
+                    'status' => 'processing',
+                ]);
+
+                $this->clearUserCart((int) $order->user_id);
+
+                $order->load('items.product');
+                PaidOrderInventory::applyForOrder($order);
+            });
+        } else {
+            $payment->update([
+                'status' => $status,
+                'paid_at' => $status === 'paid' ? now() : null,
+                'raw_response' => $data,
             ]);
-
-            $this->clearUserCart((int) $order->user_id);
-
-            PaidOrderInventory::applyForOrder($order);
         }
 
         return response()->json(['ok' => true]);

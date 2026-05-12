@@ -159,6 +159,41 @@ function StatusTooltip({ active, payload, mode }) {
   );
 }
 
+function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const target = Number(value) || 0;
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (prefersReducedMotion) {
+      setDisplayValue(target);
+      return undefined;
+    }
+
+    let raf = 0;
+    const start = performance.now();
+    const duration = 620;
+    setDisplayValue(0);
+
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(target * eased);
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  const formatted = displayValue.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+
+  return <>{prefix}{formatted}{suffix}</>;
+}
+
 function StatCard({ title, value, sub, icon }) {
   return (
     <div className="admin-surface rounded-2xl border admin-border p-5">
@@ -289,8 +324,7 @@ export default function AdminDashboard() {
       } finally {
         if (!cancelled) {
           setLoading(false);
-          if (hasLoadedOnceRef.current) setChartEnterAnim(false);
-          else hasLoadedOnceRef.current = true;
+          hasLoadedOnceRef.current = true;
         }
       }
     })();
@@ -298,6 +332,20 @@ export default function AdminDashboard() {
       cancelled = true;
     };
   }, [periodDays]);
+
+  useEffect(() => {
+    if (loading) return undefined;
+    setChartEnterAnim(false);
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setChartEnterAnim(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [loading, periodDays, salesSeriesRaw, stats.ordersByStatus]);
 
   const chartData = useMemo(() => buildDailySeries(salesSeriesRaw, periodDays), [salesSeriesRaw, periodDays]);
 
@@ -321,29 +369,29 @@ export default function AdminDashboard() {
     {
       id: "kpi-revenue",
       title: `Revenue (${periodDays}d)`,
-      value: fullUsd.format(stats.revenue.total || 0),
-      sub: `Today · ${fullUsd.format(stats.revenue.today || 0)}`,
+      value: <AnimatedNumber value={stats.revenue.total || 0} prefix="$" decimals={2} />,
+      sub: <>Today · <AnimatedNumber value={stats.revenue.today || 0} prefix="$" decimals={2} /></>,
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
     },
     {
       id: "kpi-mtd",
       title: "Month to date",
-      value: fullUsd.format(stats.revenue.month || 0),
-      sub: `New customers (${periodDays}d): ${stats.customers.new_this_month ?? 0}`,
+      value: <AnimatedNumber value={stats.revenue.month || 0} prefix="$" decimals={2} />,
+      sub: <>New customers ({periodDays}d): <AnimatedNumber value={stats.customers.new_this_month ?? 0} /></>,
       icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
     },
     {
       id: "kpi-orders",
       title: `Orders (${periodDays}d)`,
-      value: Number(stats.ordersHead.total || 0).toLocaleString(),
-      sub: `${stats.ordersHead.pending ?? 0} pending · ${stats.ordersHead.completed ?? 0} completed`,
+      value: <AnimatedNumber value={stats.ordersHead.total || 0} />,
+      sub: <><AnimatedNumber value={stats.ordersHead.pending ?? 0} /> pending · <AnimatedNumber value={stats.ordersHead.completed ?? 0} /> completed</>,
       icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
     },
     {
       id: "kpi-customers",
       title: "Customers (total)",
-      value: Number(stats.customers.total || 0).toLocaleString(),
-      sub: pctActive !== null ? `Catalog · ${pctActive}% products active` : "Registered accounts",
+      value: <AnimatedNumber value={stats.customers.total || 0} />,
+      sub: pctActive !== null ? <>Catalog · <AnimatedNumber value={pctActive} suffix="%" /> products active</> : "Registered accounts",
       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
     },
   ];
@@ -365,73 +413,73 @@ export default function AdminDashboard() {
       {/* Charts — 2fr + 1fr at xl; revenue must span 2 cols or a whole column stays empty */}
       <div className="grid w-full min-w-0 grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="min-w-0 xl:col-span-2">
-        <CardChrome
-          title="Daily revenue trend"
-          description={`Net settled sales · last ${periodDays} days`}
-          animationDelay={300}
-          action={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <PeriodTabs days={[7, 30, 90]} value={periodDays} onChange={setPeriodDays} />
-              <Link
-                to="/admin/reports"
-                className="rounded-lg border admin-border px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:text-slate-300 dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)]"
-              >
-                Full reports
-              </Link>
+          <CardChrome
+            title="Daily revenue trend"
+            description={`Net settled sales · last ${periodDays} days`}
+            animationDelay={300}
+            action={
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <PeriodTabs days={[7, 30, 90]} value={periodDays} onChange={setPeriodDays} />
+                <Link
+                  to="/admin/reports"
+                  className="rounded-lg border admin-border px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:text-slate-300 dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)]"
+                >
+                  Full reports
+                </Link>
+              </div>
+            }
+          >
+            <div className="h-[min(22rem,calc(100vw-5rem))] min-h-[280px] w-full px-2 pb-2 pt-1 md:px-4 [&_.recharts-surface]:outline-none">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 14, right: 12, left: 0, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={primaryColor} stopOpacity={0.42} />
+                      <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={chartGridColor} strokeDasharray="4 4" vertical={false} />
+                  <XAxis
+                    dataKey="xLabel"
+                    tick={{ fill: chartTickColor, fontSize: 11 }}
+                    axisLine={{ stroke: chartAxisLine }}
+                    tickLine={{ stroke: chartAxisLine }}
+                    interval={periodDays >= 45 ? Math.floor(periodDays / 10) : periodDays > 14 ? 3 : 1}
+                    minTickGap={8}
+                    height={28}
+                    angle={periodDays > 31 ? -32 : 0}
+                    textAnchor={periodDays > 31 ? "end" : "middle"}
+                    dy={periodDays > 31 ? 4 : 0}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => compactUsd.format(v)}
+                    tick={{ fill: chartTickColor, fontSize: 11 }}
+                    axisLine={{ stroke: chartAxisLine }}
+                    tickLine={{ stroke: chartAxisLine }}
+                    width={62}
+                    domain={[0, "auto"]}
+                  />
+                  <Tooltip content={<RevenueTooltip mode={mode} />} wrapperStyle={{ outline: "none" }} animationDuration={200} />
+                  <Area
+                    type="natural"
+                    dataKey="revenue"
+                    stroke={primaryColor}
+                    strokeWidth={2.25}
+                    fill={`url(#${gradientId})`}
+                    activeDot={{
+                      r: 5,
+                      fill: primaryColor,
+                      stroke: mode === "dark" ? "#0f172a" : "#fff",
+                      strokeWidth: 2,
+                    }}
+                    animationDuration={chartEnterAnim ? 720 : 0}
+                    animationEasing="ease-out"
+                    isAnimationActive={chartEnterAnim}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          }
-        >
-          <div className="h-[min(22rem,calc(100vw-5rem))] min-h-[280px] w-full px-2 pb-2 pt-1 md:px-4 [&_.recharts-surface]:outline-none">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 14, right: 12, left: 0, bottom: 4 }}>
-                <defs>
-                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={primaryColor} stopOpacity={0.42} />
-                    <stop offset="100%" stopColor={primaryColor} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke={chartGridColor} strokeDasharray="4 4" vertical={false} />
-                <XAxis
-                  dataKey="xLabel"
-                  tick={{ fill: chartTickColor, fontSize: 11 }}
-                  axisLine={{ stroke: chartAxisLine }}
-                  tickLine={{ stroke: chartAxisLine }}
-                  interval={periodDays >= 45 ? Math.floor(periodDays / 10) : periodDays > 14 ? 3 : 1}
-                  minTickGap={8}
-                  height={28}
-                  angle={periodDays > 31 ? -32 : 0}
-                  textAnchor={periodDays > 31 ? "end" : "middle"}
-                  dy={periodDays > 31 ? 4 : 0}
-                />
-                <YAxis
-                  tickFormatter={(v) => compactUsd.format(v)}
-                  tick={{ fill: chartTickColor, fontSize: 11 }}
-                  axisLine={{ stroke: chartAxisLine }}
-                  tickLine={{ stroke: chartAxisLine }}
-                  width={62}
-                  domain={[0, "auto"]}
-                />
-                <Tooltip content={<RevenueTooltip mode={mode} />} wrapperStyle={{ outline: "none" }} animationDuration={200} />
-                <Area
-                  type="natural"
-                  dataKey="revenue"
-                  stroke={primaryColor}
-                  strokeWidth={2.25}
-                  fill={`url(#${gradientId})`}
-                  activeDot={{
-                    r: 5,
-                    fill: primaryColor,
-                    stroke: mode === "dark" ? "#0f172a" : "#fff",
-                    strokeWidth: 2,
-                  }}
-                  animationDuration={chartEnterAnim ? 720 : 0}
-                  animationEasing="ease-out"
-                  isAnimationActive={chartEnterAnim}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </CardChrome>
+          </CardChrome>
         </div>
 
         {/* Side column */}

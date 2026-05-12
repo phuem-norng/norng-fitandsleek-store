@@ -2,6 +2,18 @@ import { resolveBackendOrigin } from "./backendOrigin";
 
 const backendOrigin = resolveBackendOrigin();
 
+/** When set (e.g. production API origin), `/storage/...` URLs use this host so images work with an empty local `storage/app/public`. */
+const storageMediaOrigin = (import.meta.env.VITE_STORAGE_MEDIA_ORIGIN || "")
+  .trim()
+  .replace(/\/$/, "");
+
+function originForStoragePath(path) {
+  if (!storageMediaOrigin) return backendOrigin;
+  const p = String(path || "");
+  if (p.startsWith("/storage/") || p.includes("/storage/")) return storageMediaOrigin;
+  return backendOrigin;
+}
+
 // Normalize any lingering hardcoded dev ports so assets always resolve locally.
 const normalizePort = (url) => {
   if (!url) return url;
@@ -43,7 +55,9 @@ export function resolveImageUrl(imageUrl) {
   if (shouldRewritePrivateHost(sanitizedUrl)) {
     try {
       const parsed = new URL(sanitizedUrl);
-      return `${backendOrigin}${parsed.pathname}`;
+      const path = parsed.pathname || "/";
+      const origin = originForStoragePath(path);
+      return `${origin}${path}${parsed.search || ""}`;
     } catch {
       return sanitizedUrl;
     }
@@ -54,10 +68,13 @@ export function resolveImageUrl(imageUrl) {
 
   // Handle filename-only values from API (e.g. "abc123.png").
   if (!sanitizedUrl.includes("/") && hasFileExtension(sanitizedUrl)) {
-    return `${backendOrigin}/storage/banners/${sanitizedUrl}`;
+    const path = `/storage/banners/${sanitizedUrl}`;
+    return `${originForStoragePath(path)}${path}`;
   }
 
   // common patterns: /storage/.., storage/.., public/storage/..
   const cleaned = sanitizedUrl.startsWith("/") ? sanitizedUrl : `/${sanitizedUrl}`;
-  return `${backendOrigin}${cleaned}`;
+  const normalized = cleaned.replace(/^\/+public(?=\/storage\/)/, "");
+  const origin = originForStoragePath(normalized);
+  return `${origin}${normalized}`;
 }

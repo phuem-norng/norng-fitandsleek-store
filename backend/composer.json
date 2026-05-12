@@ -13,6 +13,7 @@
         "laravel/sanctum": "^4.2",
         "laravel/socialite": "^5.24",
         "laravel/tinker": "^2.10.1",
+        "symfony/filesystem": "^7.2",
         "twilio/sdk": "^8.10"
     },
     "require-dev": {

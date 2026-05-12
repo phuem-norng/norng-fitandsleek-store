@@ -192,14 +192,20 @@ class BakongPaymentController extends Controller
 
     private function markOrderAsPaid(Order $order): void
     {
-        $order->update([
+        $locked = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+        if ($locked->payment_status === 'paid') {
+            return;
+        }
+
+        $locked->update([
             'payment_status' => 'paid',
             'status' => 'processing',
         ]);
 
-        $order->loadMissing('items.product');
+        $locked->loadMissing('items.product');
 
-        PaidOrderInventory::applyForOrder($order);
+        PaidOrderInventory::applyForOrder($locked);
     }
 
     private function formatPaymentResponse(Payment $payment): array

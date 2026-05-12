@@ -41,6 +41,7 @@ import HomePageManager from "./pages/admin/HomePageManager.jsx";
 import CompleteHomepageManager from "./pages/admin/CompleteHomepageManager.jsx";
 import { HomepageSettingsProvider, useHomepageSettings } from "./state/homepageSettings.jsx";
 import { useLanguage } from "./lib/i18n.jsx";
+import CustomCursor from "./components/CustomCursor.jsx";
 import Reports from "./pages/admin/Reports.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
@@ -133,6 +134,7 @@ export default function App() {
   return (
     <HomepageSettingsProvider>
       <FontSettingsSync />
+      <CustomCursor />
       <Routes>
         <Route element={<SiteLayout />}>
           <Route index element={<Home />} />

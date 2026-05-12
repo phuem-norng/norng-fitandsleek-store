@@ -32,21 +32,22 @@ return [
     ],
 
     'allowed_origins_patterns' => [
+        '~^http://localhost:\d+$~',
+        '~^http://127\.0\.0\.1:\d+$~',
+        '~^https://localhost:\d+$~',
+        '~^https://127\.0\.0\.1:\d+$~',
+        // Cloudflare quick Tunnel (ephemeral *.trycloudflare.com)
+        '~^https://[a-zA-Z0-9.-]+\.trycloudflare\.com$~i',
         '~^https://[a-zA-Z0-9-]+\.ngrok-free\.app$~',
         '~^https://[a-zA-Z0-9-]+\.ngrok-free\.dev$~',
         '~^https://[a-zA-Z0-9-]+\.ngrok\.io$~',
     ],
 
-    'allowed_headers' => [
-        'Content-Type',
-        'Authorization',
-        'X-CSRF-TOKEN',
-        'X-Requested-With',
-        'X-Device-ID',
-        'X-Device-Name',
-        'X-Device-Browser',
-        'X-Device-OS',
-    ],
+    /*
+     * Wildcard avoids preflight failures when the SPA sends extra headers
+     * (e.g. ngrok-skip-browser-warning, Accept) that would otherwise be rejected.
+     */
+    'allowed_headers' => ['*'],
 
     'exposed_headers' => ['XSRF-TOKEN', 'X-CSRF-TOKEN'],
 
