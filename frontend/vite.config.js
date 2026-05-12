@@ -28,6 +28,11 @@ export default defineConfig(({ mode }) => {
     .map((h) => h.trim())
     .filter(Boolean);
 
+  // Any Host not in the list → Vite 403 for `/`, `/favicon.ico`, etc. Default: allow all in dev.
+  // Set VITE_STRICT_DEV_HOSTS=1 to use defaultAllowedHosts + VITE_EXTRA_ALLOWED_HOSTS only.
+  const strictDevHosts = env.VITE_STRICT_DEV_HOSTS === "1";
+  const devAllowedHosts = strictDevHosts ? [...defaultAllowedHosts, ...extraAllowedHosts] : true;
+
   const apiProxy = {
     "/api": {
       target: proxyTarget,
@@ -54,16 +59,17 @@ export default defineConfig(({ mode }) => {
       },
     },
     preview: {
-      // `vite preview` does not inherit `server.proxy`; without this, /api hits the static server and breaks Docker + Telegram WebView.
+      // `vite preview` does not inherit `server.*`; set proxy + allowedHosts here too.
       proxy: apiProxy,
+      allowedHosts: devAllowedHosts,
     },
     server: {
       port: 5173,
       // Tunnel / LAN: listen on all interfaces. Pure local: localhost only.
       host: cfTunnel ? true : "localhost",
       strictPort: true,
-      // Quick tunnels use a new subdomain each run — `true` allows any Host (dev only).
-      allowedHosts: cfTunnel ? true : [...defaultAllowedHosts, ...extraAllowedHosts],
+      // Tunnel: any host. Otherwise see `devAllowedHosts` (default true = no 403 on unknown Host).
+      allowedHosts: cfTunnel ? true : devAllowedHosts,
       hmr:
         cfTunnel && tunnelHost
           ? {
