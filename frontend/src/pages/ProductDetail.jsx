@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../lib/api";
@@ -70,6 +70,15 @@ function parsePaymentMethods(paymentData) {
   return [];
 }
 
+// Default size chart (cm) — shown when product has no custom `size_guide` text
+const DEFAULT_SIZE_GUIDE_ROWS = [
+  { size: "XS", chest: "86-91", waist: "71-76", hip: "86-91" },
+  { size: "S", chest: "91-96", waist: "76-81", hip: "91-96" },
+  { size: "M", chest: "96-101", waist: "81-86", hip: "96-101" },
+  { size: "L", chest: "101-106", waist: "86-91", hip: "101-106" },
+  { size: "XL", chest: "106-111", waist: "91-96", hip: "106-111" },
+];
+
 export default function ProductDetail() {
   const { slug } = useParams();
   const location = useLocation();
@@ -94,6 +103,11 @@ export default function ProductDetail() {
   const [showZoomModal, setShowZoomModal] = useState(false);
   const [stockError, setStockError] = useState("");
   const [modalZoom, setModalZoom] = useState(1);
+  const [modalPan, setModalPan] = useState({ x: 0, y: 0 });
+  const [zoomPanning, setZoomPanning] = useState(false);
+  const zoomViewportRef = useRef(null);
+  const zoomPanDragRef = useRef(null);
+  const modalZoomRef = useRef(1);
 
   // useEffect hook
   useEffect(() => {
@@ -287,6 +301,122 @@ export default function ProductDetail() {
     }
   };
 
+  useEffect(() => {
+    modalZoomRef.current = modalZoom;
+  }, [modalZoom]);
+
+  useEffect(() => {
+    if (!showZoomModal) {
+      setModalZoom(1);
+      setModalPan({ x: 0, y: 0 });
+      zoomPanDragRef.current = null;
+      setZoomPanning(false);
+    }
+  }, [showZoomModal]);
+
+  useEffect(() => {
+    if (!showZoomModal || modalZoom <= 1) {
+      if (showZoomModal && modalZoom <= 1) setModalPan({ x: 0, y: 0 });
+      return;
+    }
+    const el = zoomViewportRef.current;
+    if (!el) return;
+    const vw = el.clientWidth;
+    const vh = el.clientHeight;
+    const pad = Math.max(vw, vh) * (modalZoom - 1) * 0.55;
+    setModalPan((prev) => ({
+      x: Math.max(-pad, Math.min(pad, prev.x)),
+      y: Math.max(-pad, Math.min(pad, prev.y)),
+    }));
+  }, [modalZoom, showZoomModal]);
+
+  useEffect(() => {
+    if (!zoomPanning) return undefined;
+    const stop = () => {
+      zoomPanDragRef.current = null;
+      setZoomPanning(false);
+    };
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+  }, [zoomPanning]);
+
+  useEffect(() => {
+    if (!showZoomModal) return undefined;
+    const el = zoomViewportRef.current;
+    if (!el) return undefined;
+    let startDist = 0;
+    let startZoom = 1;
+    const onTouchStart = (ev) => {
+      if (ev.touches.length === 2) {
+        const [a, b] = [ev.touches[0], ev.touches[1]];
+        startDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        startZoom = modalZoomRef.current;
+      }
+    };
+    const onTouchMove = (ev) => {
+      if (ev.touches.length !== 2) return;
+      ev.preventDefault();
+      const [a, b] = [ev.touches[0], ev.touches[1]];
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+      const next = Math.min(3, Math.max(1, (startZoom * d) / startDist));
+      setModalZoom(Number(next.toFixed(2)));
+    };
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [showZoomModal]);
+
+  const onZoomPanPointerDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    if (modalZoomRef.current <= 1) return;
+    if (e.target.closest && e.target.closest("button")) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    zoomPanDragRef.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY };
+    setZoomPanning(true);
+  }, []);
+
+  const onZoomPanPointerMove = useCallback((e) => {
+    const drag = zoomPanDragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.lastX;
+    const dy = e.clientY - drag.lastY;
+    drag.lastX = e.clientX;
+    drag.lastY = e.clientY;
+    const z = modalZoomRef.current;
+    const el = zoomViewportRef.current;
+    if (!el || z <= 1) {
+      setModalPan({ x: 0, y: 0 });
+      return;
+    }
+    const vw = el.clientWidth;
+    const vh = el.clientHeight;
+    const pad = Math.max(vw, vh) * (z - 1) * 0.55;
+    setModalPan((prev) => ({
+      x: Math.max(-pad, Math.min(pad, prev.x + dx)),
+      y: Math.max(-pad, Math.min(pad, prev.y + dy)),
+    }));
+  }, []);
+
+  const onZoomPanPointerUp = useCallback((e) => {
+    const drag = zoomPanDragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    zoomPanDragRef.current = null;
+    setZoomPanning(false);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   if (loading) {
     return (
       <div className="container-safe py-10">
@@ -347,16 +477,16 @@ export default function ProductDetail() {
 
       <div className="grid md:grid-cols-2 gap-8 lg:gap-12 items-start">
         {/* Image Gallery */}
-        <div className="grid grid-cols-[80px_1fr] gap-4 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-[80px_1fr] gap-3 md:gap-4 items-start">
           {/* Vertical Thumbnails */}
-          <div className="h-[520px] overflow-y-auto overflow-x-hidden no-scrollbar">
-            <div className="flex flex-col gap-3">
+          <div className="order-2 md:order-1 mt-2 md:mt-0 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden no-scrollbar md:h-[520px]">
+            <div className="flex gap-3 md:flex-col">
               {images.slice(0, 5).map((img, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveImage(idx)}
                   onMouseEnter={() => setActiveImage(idx)}
-                  className={`w-20 h-20 rounded-xl overflow-hidden transition-colors border ${activeImage === idx ? 'border-zinc-900' : 'border-zinc-200 hover:border-zinc-400'
+                  className={`h-16 w-16 shrink-0 md:h-20 md:w-20 rounded-xl overflow-hidden transition-colors border ${activeImage === idx ? 'border-zinc-900' : 'border-zinc-200 hover:border-zinc-400'
                     }`}
                 >
                   <img
@@ -372,7 +502,7 @@ export default function ProductDetail() {
           {/* Main Image */}
           <div
             ref={mainImageRef}
-            className="aspect-[4/5] bg-zinc-50 rounded-md overflow-hidden relative cursor-zoom-in"
+            className="order-1 md:order-2 aspect-[4/5] bg-zinc-50 rounded-md overflow-hidden relative cursor-zoom-in"
             onMouseEnter={() => setHoverZoom(true)}
             onMouseLeave={() => setHoverZoom(false)}
             onMouseMove={(e) => {
@@ -533,7 +663,7 @@ export default function ProductDetail() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-zinc-900">{t('sizeAvailable')}</span>
-                {sizes.length > 1 && (
+                {sizes.length > 0 && (
                   <button
                     onClick={() => setShowSizeGuide(true)}
                     className="text-xs text-zinc-600 hover:text-zinc-900 underline"
@@ -682,109 +812,135 @@ export default function ProductDetail() {
         </div>
       )}
 
-      {/* Size Guide Modal */}
-      {showSizeGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowSizeGuide(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">{t('sizeGuide')}</h3>
-              <button onClick={() => setShowSizeGuide(false)} className="p-2 hover:bg-zinc-100 rounded-lg transition-colors">
-                <X className="w-5 h-5" strokeWidth={2} />
-              </button>
+      {/* Size Guide — portal to body so it stays centered on all viewports */}
+      {showSizeGuide &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              aria-hidden
+              onClick={() => setShowSizeGuide(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="size-guide-dialog-title"
+              className="relative z-10 mx-auto w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex max-h-[min(90dvh,640px)] flex-col">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4 sm:px-6">
+                  <h3 id="size-guide-dialog-title" className="text-lg font-bold tracking-tight text-zinc-900">
+                    {t("sizeGuide")}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowSizeGuide(false)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50"
+                  >
+                    <X className="h-4 w-4" strokeWidth={2} />
+                  </button>
+                </div>
+                <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+                  {p.size_guide ? (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{p.size_guide}</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-zinc-200">
+                      <table className="w-full min-w-[280px] text-sm">
+                        <thead>
+                          <tr className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                            <th className="px-3 py-3 sm:px-4">{t("size")}</th>
+                            <th className="px-3 py-3 sm:px-4">{t("chestCm")}</th>
+                            <th className="px-3 py-3 sm:px-4">{t("waistCm")}</th>
+                            <th className="px-3 py-3 sm:px-4">{t("hipCm")}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {DEFAULT_SIZE_GUIDE_ROWS.map((row) => (
+                            <tr key={row.size} className="text-zinc-800">
+                              <td className="px-3 py-2.5 font-semibold sm:px-4">{row.size}</td>
+                              <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.chest}</td>
+                              <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.waist}</td>
+                              <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.hip}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="space-y-4">
-              {p.size_guide ? (
-                <p className="text-sm text-zinc-700">{p.size_guide}</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-zinc-50">
-                      <th className="px-4 py-2 text-left">{t('size')}</th>
-                      <th className="px-4 py-2 text-left">{t('chestCm')}</th>
-                      <th className="px-4 py-2 text-left">{t('waistCm')}</th>
-                      <th className="px-4 py-2 text-left">{t('hipCm')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b">
-                      <td className="px-4 py-2 font-medium">XS</td>
-                      <td className="px-4 py-2">86-91</td>
-                      <td className="px-4 py-2">71-76</td>
-                      <td className="px-4 py-2">86-91</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="px-4 py-2 font-medium">S</td>
-                      <td className="px-4 py-2">91-96</td>
-                      <td className="px-4 py-2">76-81</td>
-                      <td className="px-4 py-2">91-96</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="px-4 py-2 font-medium">M</td>
-                      <td className="px-4 py-2">96-101</td>
-                      <td className="px-4 py-2">81-86</td>
-                      <td className="px-4 py-2">96-101</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="px-4 py-2 font-medium">L</td>
-                      <td className="px-4 py-2">101-106</td>
-                      <td className="px-4 py-2">86-91</td>
-                      <td className="px-4 py-2">101-106</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-2 font-medium">XL</td>
-                      <td className="px-4 py-2">106-111</td>
-                      <td className="px-4 py-2">91-96</td>
-                      <td className="px-4 py-2">106-111</td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Zoom Modal */}
       {showZoomModal && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="absolute inset-0" onClick={() => setShowZoomModal(false)} />
-          <div className="relative bg-white !rounded-none border border-gray-200 shadow-2xl w-full max-w-4xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-semibold">{t('zoom')}</div>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-2">
+          <div className="absolute inset-0" onClick={() => setShowZoomModal(false)} aria-hidden />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("zoom")}
+            className="relative flex h-[min(94dvh,calc(100dvh-0.5rem))] w-full max-w-[min(98vw,640px)] flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-2xl sm:h-[min(92dvh,calc(100dvh-1rem))] sm:max-w-[min(96vw,880px)] md:max-w-[min(94vw,1120px)] lg:h-[min(91dvh,calc(100dvh-1.25rem))] lg:max-w-[min(92vw,1280px)] xl:max-w-[min(90vw,1440px)] 2xl:max-w-[min(88vw,1680px)]"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 sm:px-5 sm:py-3.5">
+              <div className="text-base font-semibold tracking-tight text-zinc-900 sm:text-lg">{t("zoom")}</div>
               <button
+                type="button"
                 onClick={() => setShowZoomModal(false)}
-                className="h-8 w-8 rounded-full border border-zinc-200 flex items-center justify-center"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 sm:h-10 sm:w-10"
               >
-                <X className="w-4 h-4" strokeWidth={2} />
+                <X className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={2} />
               </button>
             </div>
-            <div className="relative aspect-square bg-zinc-50 !rounded-none border border-gray-200 overflow-hidden flex items-center justify-center">
+            <div
+              ref={zoomViewportRef}
+              className={`relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden bg-zinc-100/90 p-2 sm:p-4 md:p-6 lg:p-8 select-none ${
+                modalZoom > 1 ? `touch-none ${zoomPanning ? "cursor-grabbing" : "cursor-grab"}` : ""
+              }`}
+              style={{ touchAction: modalZoom > 1 ? "none" : "manipulation" }}
+              onPointerDown={onZoomPanPointerDown}
+              onPointerMove={onZoomPanPointerMove}
+              onPointerUp={onZoomPanPointerUp}
+              onPointerCancel={onZoomPanPointerUp}
+            >
               <img
                 src={resolveImageUrl(images[activeImage])}
                 alt={p.name}
-                className="max-h-[85vh] max-w-full object-contain mx-auto shadow-2xl transition-transform duration-200 will-change-transform"
-                style={{ transform: `scale(${modalZoom})`, transformOrigin: "center center" }}
+                draggable={false}
+                className="mx-auto block h-full max-h-full w-full max-w-full object-contain shadow-none will-change-transform"
+                style={{
+                  transform: `translate(${modalPan.x}px, ${modalPan.y}px) scale(${modalZoom})`,
+                  transformOrigin: "center center",
+                  transition: zoomPanning ? "none" : "transform 0.2s ease-out",
+                }}
               />
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-3">
-              <button
-                onClick={() => setModalZoom((z) => Math.max(1, Number((z - 0.25).toFixed(2))))}
-                disabled={modalZoom <= 1}
-                className="h-10 w-10 rounded-full border border-zinc-200 bg-white shadow-sm flex items-center justify-center text-lg font-semibold transition hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                −
-              </button>
-              <div className="min-w-[76px] h-10 rounded-full border border-zinc-200 bg-white shadow-sm flex items-center justify-center text-sm font-semibold">
-                {Math.round(modalZoom * 100)}%
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center bg-gradient-to-t from-black/30 via-black/10 to-transparent pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-14 sm:pt-20 lg:pt-24">
+                <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-white/25 bg-white/95 px-3 py-2 shadow-xl backdrop-blur-md sm:gap-3 sm:px-4 sm:py-2.5 lg:gap-4 lg:px-5 lg:py-3">
+                  <button
+                    type="button"
+                    onClick={() => setModalZoom((z) => Math.max(1, Number((z - 0.25).toFixed(2))))}
+                    disabled={modalZoom <= 1}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-lg font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:w-11 sm:text-xl lg:h-12 lg:w-12"
+                  >
+                    −
+                  </button>
+                  <div className="flex h-10 min-w-[5rem] items-center justify-center rounded-full border border-zinc-200 bg-white px-3 text-sm font-semibold tabular-nums text-zinc-800 shadow-sm sm:h-11 sm:min-w-[5.5rem] sm:text-base lg:h-12 lg:min-w-[6rem] lg:text-lg">
+                    {Math.round(modalZoom * 100)}%
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
+                    disabled={modalZoom >= 3}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-lg font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:w-11 sm:text-xl lg:h-12 lg:w-12"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => setModalZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
-                disabled={modalZoom >= 3}
-                className="h-10 w-10 rounded-full border border-zinc-200 bg-white shadow-sm flex items-center justify-center text-lg font-semibold transition hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                +
-              </button>
             </div>
           </div>
         </div>,

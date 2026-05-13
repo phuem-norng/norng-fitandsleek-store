@@ -319,7 +319,19 @@ export default function ExtendedHomepageManager() {
         sections: allSections,
         subsections 
       });
-      setSuccess('✅ All sections saved!');
+      const chrome =
+        headerSettings.background_color || footerSettings.background_color || '#6F8F72';
+      await api.put('/admin/homepage-settings/header-extended', {
+        ...headerSettings,
+        background_color: chrome,
+      });
+      await api.put('/admin/homepage-settings/footer-extended', {
+        footer: { ...footerSettings, background_color: chrome },
+        footer_sections: footerSections,
+        footer_section_titles: footerSectionTitles,
+        footer_socials: footerSocials
+      });
+      setSuccess('✅ Sections saved (including shared header/footer background color)!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       if (err.response?.status === 401) {
@@ -371,6 +383,11 @@ export default function ExtendedHomepageManager() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSharedChromeBackgroundColor = (color) => {
+    setHeaderSettings((prev) => ({ ...prev, background_color: color }));
+    setFooterSettings((prev) => ({ ...prev, background_color: color }));
   };
 
   return (
@@ -465,7 +482,21 @@ export default function ExtendedHomepageManager() {
         {activeTab === 'sections' && (
           <div className="bg-white rounded-lg shadow-lg p-8">
             <h2 className="text-3xl font-bold mb-6">Homepage Sections</h2>
-            
+
+            <div className="mb-8 rounded-lg border border-gray-200 p-5 bg-gray-50">
+              <h3 className="mb-2 text-lg font-semibold text-gray-900">Header &amp; footer background</h3>
+              <p className="mb-4 text-sm text-gray-600">
+                One color for both header and footer. Save with <strong>Save All Sections</strong> below.
+              </p>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Shared background color</label>
+              <input
+                type="color"
+                value={headerSettings.background_color || footerSettings.background_color || '#6F8F72'}
+                onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
+                className="w-20 h-10 border border-gray-300 rounded"
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               {Object.entries(allSections).map(([key, section]) => (
                 <div key={key} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition">
@@ -560,16 +591,6 @@ export default function ExtendedHomepageManager() {
                   value={headerSettings.logo_url || ''}
                   onChange={(e) => setHeaderSettings({ ...headerSettings, logo_url: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Header Background Color</label>
-                <input
-                  type="color"
-                  value={headerSettings.background_color || '#6F8F72'}
-                  onChange={(e) => setHeaderSettings({ ...headerSettings, background_color: e.target.value })}
-                  className="w-20 h-10 border border-gray-300 rounded"
                 />
               </div>
 
@@ -985,16 +1006,6 @@ export default function ExtendedHomepageManager() {
                   value={footerSettings.copyright_text}
                   onChange={(e) => setFooterSettings({ ...footerSettings, copyright_text: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">Footer Background Color</label>
-                <input
-                  type="color"
-                  value={footerSettings.background_color || '#6F8F72'}
-                  onChange={(e) => setFooterSettings({ ...footerSettings, background_color: e.target.value })}
-                  className="w-20 h-10 border border-gray-300 rounded"
                 />
               </div>
 

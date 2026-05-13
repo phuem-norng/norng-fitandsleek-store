@@ -336,6 +336,11 @@ export default function CompleteHomepageManager() {
  }));
  };
 
+const handleSharedChromeBackgroundColor = (color) => {
+handleHeaderChange('background_color', color);
+handleFooterChange('background_color', color);
+};
+
  const uploadLeftMenuImage = async (sectionIndex, itemIndex, file) => {
  if (!file) return;
  const formData = new FormData();
@@ -410,7 +415,18 @@ export default function CompleteHomepageManager() {
  setLoading(true);
  setError('');
  await api.put('/admin/homepage-settings/sections', { sections });
- setSuccess('✅ Section settings saved successfully!');
+ const chrome =
+ headerSettings.background_color || footerSettings.background_color || '#6F8F72';
+ await api.put('/admin/homepage-settings/header-extended', {
+ ...headerSettings,
+ background_color: chrome,
+ });
+ await api.put('/admin/homepage-settings/footer-extended', {
+ footer: { ...footerSettings, background_color: chrome },
+ footer_sections: footerSections,
+ footer_socials: footerSocials,
+ });
+ setSuccess('✅ Section settings, header color, and footer color saved!');
  setTimeout(() => setSuccess(''), 3000);
  } catch (err) {
  console.error('Save error:', err);
@@ -521,6 +537,22 @@ export default function CompleteHomepageManager() {
  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
  <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white">Homepage Sections</h2>
  <p className="text-slate-500 dark:text-slate-400 mb-6">Manage sections displayed on the homepage. Enable/disable sections and set their display order.</p>
+
+ <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 p-5 bg-white dark:bg-slate-900">
+ <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Header &amp; footer background</h3>
+ <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+ One color for both header and footer. Use <strong>Save Section Settings</strong> at the bottom of this tab to save it to the server.
+ </p>
+ <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
+ Shared background color
+ </label>
+ <input
+ type="color"
+ value={headerSettings.background_color || footerSettings.background_color || '#6F8F72'}
+ onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
+ className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+ />
+ </div>
 
  <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">Add New Section</h3>
@@ -667,16 +699,6 @@ export default function CompleteHomepageManager() {
  value={headerSettings.logo_url || ''}
  onChange={(e) => handleHeaderChange('logo_url', e.target.value)}
  className="w-full h-11 rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm focus:border-[var(--admin-primary)] focus:ring-0 outline-none bg-white dark:bg-slate-900/60 text-slate-900 dark:text-slate-100"
- />
- </div>
-
- <div>
- <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Header Background Color</label>
- <input
- type="color"
- value={headerSettings.background_color || '#6F8F72'}
- onChange={(e) => handleHeaderChange('background_color', e.target.value)}
- className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
  />
  </div>
 
@@ -1124,16 +1146,6 @@ export default function CompleteHomepageManager() {
  value={footerSettings.contact_address || ''}
  onChange={(e) => handleFooterChange('contact_address', e.target.value)}
  className="w-full h-11 rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm focus:border-[var(--admin-primary)] focus:ring-0 outline-none bg-white dark:bg-slate-900/60 text-slate-900 dark:text-slate-100"
- />
- </div>
-
- <div>
- <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Footer Background Color</label>
- <input
- type="color"
- value={footerSettings.background_color || '#6F8F72'}
- onChange={(e) => handleFooterChange('background_color', e.target.value)}
- className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
  />
  </div>
 

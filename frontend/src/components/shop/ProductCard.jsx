@@ -3,10 +3,6 @@ import { Heart } from "lucide-react";
 import { Link } from "react-router-dom";
 import { resolveImageUrl } from "../../lib/images";
 import { useWishlist } from "../../state/wishlist";
-import { useCart } from "../../state/cart";
-import { useAuth } from "../../state/auth";
-import { errorAlert } from "../../lib/swal";
-import { triggerTelegramHaptic } from "../../lib/telegramWebApp";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -16,53 +12,6 @@ function Money({ value }) {
 export default function ProductCard({ p }) {
   const [imgOk, setImgOk] = useState(true);
   const wishlist = useWishlist();
-  const cart = useCart();
-  const { user } = useAuth();
-
-  const addToCart = async () => {
-    try {
-      const sizes = Array.isArray(p?.sizes)
-        ? p.sizes
-        : typeof p?.sizes === "string"
-          ? p.sizes.split(",").map((s) => s.trim()).filter(Boolean)
-          : [];
-      const colors = Array.isArray(p?.colors)
-        ? p.colors
-        : typeof p?.colors === "string"
-          ? p.colors.split(",").map((c) => c.trim()).filter(Boolean)
-          : [];
-      if (sizes.length > 0) {
-        triggerTelegramHaptic("notification", "warning");
-        await errorAlert({
-          khTitle: "សូមជ្រើសទំហំ",
-          enTitle: "Select size",
-          khText: "សូមជ្រើសទំហំនៅលើទំព័រទំនិញ",
-          enText: "Please select a size on the product page.",
-        });
-        if (p?.slug) window.location.href = `/p/${p.slug}`;
-        return;
-      }
-      if (colors.length > 0) {
-        triggerTelegramHaptic("notification", "warning");
-        await errorAlert({
-          khTitle: "សូមជ្រើសពណ៌",
-          enTitle: "Select color",
-          khText: "សូមជ្រើសពណ៌នៅលើទំព័រទំនិញ",
-          enText: "Please select a color on the product page.",
-        });
-        if (p?.slug) window.location.href = `/p/${p.slug}`;
-        return;
-      }
-      await cart.add(p, 1);
-      triggerTelegramHaptic("impact", "medium");
-    } catch (e) {
-      triggerTelegramHaptic("notification", "error");
-      if (String(e?.message || "").includes("LOGIN_REQUIRED")) {
-        window.location.href = "/login";
-        return;
-      }
-    }
-  };
 
   const src = imgOk ? resolveImageUrl(p.image_url) : "/placeholder.svg";
 
@@ -111,7 +60,7 @@ export default function ProductCard({ p }) {
           title="Wishlist"
         >
           <Heart
-            className="w-4 h-4 sm:w-5 sm:h-5"
+            className="w-4 h-4 sm:w-5 sm:w-5"
             strokeWidth={1.5}
             fill={wishlist.has(p.id) ? "currentColor" : "none"}
           />
@@ -157,18 +106,6 @@ export default function ProductCard({ p }) {
           <span className="h-2 w-2 rounded-full bg-zinc-400" />
           <span className="h-2 w-2 rounded-full bg-zinc-200" />
         </div>
-
-        {!user ? (
-          <div className="mt-2 text-xs text-zinc-500">Login required for cart & checkout</div>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={addToCart}
-          className="mt-3 w-full rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-amber-600 active:translate-y-[1px]"
-        >
-          Add to Cart
-        </button>
       </div>
     </div>
   );

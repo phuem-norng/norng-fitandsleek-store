@@ -172,7 +172,7 @@ export default function SupportChatWidget() {
 
   return (
     <div
-      className="fixed z-[60] pointer-events-none flex flex-col items-end"
+      className="fixed z-[45] pointer-events-none flex flex-col items-end"
       style={{ right: pos.right, bottom: pos.bottom }}
     >
       <div

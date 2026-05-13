@@ -187,67 +187,67 @@ function DropdownMenu({ items, children, hasSubtitle }) {
             // Full-width sections layout
             <div className="container-safe mx-auto py-6 px-8">
               <div className="grid grid-cols-4 gap-10">
-              {safeItems.filter(item => item?.type === 'section').map((section, idx) => (
-                <div key={idx} className={section.className || ''}>
-                  {section.to ? (
-                    <Link
-                      to={section.to}
-                      className="block group mb-3"
-                    >
-                      <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1 group-hover:text-emerald-600 transition-colors">
-                        {section.label}
-                      </h4>
-                      {section.description && (
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          {section.description}
-                        </p>
-                      )}
-                    </Link>
-                  ) : (
-                    <div className="block mb-3">
-                      <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1">
-                        {section.label}
-                      </h4>
-                      {section.description && (
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          {section.description}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    {section.items && section.items.map((item, itemIdx) => (
+                {safeItems.filter(item => item?.type === 'section').map((section, idx) => (
+                  <div key={idx} className={section.className || ''}>
+                    {section.to ? (
                       <Link
-                        key={itemIdx}
-                        to={item.to}
-                        className="fs-menu-item"
+                        to={section.to}
+                        className="block group mb-3"
                       >
-                        {item.label}
+                        <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1 group-hover:text-emerald-600 transition-colors">
+                          {section.label}
+                        </h4>
+                        {section.description && (
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            {section.description}
+                          </p>
+                        )}
                       </Link>
-                    ))}
+                    ) : (
+                      <div className="block mb-3">
+                        <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1">
+                          {section.label}
+                        </h4>
+                        {section.description && (
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            {section.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      {section.items && section.items.map((item, itemIdx) => (
+                        <Link
+                          key={itemIdx}
+                          to={item.to}
+                          className="fs-menu-item"
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
             </div>
           ) : (
             // Simple list layout - horizontal row
             <div className="container-safe mx-auto py-6 px-8">
               <div className="flex items-center justify-center gap-3 flex-wrap">
                 {safeItems.map((item, idx) => (
-                <Link
-                  key={idx}
-                  to={item.to}
-                  className={cn(
-                    "px-6 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
-                    item.highlight 
-                      ? "text-zinc-900 font-semibold bg-zinc-100 hover:bg-zinc-200" 
-                      : "text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
+                  <Link
+                    key={idx}
+                    to={item.to}
+                    className={cn(
+                      "px-6 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
+                      item.highlight
+                        ? "text-zinc-900 font-semibold bg-zinc-100 hover:bg-zinc-200"
+                        : "text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
               </div>
             </div>
           )}
@@ -283,7 +283,7 @@ function AnimatedNavLink({ to, label, hasDropdown, onHover, isHovered }) {
 function NavBar({ navItems }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [showMore, setShowMore] = useState(false);
-  
+
   // Responsive menu: show fewer items on smaller desktops, more on larger screens
   const visibleItemsCount = navItems.length > 8 ? 5 : navItems.length > 6 ? 5 : Math.min(6, navItems.length);
   const visibleItems = navItems.slice(0, visibleItemsCount);
@@ -304,27 +304,27 @@ function NavBar({ navItems }) {
           return item.items ? (
             <DropdownMenu key={itemKey} items={item.items}>
               {(isOpen) => (
-                <AnimatedNavLink 
-                  to={item.to} 
-                  label={item.label} 
-                  hasDropdown 
+                <AnimatedNavLink
+                  to={item.to}
+                  label={item.label}
+                  hasDropdown
                   onHover={() => setHoveredIndex(index)}
                   isHovered={hoveredIndex === index || isOpen}
                 />
               )}
             </DropdownMenu>
           ) : (
-            <AnimatedNavLink 
-              key={itemKey} 
-              to={item.to} 
-              label={item.label} 
+            <AnimatedNavLink
+              key={itemKey}
+              to={item.to}
+              label={item.label}
               hasDropdown={false}
               onHover={() => setHoveredIndex(index)}
               isHovered={hoveredIndex === index}
             />
           );
         })}
-        
+
         {/* More dropdown for overflow items */}
         {hasMore && (
           <div className="relative">
@@ -781,9 +781,9 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           },
         ],
       },
-      { 
+      {
         key: 'sale',
-        label: label('sale', t('sale')), 
+        label: label('sale', t('sale')),
         to: "/search?tab=sale",
         items: [
           { label: label('allSaleItems', t('allSaleItems')), to: "/search?tab=sale" },
@@ -830,7 +830,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   const handleSearchInput = (value) => {
     setQ(value);
     setSelectedIndex(-1);
-    
+
     // Clear previous timeout
     if (suggestionTimeoutRef.current) {
       clearTimeout(suggestionTimeoutRef.current);
@@ -848,7 +848,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndex((prev) => 
+      setSelectedIndex((prev) =>
         prev < suggestions.length - 1 ? prev + 1 : prev
       );
     } else if (e.key === "ArrowUp") {
@@ -881,11 +881,11 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   // Highlight matching text
   const highlightMatch = (text, query) => {
     if (!query || !text) return text;
-    
+
     const parts = text.split(new RegExp(`(${query})`, 'gi'));
     return (
       <span>
-        {parts.map((part, i) => 
+        {parts.map((part, i) =>
           part.toLowerCase() === query.toLowerCase() ? (
             <strong key={i} className="font-extrabold text-zinc-900 bg-yellow-100/50 px-0.5 rounded">{part}</strong>
           ) : (
@@ -1137,13 +1137,16 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           setQ("");
         }
       }}>
-        <AlertDialogContent className="top-[10%] translate-y-0 max-w-2xl p-0 overflow-hidden border border-slate-200">
+        <AlertDialogContent
+          overlayClassName="bg-black/45 backdrop-blur-[10px]"
+          className="w-[92vw] sm:min-w-[620px] sm:max-w-[680px] p-0 overflow-hidden border border-slate-200 rounded-[24px] sm:rounded-[28px] shadow-[0_28px_70px_rgba(15,23,42,0.22)]"
+        >
           <AlertDialogHeader>
-            <div className="px-6 pt-6 pb-2">
-              <AlertDialogTitle className="text-3xl font-black tracking-tight text-slate-900">
-                {t('searchProducts')}
+            <div className="px-[22px] pt-[28px] pb-2 sm:p-10 sm:pb-3">
+              <AlertDialogTitle className="text-[32px] leading-none font-black tracking-tight text-slate-900">
+                Search items...
               </AlertDialogTitle>
-              <AlertDialogDescription className="mt-2 text-base text-slate-500">
+              <AlertDialogDescription className="mt-2.5 text-base text-slate-500">
                 Smart search with instant suggestions.
               </AlertDialogDescription>
             </div>
@@ -1154,7 +1157,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
               submitSearch(e);
               setShowSearchDialog(false);
             }}
-            className="space-y-5 px-6 pb-6"
+            className="space-y-6 px-[22px] pb-[28px] sm:space-y-6 sm:px-10 sm:pb-10"
           >
             <div className="relative">
               <input
@@ -1162,19 +1165,26 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
                 value={q}
                 onChange={(e) => handleSearchInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={searchPlaceholder}
-                className="w-full h-14 rounded-2xl border border-slate-200 bg-white pl-12 pr-14 text-lg text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-zinc-900"
+                placeholder="Search everything"
+                className="w-full h-16 rounded-full border border-slate-300 bg-white pl-14 pr-14 text-[20px] text-slate-900 placeholder-slate-400 outline-none shadow-[0_10px_28px_rgba(15,23,42,0.06)] focus:ring-2 focus:ring-zinc-900"
                 autoFocus
                 autoComplete="off"
               />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+              <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
                 <Search className="w-5 h-5" />
               </span>
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                <kbd className="hidden sm:inline-flex h-6 items-center rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-500">
-                  Enter
-                </kbd>
-              </span>
+              <button
+                type="button"
+                aria-label="Search by image"
+                title="Search by image"
+                onClick={() => {
+                  setShowSearchDialog(false);
+                  nav('/image-search');
+                }}
+                className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+              >
+                <Camera className="h-5 w-5" aria-hidden />
+              </button>
 
               {/* Autocomplete Suggestions Dropdown */}
               {showSuggestions && suggestions.length > 0 && (
@@ -1184,16 +1194,15 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
                       Loading...
                     </div>
                   )}
-                  
+
                   <div className="overflow-y-auto max-h-[320px] py-2">
                     {!loadingSuggestions && suggestions.map((product, index) => (
                       <button
                         key={product.id}
                         type="button"
                         onClick={() => selectSuggestion(product)}
-                        className={`w-full px-5 py-3 text-left hover:bg-gradient-to-r hover:from-zinc-50 hover:to-slate-50 transition-all duration-200 group ${
-                          selectedIndex === index ? 'bg-gradient-to-r from-zinc-100 to-slate-100' : ''
-                        }`}
+                        className={`w-full px-5 py-3 text-left hover:bg-gradient-to-r hover:from-zinc-50 hover:to-slate-50 transition-all duration-200 group ${selectedIndex === index ? 'bg-gradient-to-r from-zinc-100 to-slate-100' : ''
+                          }`}
                         onMouseEnter={() => setSelectedIndex(index)}
                       >
                         <div className="flex items-center gap-3">
@@ -1232,51 +1241,46 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 mr-1">
-                Popular
+            <div className="space-y-3">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Popular searches
               </span>
-              {[
-                { label: "Belts", to: "/search?q=Belts" },
-                { label: "Shoes", to: "/search?q=Shoes" },
-                { label: "Hoodies", to: "/search?q=Hoodies" },
-                { label: "New In", to: "/search?tab=new" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => {
-                    setShowSearchDialog(false);
-                    nav(item.to);
-                  }}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
-                >
-                  {item.label}
-                </button>
-              ))}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {[
+                  { label: "Belts", to: "/search?q=Belts" },
+                  { label: "Shoes", to: "/search?q=Shoes" },
+                  { label: "Hoodies", to: "/search?q=Hoodies" },
+                  { label: "New In", to: "/search?tab=new" },
+                  { label: "T-shirts", to: "/search?q=T-shirts" },
+                  { label: "Jeans", to: "/search?q=Jeans" },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      setShowSearchDialog(false);
+                      nav(item.to);
+                    }}
+                    className="inline-flex h-[38px] items-center rounded-full border border-slate-200 bg-slate-50/80 px-4 text-[15px] font-medium text-slate-700 hover:bg-slate-100 transition"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="h-px bg-slate-200/90" />
+
+            <div className="flex w-full items-center justify-between gap-4">
+              <AlertDialogCancel type="button" className="h-auto border-0 bg-transparent p-0 text-sm font-medium text-slate-500 shadow-none hover:bg-transparent hover:text-slate-700">
+                Cancel
+              </AlertDialogCancel>
               <button
-                type="button"
-                onClick={() => {
-                  setShowSearchDialog(false);
-                  nav('/image-search');
-                }}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                type="submit"
+                className="inline-flex h-[52px] w-[120px] shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-zinc-800 transition"
               >
-                <Camera className="w-4 h-4" />
-                Search by image
+                Search
               </button>
-              <div className="flex items-center gap-2">
-                <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 text-white px-5 py-2 text-sm font-semibold hover:bg-zinc-800 transition"
-                >
-                  Search
-                </button>
-              </div>
             </div>
           </form>
         </AlertDialogContent>
