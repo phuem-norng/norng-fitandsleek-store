@@ -205,14 +205,14 @@ class PaymentController extends Controller
 
         return [
             'bakong' => [
-                'receive_account' => $settings['bakong_receive_account']?->value ?? config('services.bakong.receive_account'),
-                'merchant_name' => $settings['bakong_merchant_name']?->value ?? config('services.bakong.merchant_name'),
-                'merchant_city' => $settings['bakong_merchant_city']?->value ?? config('services.bakong.merchant_city'),
-                'enabled' => (bool)($settings['payment_method_bakong_khqr']?->value ?? true),
+                'receive_account' => $settings->get('bakong_receive_account')?->value ?? config('services.bakong.receive_account'),
+                'merchant_name' => $settings->get('bakong_merchant_name')?->value ?? config('services.bakong.merchant_name'),
+                'merchant_city' => $settings->get('bakong_merchant_city')?->value ?? config('services.bakong.merchant_city'),
+                'enabled' => (bool) ($settings->get('payment_method_bakong_khqr')?->value ?? true),
             ],
             'card' => [
-                'provider' => $settings['card_provider']?->value ?? 'demo',
-                'enabled' => (bool)($settings['payment_method_card_visa']?->value ?? true),
+                'provider' => $settings->get('card_provider')?->value ?? 'demo',
+                'enabled' => (bool) ($settings->get('payment_method_card_visa')?->value ?? true),
             ],
         ];
     }

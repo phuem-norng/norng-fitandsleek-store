@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
-import { warningConfirm } from "../../lib/swal";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 
 export default function Contacts() {
@@ -13,6 +13,9 @@ export default function Contacts() {
  const [viewContact, setViewContact] = useState(null);
  const [err, setErr] = useState("");
  const [success, setSuccess] = useState("");
+ const [pendingDeleteId, setPendingDeleteId] = useState(null);
+ const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+ const [deleteBusy, setDeleteBusy] = useState(false);
 
  const loadContacts = async () => {
  setLoading(true);
@@ -55,20 +58,29 @@ export default function Contacts() {
  }
  };
 
- const handleDelete = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this contact?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const handleDelete = (id) => {
+ setPendingDeleteId(id);
+ };
+
+ const confirmDelete = async () => {
+ setDeleteBusy(true);
  try {
- await api.delete(`/admin/contacts/${id}`);
+ if (pendingBulkDelete) {
+ await api.post("/admin/contacts/bulk-delete", { ids: selectedIds });
+ setSuccess(`${selectedIds.length} contacts deleted`);
+ setSelectedIds([]);
+ } else if (pendingDeleteId != null) {
+ await api.delete(`/admin/contacts/${pendingDeleteId}`);
  setSuccess("Contact deleted");
+ if (viewContact?.id === pendingDeleteId) setViewContact(null);
+ }
  loadContacts();
  } catch (e) {
- setErr("Failed to delete contact");
+ setErr("Failed to delete contact(s)");
+ } finally {
+ setDeleteBusy(false);
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
  }
  };
 
@@ -89,21 +101,7 @@ export default function Contacts() {
 
  const handleBulkDelete = async () => {
  if (selectedIds.length === 0) return;
- const confirmRes = await warningConfirm({
- enTitle: "Delete selected contacts?",
- enText: `Permanently remove ${selectedIds.length} contact(s)? This cannot be undone.`,
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- try {
- await api.post("/admin/contacts/bulk-delete", { ids: selectedIds });
- setSuccess(`${selectedIds.length} contacts deleted`);
- setSelectedIds([]);
- loadContacts();
- } catch (e) {
- setErr("Failed to delete contacts");
- }
+ setPendingBulkDelete(true);
  };
 
  const handleSelectAll = (e) => {
@@ -141,6 +139,26 @@ export default function Contacts() {
  return (
  <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
  <div className="w-full min-w-0">
+ <AdminConfirmDialog
+ open={pendingDeleteId != null || pendingBulkDelete}
+ onClose={() => {
+ if (deleteBusy) return;
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
+ }}
+ onConfirm={confirmDelete}
+ title={pendingBulkDelete ? "Delete selected contacts?" : "Delete this contact?"}
+ message={
+ pendingBulkDelete
+ ? `Permanently remove ${selectedIds.length} contact(s)? This cannot be undone.`
+ : "This action cannot be undone."
+ }
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
+ />
+
  {/* Header */}
  <div className="mb-8">
  <h1 className="text-4xl font-bold text-slate-800 dark:text-white mb-2">
@@ -382,19 +400,14 @@ export default function Contacts() {
  </div>
 
  {/* Contact Detail Modal */}
- {viewContact && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setViewContact(null)} />
- <div className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 animate-modal-in">
- <div className="flex items-center justify-between mb-6">
- <h3 className="text-xl font-bold text-slate-800 dark:text-white">Contact Details</h3>
- <button onClick={() => setViewContact(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
- <svg className="w-5 h-5 text-slate-500 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
-
+ <AdminModal
+ open={!!viewContact}
+ onClose={() => setViewContact(null)}
+ title="Contact Details"
+ titleId="contact-details-title"
+ maxWidthClass="max-w-lg"
+ >
+ {viewContact ? (
  <div className="space-y-4">
  <div className="flex items-center gap-4">
  <div className="w-14 h-14 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 text-xl font-bold">
@@ -451,16 +464,10 @@ export default function Contacts() {
  </button>
  </div>
  </div>
- </div>
- </div>
- )}
+ ) : null}
+ </AdminModal>
 
  <style>{`
- @keyframes modal-in {
- from { opacity: 0; transform: scale(0.95) translateY(-20px); }
- to { opacity: 1; transform: scale(1) translateY(0); }
- }
- .animate-modal-in { animation: modal-in 0.3s ease-out; }
  @keyframes fade-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
  .animate-fade-in { animation: fade-in 0.3s ease-out; }
  `}</style>

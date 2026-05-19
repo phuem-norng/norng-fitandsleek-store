@@ -4,7 +4,7 @@ const THEME_STORAGE_KEY = "fitandsleek_admin_theme";
 
 /** Named presets (matches common dashboard “theme picker” patterns). */
 export const ADMIN_APPEARANCE_PRESETS = [
-  { id: "default", label: "Default", color: "#6B7E73" },
+  { id: "default", label: "Default", color: "#6e8b7e" },
   { id: "emerald", label: "Emerald", color: "#10A37F" },
   { id: "ocean", label: "Ocean Breeze", color: "#6366F1" },
   { id: "coral", label: "Coral Sunset", color: "#F97316" },
@@ -15,7 +15,7 @@ export const ADMIN_APPEARANCE_PRESETS = [
 
 const DEFAULT_THEME = {
   mode: "dark",
-  primaryColor: "#6B7E73",
+  primaryColor: "#6e8b7e",
   presetId: "default",
   scale: "default",
   radius: "md",
@@ -67,11 +67,11 @@ const SCALE_MULT = {
   lg: 1.125,
 };
 
-function applyModeAndPrimary(mode, primaryColor) {
+function applyModeAndPrimary(_mode, primaryColor) {
   const html = document.documentElement;
-  const normalizedMode = mode === "dark" ? "dark" : "light";
   const normalizedColor = normalizeHexColor(primaryColor);
-  html.classList.toggle("dark", normalizedMode === "dark");
+  /* Never toggle `dark` on <html> — storefront shares the same document; admin uses `data-admin-theme` + Tailwind selector */
+  html.classList.remove("dark");
   html.style.setProperty("--admin-primary", normalizedColor);
   html.style.setProperty("--admin-primary-rgb", hexToRgbString(normalizedColor));
 }

@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
+import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 
 function formatDate(value) {
@@ -54,7 +56,6 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const [adminSearchQuery, setAdminSearchQuery] = useState("");
  const [selectedIds, setSelectedIds] = useState([]);
  const [showAddModal, setShowAddModal] = useState(false);
- const [showDeleteModal, setShowDeleteModal] = useState(false);
  const [editingUser, setEditingUser] = useState(null);
  const [userToDelete, setUserToDelete] = useState(null);
  const [modalContext, setModalContext] = useState("customer");
@@ -160,12 +161,10 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  if (context === "admin" && !allowAdmins) return;
  setUserToDelete(userItem);
  setDeleteContext(context);
- setShowDeleteModal(true);
  };
 
  const closeModals = () => {
  setShowAddModal(false);
- setShowDeleteModal(false);
  setEditingUser(null);
  setUserToDelete(null);
  setFormData({ name: "", email: "", phone: "", address: "", password: "" });
@@ -267,7 +266,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold overflow-hidden">
  {item.profile_image_url ? (
- <img src={item.profile_image_url} alt={item.name} className="w-full h-full object-cover" />
+<img src={resolveImageUrl(item.profile_image_url)} alt={item.name} className="w-full h-full object-cover" />
  ) : (
  item.name?.charAt(0).toUpperCase()
  )}
@@ -331,7 +330,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold overflow-hidden flex-shrink-0">
  {item.profile_image_url ? (
- <img src={item.profile_image_url} alt={item.name} className="w-full h-full object-cover" />
+<img src={resolveImageUrl(item.profile_image_url)} alt={item.name} className="w-full h-full object-cover" />
  ) : (
  item.name?.charAt(0).toUpperCase()
  )}
@@ -616,25 +615,17 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  </div>
 
- {showAddModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
- <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800">
- <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
- <div>
- <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-1">{modalContext === "admin" ? "Admin" : "Customer"}</p>
- <h3 className="text-xl font-bold text-slate-900 dark:text-white">{editingUser ? "Edit" : "Add"} {modalContext === "admin" ? "Administrator" : "Customer"}</h3>
- </div>
- <button
- onClick={closeModals}
- className="h-9 w-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+ <AdminModal
+ open={showAddModal}
+ onClose={closeModals}
+ title={`${editingUser ? "Edit" : "Add"} ${modalContext === "admin" ? "Administrator" : "Customer"}`}
+ titleId="user-form-title"
+ maxWidthClass="max-w-xl"
  >
- <svg className="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
-
- <div className="p-6 space-y-4">
+ <p className="-mt-2 mb-4 text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+ {modalContext === "admin" ? "Admin" : "Customer"}
+ </p>
+ <div className="space-y-4">
  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200">
  <span>Name</span>
@@ -688,7 +679,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  </div>
 
- <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 flex gap-3 justify-end border-t border-slate-200 dark:border-slate-800 rounded-b-2xl">
+ <div className="mt-6 border-t border-slate-200 bg-slate-50 pt-4 dark:border-slate-800 dark:bg-slate-900 flex gap-3 justify-end">
  <button
  onClick={closeModals}
  className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold"
@@ -702,36 +693,18 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  Save
  </button>
  </div>
- </div>
- </div>
- )}
+ </AdminModal>
 
- {showDeleteModal && userToDelete && (
- <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
- <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800">
- <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800">
- <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete {deleteContext === "admin" ? "Administrator" : "Customer"}</h3>
- <p className="text-slate-500 dark:text-slate-400 mt-1">
- Are you sure you want to delete {userToDelete.name}? This action cannot be undone.
- </p>
- </div>
- <div className="bg-slate-50 dark:bg-slate-900 px-6 py-4 flex gap-3 justify-end border-t border-slate-200 dark:border-slate-800 rounded-b-2xl">
- <button
- onClick={closeModals}
- className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold"
- >
- Cancel
- </button>
- <button
- onClick={handleDelete}
- className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
- >
- Delete
- </button>
- </div>
- </div>
- </div>
- )}
+ <AdminConfirmDialog
+ open={!!userToDelete}
+ onClose={closeModals}
+ onConfirm={handleDelete}
+ title={`Delete ${deleteContext === "admin" ? "Administrator" : "Customer"}`}
+ message={`Are you sure you want to delete ${userToDelete?.name || "this user"}? This action cannot be undone.`}
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ />
  </div>
  );
 }

@@ -75,7 +75,7 @@ export default function ExtendedHomepageManager() {
   const [headerSettings, setHeaderSettings] = useState({
     logo_text: 'Fitandsleek',
     logo_url: '/logo.png',
-    background_color: '#6F8F72',
+    background_color: '#6e8b7e',
     search_placeholder: 'Search items...',
     search_enabled: true,
     cart_enabled: true,
@@ -168,7 +168,7 @@ export default function ExtendedHomepageManager() {
     contact_phone: '+855 00 00 000',
     contact_address: 'Phnom Penh, Cambodia',
     copyright_text: '© 2026 Fitandsleek. All rights reserved.',
-    background_color: '#6F8F72',
+    background_color: '#6e8b7e',
     social_title: 'FOLLOW US',
     social_enabled: true,
     support_enabled: true,
@@ -320,7 +320,7 @@ export default function ExtendedHomepageManager() {
         subsections 
       });
       const chrome =
-        headerSettings.background_color || footerSettings.background_color || '#6F8F72';
+        headerSettings.background_color || footerSettings.background_color || '#6e8b7e';
       await api.put('/admin/homepage-settings/header-extended', {
         ...headerSettings,
         background_color: chrome,
@@ -491,7 +491,7 @@ export default function ExtendedHomepageManager() {
               <label className="block text-sm font-semibold text-gray-900 mb-2">Shared background color</label>
               <input
                 type="color"
-                value={headerSettings.background_color || footerSettings.background_color || '#6F8F72'}
+                value={headerSettings.background_color || footerSettings.background_color || '#6e8b7e'}
                 onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
                 className="w-20 h-10 border border-gray-300 rounded"
               />

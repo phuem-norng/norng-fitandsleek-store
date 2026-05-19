@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
-import { warningConfirm } from "../../lib/swal";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 import { useTheme } from "../../state/theme.jsx";
 
@@ -77,6 +77,10 @@ export default function AdminOrders() {
  const [search, setSearch] = useState("");
  const [selectedIds, setSelectedIds] = useState([]);
  const [viewMode, setViewMode] = useState("list");
+ const [viewLoading, setViewLoading] = useState(false);
+ const [pendingDeleteId, setPendingDeleteId] = useState(null);
+ const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+ const [deleteBusy, setDeleteBusy] = useState(false);
 
  const load = async () => {
  setLoading(true);
@@ -100,13 +104,29 @@ export default function AdminOrders() {
  setSelectedIds((prev) => prev.filter((id) => rows.some((o) => o.id === id)));
  }, [rows]);
 
+ const closeView = () => {
+ setSelected(null);
+ setViewLoading(false);
+ };
+
  const open = async (id) => {
+ setViewLoading(true);
+ setSelected({ id });
+ setErr("");
+ try {
  const { data } = await api.get(`/admin/orders/${id}`);
  setSelected(data);
  setStatus(data.status || "");
+ } catch (e) {
+ setErr(e?.response?.data?.message || "Failed to load order.");
+ setSelected(null);
+ } finally {
+ setViewLoading(false);
+ }
  };
 
  const save = async () => {
+ if (viewLoading || !selected?.id) return;
  setErr("");
  try {
  const { data } = await api.patch(`/admin/orders/${selected.id}`, { status });
@@ -117,19 +137,28 @@ export default function AdminOrders() {
  }
  };
 
- const del = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this order?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const del = (id) => {
+ setPendingDeleteId(id);
+ };
+
+ const confirmDelete = async () => {
+ setDeleteBusy(true);
+ setErr("");
  try {
- await api.delete(`/admin/orders/${id}`);
+ if (pendingBulkDelete) {
+ await Promise.all(selectedIds.map((id) => api.delete(`/admin/orders/${id}`)));
+ setSelectedIds([]);
+ } else if (pendingDeleteId != null) {
+ await api.delete(`/admin/orders/${pendingDeleteId}`);
+ if (selected?.id === pendingDeleteId) closeView();
+ }
  await load();
  } catch (e) {
  setErr(e?.response?.data?.message || "Delete failed.");
+ } finally {
+ setDeleteBusy(false);
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
  }
  };
 
@@ -164,22 +193,9 @@ export default function AdminOrders() {
  );
  };
 
- const deleteSelected = async () => {
+ const deleteSelected = () => {
  if (selectedIds.length === 0) return;
- const confirmRes = await warningConfirm({
- enTitle: "Delete selected orders?",
- enText: `Permanently remove ${selectedIds.length} order(s)? This cannot be undone.`,
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- try {
- await Promise.all(selectedIds.map((id) => api.delete(`/admin/orders/${id}`)));
- setSelectedIds([]);
- await load();
- } catch (e) {
- setErr(e?.response?.data?.message || "Bulk delete failed.");
- }
+ setPendingBulkDelete(true);
  };
 
  const printSelectedInvoices = async () => {
@@ -530,49 +546,59 @@ export default function AdminOrders() {
  </div>
  </div>
 
- {/* Order Detail Modal */}
- {selected && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div
- className="absolute inset-0 bg-black/50 backdrop-blur-sm"
- onClick={() => setSelected(null)}
+ <AdminConfirmDialog
+ open={pendingDeleteId != null || pendingBulkDelete}
+ onClose={() => {
+ if (deleteBusy) return;
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
+ }}
+ onConfirm={confirmDelete}
+ title={pendingBulkDelete ? "Delete selected orders?" : "Delete this order?"}
+ message={
+ pendingBulkDelete
+ ? `Permanently remove ${selectedIds.length} order(s)? This cannot be undone.`
+ : "This action cannot be undone."
+ }
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
  />
- <div className="relative bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl p-6 animate-modal-in max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-800">
- <div className="flex items-start justify-between gap-3 mb-6">
- <div>
- <div className="flex items-center gap-3">
- <span className="text-2xl font-bold text-slate-800 dark:text-white">Order #{selected.id}</span>
+
+ <AdminModal
+ open={!!selected}
+ onClose={closeView}
+ title={selected ? `Order #${selected.id}` : ""}
+ titleId="order-view-title"
+ maxWidthClass="max-w-2xl"
+ >
+ {viewLoading || !selected ? (
+ <AdminSectionLoader />
+ ) : (
+ <>
+ <div className="mb-6 flex flex-wrap items-center gap-3">
  <span
  className="inline-flex px-3 py-1 rounded-full text-xs font-semibold border"
- style={getStatusStyle(selected.status, mode, primaryColor)}
+ style={getStatusStyle(selected?.status, mode, primaryColor)}
  >
- {selected.status || 'Pending'}
+ {selected?.status || "Pending"}
+ </span>
+ <span className="text-sm text-slate-500 dark:text-slate-400">
+ {formatDate(selected?.created_at)}
  </span>
  </div>
- <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
- {formatDate(selected.created_at)}
- </div>
- </div>
- <button
- onClick={() => setSelected(null)}
- className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
- >
- <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
 
- {/* Customer Info */}
+{/* Customer Info */}
  <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl">
  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Customer Information</h4>
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold">
- {selected.user?.name?.charAt(0).toUpperCase() || 'U'}
+ {selected?.user?.name?.charAt(0).toUpperCase() || 'U'}
  </div>
  <div>
- <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{selected.user?.name || 'Guest'}</p>
- <p className="text-xs text-slate-500 dark:text-slate-400">{selected.user?.email}</p>
+ <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{selected?.user?.name || 'Guest'}</p>
+ <p className="text-xs text-slate-500 dark:text-slate-400">{selected?.user?.email}</p>
  </div>
  </div>
  </div>
@@ -606,7 +632,7 @@ export default function AdminOrders() {
  <div className="mb-6">
  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Order Items</h4>
  <div className="space-y-3">
- {(selected.items || []).map((it) => (
+ {(selected?.items || []).map((it) => (
  <div key={it.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl">
  <div className="flex items-center gap-3">
  <div className="w-12 h-12 bg-white dark:bg-slate-900 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 font-bold overflow-hidden">
@@ -642,11 +668,12 @@ export default function AdminOrders() {
  {/* Total */}
  <div className="border-t border-slate-200 dark:border-slate-800 pt-4 flex justify-between items-center">
  <span className="text-lg font-semibold text-slate-700 dark:text-slate-200">Total Amount</span>
- <span className="text-2xl font-bold text-slate-900 dark:text-white"><Money value={selected.total} /></span>
+ <span className="text-2xl font-bold text-slate-900 dark:text-white"><Money value={selected?.total} /></span>
  </div>
- </div>
- </div>
+ 
+ </>
  )}
+ </AdminModal>
 
  <style>{`
  @keyframes shake {
@@ -656,19 +683,6 @@ export default function AdminOrders() {
  }
  .animate-shake {
  animation: shake 0.5s ease-in-out;
- }
- @keyframes modal-in {
- from {
- opacity: 0;
- transform: scale(0.95) translateY(-20px);
- }
- to {
- opacity: 1;
- transform: scale(1) translateY(0);
- }
- }
- .animate-modal-in {
- animation: modal-in 0.3s ease-out;
  }
  `}</style>
  </div>

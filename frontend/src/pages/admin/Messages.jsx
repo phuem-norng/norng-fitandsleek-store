@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
-import { warningConfirm } from "../../lib/swal";
+import { isAdminDarkChrome } from "../../lib/adminDarkChrome.js";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 
 export default function AdminMessages() {
@@ -17,6 +18,9 @@ export default function AdminMessages() {
  });
  const [search, setSearch] = useState("");
  const [selectedIds, setSelectedIds] = useState([]);
+ const [pendingDeleteId, setPendingDeleteId] = useState(null);
+ const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+ const [deleteBusy, setDeleteBusy] = useState(false);
 
  const [formData, setFormData] = useState({
  title: '',
@@ -125,19 +129,33 @@ export default function AdminMessages() {
  setShowForm(true);
  };
 
- const handleDelete = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this message?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const closeForm = () => {
+ setShowForm(false);
+ setEditingMessage(null);
+ resetForm();
+ };
+
+ const handleDelete = (id) => {
+ setPendingDeleteId(id);
+ };
+
+ const confirmDelete = async () => {
+ setDeleteBusy(true);
  try {
- await api.delete(`/admin/messages/${id}`);
+ if (pendingBulkDelete) {
+ await Promise.all(selectedIds.map((id) => api.delete(`/admin/messages/${id}`)));
+ setSelectedIds([]);
+ } else if (pendingDeleteId != null) {
+ await api.delete(`/admin/messages/${pendingDeleteId}`);
+ if (editingMessage?.id === pendingDeleteId) closeForm();
+ }
  loadMessages();
  } catch (e) {
- console.error("Failed to delete message", e);
+ console.error("Failed to delete message(s)", e);
+ } finally {
+ setDeleteBusy(false);
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
  }
  };
 
@@ -161,22 +179,9 @@ export default function AdminMessages() {
  setSelectedIds(Array.from(next));
  };
 
- const deleteSelected = async () => {
+ const deleteSelected = () => {
  if (selectedIds.length === 0) return;
- const confirmRes = await warningConfirm({
- enTitle: "Delete selected messages?",
- enText: `Permanently remove ${selectedIds.length} message(s)? This cannot be undone.`,
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- try {
- await Promise.all(selectedIds.map((id) => api.delete(`/admin/messages/${id}`)));
- setSelectedIds([]);
- loadMessages();
- } catch (e) {
- console.error("Failed to delete selected messages", e);
- }
+ setPendingBulkDelete(true);
  };
 
  const handleToggleActive = async (message) => {
@@ -264,6 +269,26 @@ export default function AdminMessages() {
  return (
  <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
  <div className="w-full min-w-0">
+ <AdminConfirmDialog
+ open={pendingDeleteId != null || pendingBulkDelete}
+ onClose={() => {
+ if (deleteBusy) return;
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
+ }}
+ onConfirm={confirmDelete}
+ title={pendingBulkDelete ? "Delete selected messages?" : "Delete this message?"}
+ message={
+ pendingBulkDelete
+ ? `Permanently remove ${selectedIds.length} message(s)? This cannot be undone.`
+ : "This action cannot be undone."
+ }
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
+ />
+
  {/* Header */}
  <div className="mb-8">
  <div className="flex items-center justify-between">
@@ -418,9 +443,9 @@ export default function AdminMessages() {
  aria-label="Delete message"
  className="h-9 w-9 rounded-lg transition-colors inline-flex items-center justify-center"
  style={{
- color: message.is_active ? (document.documentElement.classList.contains('dark') ? '#fca5a5' : '#dc2626') : (document.documentElement.classList.contains('dark') ? '#fca5a5' : '#dc2626'),
- border: `1px solid ${document.documentElement.classList.contains('dark') ? '#fca5a5' : '#fecaca'}`,
- backgroundColor: document.documentElement.classList.contains('dark') ? 'rgba(248,113,113,0.12)' : '#fff',
+ color: message.is_active ? (isAdminDarkChrome() ? '#fca5a5' : '#dc2626') : (isAdminDarkChrome() ? '#fca5a5' : '#dc2626'),
+ border: `1px solid ${isAdminDarkChrome() ? '#fca5a5' : '#fecaca'}`,
+ backgroundColor: isAdminDarkChrome() ? 'rgba(248,113,113,0.12)' : '#fff',
  cursor: 'pointer',
  }}
  >
@@ -438,24 +463,13 @@ export default function AdminMessages() {
  </div>
 
  {/* Message Form Modal */}
- {showForm && (
- <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
- <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
- <div className="p-6">
- <div className="flex items-center justify-between mb-6">
- <h2 className="text-2xl font-bold text-slate-800 dark:text-white">
- {editingMessage ? 'Edit Message' : 'Create New Message'}
- </h2>
- <button
- onClick={() => setShowForm(false)}
- className="p-2 text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+ <AdminModal
+ open={showForm}
+ onClose={closeForm}
+ title={editingMessage ? 'Edit Message' : 'Create New Message'}
+ titleId="message-form-title"
+ maxWidthClass="max-w-2xl"
  >
- <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
-
  <form onSubmit={handleSubmit} className="space-y-6">
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Title</label>
@@ -619,7 +633,7 @@ export default function AdminMessages() {
  <div className="flex justify-end gap-3 pt-4">
  <button
  type="button"
- onClick={() => setShowForm(false)}
+ onClick={closeForm}
  className="px-4 py-2 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
  >
  Cancel
@@ -632,10 +646,7 @@ export default function AdminMessages() {
  </button>
  </div>
  </form>
- </div>
- </div>
- </div>
- )}
+ </AdminModal>
  </div>
  </div>
  );

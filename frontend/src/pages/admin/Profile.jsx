@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../state/auth";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
+import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 
 export default function Profile() {
@@ -29,6 +31,8 @@ export default function Profile() {
  const [sessionsLoading, setSessionsLoading] = useState(false);
  const [profileSaving, setProfileSaving] = useState(false);
  const [passwordSaving, setPasswordSaving] = useState(false);
+ const [pendingSessionId, setPendingSessionId] = useState(null);
+ const [sessionBusy, setSessionBusy] = useState(false);
 
  useEffect(() => {
  if (!user) return;
@@ -61,8 +65,14 @@ export default function Profile() {
  }, [activeTab]);
 
  const revokeSession = async (sessionId) => {
+ setPendingSessionId(sessionId);
+ };
+
+ const confirmRevokeSession = async () => {
+ if (!pendingSessionId) return;
+ setSessionBusy(true);
  try {
- const { data } = await api.delete(`/auth/sessions/${sessionId}`);
+ const { data } = await api.delete(`/auth/sessions/${pendingSessionId}`);
  if (data?.current_session_revoked) {
  window.location.href = "/login";
  return;
@@ -71,6 +81,9 @@ export default function Profile() {
  setSuccess("Session revoked successfully");
  } catch (e) {
  setErr(e.response?.data?.message || "Failed to revoke session");
+ } finally {
+ setSessionBusy(false);
+ setPendingSessionId(null);
  }
  };
 
@@ -170,10 +183,27 @@ export default function Profile() {
 
  const textAreaClass =
  "w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-4 py-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-[rgba(var(--admin-primary-rgb),0.18)] focus:border-[var(--admin-primary)] transition";
+ const displayProfileImage = profileImage
+ ? (/^(blob:|data:)/i.test(profileImage) ? profileImage : resolveImageUrl(profileImage))
+ : null;
 
  return (
  <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
  <div className="w-full min-w-0 space-y-6">
+ <AdminConfirmDialog
+ open={!!pendingSessionId}
+ onClose={() => {
+ if (sessionBusy) return;
+ setPendingSessionId(null);
+ }}
+ onConfirm={confirmRevokeSession}
+ title="Logout this device?"
+ message="This session will be revoked immediately."
+ confirmLabel="Logout"
+ cancelLabel="Cancel"
+ destructive
+ busy={sessionBusy}
+ />
  <div>
  <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">My Profile</h1>
  <p className="text-slate-500 dark:text-slate-400 mt-1">
@@ -220,8 +250,8 @@ export default function Profile() {
  <div className="px-6 pb-6 -mt-12">
  <div className="relative w-fit">
  <div className="w-24 h-24 rounded-2xl bg-white dark:bg-slate-900 ring-4 ring-white dark:ring-slate-800 flex items-center justify-center text-3xl font-bold text-slate-700 dark:text-slate-200 overflow-hidden ">
- {profileImage ? (
- <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+ {displayProfileImage ? (
+ <img src={displayProfileImage} alt="Profile" className="w-full h-full object-cover" />
  ) : (
  user?.name?.charAt(0).toUpperCase() || "A"
  )}

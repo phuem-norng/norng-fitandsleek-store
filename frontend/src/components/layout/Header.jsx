@@ -663,9 +663,9 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       {
         key: 'newIn',
         label: 'NEW IN',
-        to: "/search?q=New%20Arrivals",
+        to: "/search?tab=new",
         items: [
-          { label: 'New Arrivals', to: "/search?q=New%20Arrivals" },
+          { label: 'New Arrivals', to: "/search?tab=new" },
           { label: 'Trending Now', to: "/search?q=Trending%20Now" },
           { label: 'This Week', to: "/search?q=This%20Week" },
         ],
@@ -911,7 +911,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   }, [showSearchDialog]);
 
   return (
-    <div className="sticky top-0 z-30 backdrop-blur-md shadow-sm" style={{ backgroundColor: headerSettings.background_color || '#6F8F72' }}>
+    <div className="sticky top-0 z-30 backdrop-blur-md shadow-sm" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
       {/* Mobile: logo + search only */}
       <div className="lg:hidden container-safe h-14 md:h-16 flex items-center gap-2 sm:gap-3">
         <Link to="/" className="shrink-0 max-w-[80px] sm:max-w-none">
@@ -1053,7 +1053,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       </div>
 
       {/* Desktop Navigation Row */}
-      <div className="hidden lg:block border-b border-white/20 relative" style={{ backgroundColor: headerSettings.background_color || '#6F8F72' }}>
+      <div className="hidden lg:block border-b border-white/20 relative" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
         <NavBar navItems={navItems} />
       </div>
 

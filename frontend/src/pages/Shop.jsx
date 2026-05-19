@@ -112,6 +112,7 @@ export default function Shop() {
         if (gender && gender !== "sale") params.gender = gender;
         if (categoryId) params.category_id = categoryId;
         if (parentCategory) params.parent_category = parentCategory;
+        if (tab && tab !== "wishlist") params.tab = tab;
         if (imageSearchResults?.colors) {
           params.colors = JSON.stringify(imageSearchResults.colors);
         }
@@ -121,7 +122,7 @@ export default function Shop() {
         setLoading(false);
       }
     })();
-  }, [q, gender, categoryId, parentCategory, page, imageSearchResults]);
+  }, [q, gender, categoryId, parentCategory, tab, page, imageSearchResults]);
 
   const products = useMemo(() => {
     const list = data?.data || [];
@@ -306,7 +307,7 @@ export default function Shop() {
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             {Array.from({ length: 8 }).map((_, idx) => (
               <div key={idx} className="fs-card overflow-hidden">
-                <div className="aspect-square fs-skeleton-block" />
+                <div className="aspect-[4/5] fs-skeleton-block" />
                 <div className="p-3">
                   <div className="h-3 w-2/3 fs-skeleton-block rounded" />
                   <div className="mt-2 h-3 w-1/3 fs-skeleton-block rounded" />

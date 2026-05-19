@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Storefront;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class ProductController extends Controller
 {
@@ -21,6 +22,7 @@ class ProductController extends Controller
         }
 
         $this->applyParentCategoryFilter($q, $request);
+        $tabOrdered = $this->applyTabFilter($q, $request);
 
         if ($request->filled('category')) {
             $categorySlug = (string) $request->input('category');
@@ -60,16 +62,8 @@ class ProductController extends Controller
             $allowedGenders = ['men', 'women', 'boys', 'girls'];
 
             if (in_array($gender, $allowedGenders, true)) {
-                // Support both legacy datasets (categories.gender filled)
-                // and imported dumps where gender is encoded in name/slug.
                 $q->whereHas('category', function ($categoryQuery) use ($gender) {
-                    $categoryQuery->where(function ($inner) use ($gender) {
-                        $inner->whereRaw('LOWER(COALESCE(gender, \'\')) = ?', [$gender])
-                            ->orWhereRaw('LOWER(COALESCE(name, \'\')) = ?', [$gender])
-                            ->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$gender . '-%'])
-                            ->orWhereRaw('LOWER(COALESCE(slug, \'\')) = ?', [$gender])
-                            ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', [$gender . '-%']);
-                    });
+                    $this->applyCategoryAudienceFilter($categoryQuery, $gender);
                 });
             }
         }
@@ -85,9 +79,48 @@ class ProductController extends Controller
         }
 
         $perPage = min((int) $request->get('per_page', 12), 200);
-        $products = $q->orderByDesc('id')->paginate($perPage);
+        if (!$tabOrdered) {
+            $q->orderByDesc('products.id');
+        }
+        $products = $q->paginate($perPage);
 
         return response()->json($products);
+    }
+
+    /**
+     * Browse tabs from header / homepage (new, trending, this-week, sale).
+     */
+    private function applyTabFilter($query, Request $request): bool
+    {
+        if (!$request->filled('tab')) {
+            return false;
+        }
+
+        $tab = strtolower(trim((string) $request->input('tab')));
+        if ($tab === '' || $tab === 'wishlist') {
+            return false;
+        }
+
+        switch ($tab) {
+            case 'new':
+                $query->orderByDesc('products.created_at')->orderByDesc('products.id');
+                return true;
+            case 'this-week':
+                $query->where('products.created_at', '>=', Carbon::now()->startOfWeek())
+                    ->orderByDesc('products.created_at')
+                    ->orderByDesc('products.id');
+                return true;
+            case 'trending':
+                $query->orderByDesc('products.updated_at')->orderByDesc('products.id');
+                return true;
+            case 'sale':
+                $query->where('products.is_active', true)
+                    ->whereHas('activeSale')
+                    ->orderByDesc('products.id');
+                return true;
+            default:
+                return false;
+        }
     }
 
     private function applyParentCategoryFilter($query, Request $request): void
@@ -101,25 +134,48 @@ class ProductController extends Controller
             return;
         }
 
-        $allowedParents = [
-            'men' => 'men',
-            'women' => 'women',
-            'boys' => 'boys',
-            'girls' => 'girls',
-        ];
-
         $parent = strtolower($rawParent);
-        if (!isset($allowedParents[$parent])) {
+        if (!in_array($parent, ['men', 'women', 'boys', 'girls'], true)) {
             return;
         }
 
-        $prefix = $allowedParents[$parent];
+        $query->whereHas('category', function ($categoryQuery) use ($parent) {
+            $this->applyCategoryAudienceFilter($categoryQuery, $parent);
+        });
+    }
 
-        $query->whereHas('category', function ($categoryQuery) use ($prefix) {
-            $categoryQuery->where(function ($nameQuery) use ($prefix) {
-                $nameQuery->whereRaw('LOWER(name) = ?', [$prefix])
-                    ->orWhereRaw('LOWER(name) LIKE ?', [$prefix . '-%']);
-            });
+    /**
+     * Match categories for Men/Women/Boys/Girls across gender column and names like "Women - Dresses".
+     */
+    private function applyCategoryAudienceFilter($categoryQuery, string $audience): void
+    {
+        $audience = strtolower(trim($audience));
+        $labels = [
+            'men' => ['Men', 'Man', 'MEN', 'MAN'],
+            'women' => ['Women', 'Woman', 'WOMEN', 'WOMAN'],
+            'boys' => ['Boy', 'Boys', 'BOY', 'BOYS'],
+            'girls' => ['Girl', 'Girls', 'GIRL', 'GIRLS'],
+        ];
+
+        if (!isset($labels[$audience])) {
+            return;
+        }
+
+        $display = $labels[$audience][0];
+
+        $categoryQuery->where(function ($inner) use ($audience, $labels, $display) {
+            foreach ($labels[$audience] as $variant) {
+                $lower = strtolower($variant);
+                $inner->orWhereRaw('LOWER(COALESCE(gender, \'\')) = ?', [$lower])
+                    ->orWhereRaw('UPPER(COALESCE(gender, \'\')) = ?', [strtoupper($variant)]);
+            }
+
+            $prefix = strtolower($display);
+            $inner->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$prefix . ' -%'])
+                ->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$prefix . '-%'])
+                ->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$prefix . ' %'])
+                ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', [$prefix . '-%'])
+                ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', [$prefix . '%']);
         });
     }
 

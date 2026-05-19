@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { resolveImageUrl } from "../../lib/images";
 import api from "../../lib/api";
 import { errorAlert, promptEnglish, toastSuccess, warningConfirm } from "../../lib/swal";
+import AdminModal from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import { useTheme } from "@/state/theme";
 
@@ -228,14 +229,16 @@ export default function AdminReplacementCases() {
  </div>
  </div>
 
- {showDetails && selectedCase && (
- <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
- <div className="admin-surface border admin-border rounded-2xl max-w-lg w-full overflow-hidden">
- <div className="p-6 border-b admin-border flex justify-between items-center">
- <h3 className="text-xl font-bold dark:text-white">Case Details</h3>
- <button onClick={() => setShowDetails(false)} className="dark:text-white">✕</button>
- </div>
- <div className="p-6 space-y-4">
+ <AdminModal
+ open={showDetails && !!selectedCase}
+ onClose={() => setShowDetails(false)}
+ title="Case Details"
+ titleId="replacement-case-details-title"
+ maxWidthClass="max-w-lg"
+ >
+ {selectedCase ? (
+ <>
+ <div className="space-y-4">
  <div className="flex justify-between border-b admin-border pb-2">
  <span className="text-slate-500 text-sm">Status</span>
  <span style={getStatusStyles(selectedCase.status)} className="px-3 py-0.5 rounded-full text-xs leading-tight font-semibold uppercase tracking-wide border">
@@ -253,7 +256,7 @@ export default function AdminReplacementCases() {
  </div>
  )}
  </div>
- <div className="p-6 bg-slate-50 dark:bg-white/5 border-t admin-border flex justify-end gap-3">
+ <div className="mt-6 border-t admin-border bg-slate-50 pt-4 dark:bg-white/5 flex justify-end gap-3">
  {selectedCase.status === "pending" && (
  <>
  <button onClick={handleReject} className="px-4 py-2 text-red-600 font-semibold text-xs uppercase tracking-wide">Reject</button>
@@ -265,9 +268,9 @@ export default function AdminReplacementCases() {
  )}
  <button onClick={() => setShowDetails(false)} className="px-4 py-2 border admin-border rounded-xl text-xs font-semibold dark:text-white">Close</button>
  </div>
- </div>
- </div>
- )}
+ </>
+ ) : null}
+ </AdminModal>
  </div>
  </div>
  );

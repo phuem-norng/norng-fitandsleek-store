@@ -26,7 +26,7 @@ export default function Settings() {
  font_en: "Inter",
  font_km: "Noto Sans Khmer",
  admin_theme_mode: "light",
- admin_primary_color: "#6B7E73",
+ admin_primary_color: "#6e8b7e",
  privacy_content: "",
  terms_content: "",
  });
@@ -51,7 +51,7 @@ export default function Settings() {
  });
 
  const loadedMode = flatForm.admin_theme_mode === "dark" ? "dark" : "light";
- const loadedColor = normalizeHexColor(flatForm.admin_primary_color || "#6B7E73");
+ const loadedColor = normalizeHexColor(flatForm.admin_primary_color || "#6e8b7e");
  flatForm.admin_theme_mode = loadedMode;
  flatForm.admin_primary_color = loadedColor;
 
@@ -71,7 +71,7 @@ export default function Settings() {
  setError("");
  try {
  const normalizedThemeMode = formThemeMode === "dark" ? "dark" : "light";
- const normalizedThemeColor = normalizeHexColor(formPrimaryColor || "#6B7E73");
+ const normalizedThemeColor = normalizeHexColor(formPrimaryColor || "#6e8b7e");
  const payloadForm = {
  ...form,
  admin_theme_mode: normalizedThemeMode,
@@ -104,7 +104,7 @@ export default function Settings() {
  };
 
  const handleThemeColorChange = (nextColor) => {
- const colorValue = normalizeHexColor(nextColor || "#6B7E73");
+ const colorValue = normalizeHexColor(nextColor || "#6e8b7e");
  setPrimaryColor(colorValue);
  handleChange("admin_primary_color", colorValue);
  };
@@ -198,9 +198,9 @@ export default function Settings() {
  onChange={(e) => handleThemeColorChange(e.target.value)}
  className="h-11 w-14 p-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 cursor-pointer"
  />
- <input type="text" value={formPrimaryColor} onChange={(e) => handleThemeColorChange(e.target.value)} className={inputClass} placeholder="#6B7E73" />
+ <input type="text" value={formPrimaryColor} onChange={(e) => handleThemeColorChange(e.target.value)} className={inputClass} placeholder="#6e8b7e" />
  </div>
- <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Admin accent color (default: #6B7E73)</p>
+ <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Admin accent color (default: #6e8b7e)</p>
  </div>
  </div>
  </section>

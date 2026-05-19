@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Setting;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -15,14 +16,19 @@ class BakongKhqrService
 
     public function generate(Order $order, Payment $payment): array
     {
-        $accountId = config('services.bakong.receive_account');
+        $bakong = $this->resolvedBakongOptions();
+        $accountId = $bakong['receive_account'];
 
-        if (! $accountId) {
-            throw new RuntimeException('Bakong receive account is not configured.');
+        if (blank($accountId)) {
+            throw new RuntimeException('Bakong receive account is not configured (admin payment settings or BAKONG_RECEIVE_ACCOUNT).');
         }
 
         $currency = strtoupper($payment->currency ?: config('services.bakong.currency', 'KHR'));
-        $amount = (float) ($payment->amount ?: $order->total ?: 0);
+        $rawAmount = (float) ($payment->amount ?: $order->total ?: 0);
+        // ts-khqr: KHR must be a whole number (see generate.js — non-integers throw "Amount is invalid").
+        $amount = $currency === 'KHR'
+            ? max(0, (int) round($rawAmount))
+            : round($rawAmount, 2);
         $billNumber = $payment->bill_number ?: $this->makeBillNumber($order);
         $billNumber = $this->ensureUniqueBillNumber($billNumber, $payment->id);
 
@@ -30,8 +36,8 @@ class BakongKhqrService
 
         $payload = [
             'accountID' => $accountId,
-            'merchantName' => config('services.bakong.merchant_name', 'Fitandsleek Clothes Store'),
-            'merchantCity' => config('services.bakong.merchant_city', 'Phnom Penh'),
+            'merchantName' => $bakong['merchant_name'] ?: 'Fitandsleek Clothes Store',
+            'merchantCity' => $bakong['merchant_city'] ?: 'Phnom Penh',
             'currency' => $currency,
             'amount' => $amount,
             'billNumber' => $billNumber,
@@ -48,6 +54,33 @@ class BakongKhqrService
             'md5' => $result['md5'],
             'expires_at' => $expiresAt,
             'payload' => $payload,
+        ];
+    }
+
+    /**
+     * Same precedence as storefront payment settings: DB (admin) overrides .env.
+     *
+     * @return array{receive_account: ?string, merchant_name: ?string, merchant_city: ?string}
+     */
+    private function resolvedBakongOptions(): array
+    {
+        /** @var \Illuminate\Support\Collection<string, Setting> $settings */
+        $settings = Setting::where('group', 'payment')->get()->keyBy('key');
+
+        $receive = $settings->get('bakong_receive_account');
+        $merchantName = $settings->get('bakong_merchant_name');
+        $merchantCity = $settings->get('bakong_merchant_city');
+
+        return [
+            'receive_account' => filled($receive?->value)
+                ? (string) $receive->value
+                : (string) config('services.bakong.receive_account'),
+            'merchant_name' => filled($merchantName?->value)
+                ? (string) $merchantName->value
+                : (string) (config('services.bakong.merchant_name') ?: ''),
+            'merchant_city' => filled($merchantCity?->value)
+                ? (string) $merchantCity->value
+                : (string) (config('services.bakong.merchant_city') ?: ''),
         ];
     }
 

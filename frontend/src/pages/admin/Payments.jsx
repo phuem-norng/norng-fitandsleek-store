@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
 import { errorAlert, toastSuccess, warningConfirm } from "../../lib/swal";
+import AdminModal from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import { useTheme } from "../../state/theme.jsx";
 
@@ -58,6 +59,7 @@ export default function AdminPayments() {
  await api.post(`/admin/payments/${payment.id}/verify`);
  loadPayments(currentPage);
  setShowDetails(false);
+ setSelectedPayment(null);
  await toastSuccess({
  khText: "បានបញ្ជាក់ការទូទាត់ដោយជោគជ័យ",
  enText: "Payment verified successfully",
@@ -84,6 +86,7 @@ export default function AdminPayments() {
  await api.post(`/admin/payments/${payment.id}/reject`);
  loadPayments(currentPage);
  setShowDetails(false);
+ setSelectedPayment(null);
  await toastSuccess({
  khText: "បានបដិសេធការទូទាត់ដោយជោគជ័យ",
  enText: "Payment rejected successfully",
@@ -106,6 +109,11 @@ export default function AdminPayments() {
  } catch (e) {
  console.error("Failed to fetch payment details", e);
  }
+ };
+
+ const closePaymentDetails = () => {
+ setShowDetails(false);
+ setSelectedPayment(null);
  };
 
  const getStatusBadge = (status) => {
@@ -488,24 +496,16 @@ export default function AdminPayments() {
  )}
 
  {/* Payment Details Modal */}
- {showDetails && selectedPayment && (
- <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
- <div className="bg-white dark:bg-slate-900 rounded-xl max-w-md w-full border border-slate-200 dark:border-slate-800">
- <div className="p-6 border-b border-slate-200 dark:border-slate-800">
- <div className="flex justify-between items-center">
- <h3 className="text-lg font-bold text-slate-900 dark:text-white">
- Payment Details
- </h3>
- <button
- onClick={() => setShowDetails(false)}
- className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+ <AdminModal
+ open={showDetails && !!selectedPayment}
+ onClose={closePaymentDetails}
+ title="Payment Details"
+ titleId="payment-details-title"
+ maxWidthClass="max-w-md"
  >
- ✕
- </button>
- </div>
- </div>
-
- <div className="p-6 space-y-4">
+ {selectedPayment ? (
+ <>
+ <div className="space-y-4">
  <div>
  <p className="text-sm text-slate-500 dark:text-slate-400">
  Payment ID
@@ -556,9 +556,8 @@ export default function AdminPayments() {
  Status
  </p>
  <span
- className={`px-3 py-1 rounded-full text-sm font-medium inline-block ${getStatusBadge(
- selectedPayment.status
- )}`}
+ className="px-3 py-1 rounded-full text-sm font-medium inline-block border"
+ style={getStatusBadge(selectedPayment.status)}
  >
  {selectedPayment.status}
  </span>
@@ -583,7 +582,7 @@ export default function AdminPayments() {
  </div>
  </div>
 
- <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+ <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800 flex justify-end gap-2">
  {selectedPayment.status === "pending" && (
  <>
  <button
@@ -603,15 +602,15 @@ export default function AdminPayments() {
  </>
  )}
  <button
- onClick={() => setShowDetails(false)}
+ onClick={closePaymentDetails}
  className="inline-flex items-center gap-2 px-4 h-9 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
  >
  Close
  </button>
  </div>
- </div>
- </div>
- )}
+ </>
+ ) : null}
+ </AdminModal>
  </div>
  </div>
  );

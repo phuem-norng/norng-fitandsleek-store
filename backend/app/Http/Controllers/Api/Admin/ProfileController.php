@@ -120,16 +120,17 @@ class ProfileController extends Controller
         $user->update([
             'profile_image_path' => $path,
         ]);
+        $user->refresh();
 
         return response()->json([
             'success' => true,
             'message' => 'Profile image uploaded successfully',
-            'profile_image_url' => asset('storage/' . $path),
+            'profile_image_url' => $user->profile_image_url,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'profile_image_url' => asset('storage/' . $path),
+                'profile_image_url' => $user->profile_image_url,
             ],
         ]);
     }

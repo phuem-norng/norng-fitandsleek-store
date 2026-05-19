@@ -10,29 +10,40 @@ export function initTelegramWebApp() {
   const tg = getTelegramWebApp();
   if (!tg) return;
 
+  const atLeast =
+    typeof tg.isVersionAtLeast === "function"
+      ? (v) => {
+          try {
+            return tg.isVersionAtLeast(v);
+          } catch {
+            return false;
+          }
+        }
+      : () => false;
+
   try {
     tg.ready();
     tg.expand();
     // requestFullscreen exists on the SDK before it is actually supported; Bot API 8.0+ only.
     const canRequestFullscreen =
-      typeof tg.isVersionAtLeast === "function" &&
-      tg.isVersionAtLeast("8.0") &&
-      typeof tg.requestFullscreen === "function";
+      atLeast("8.0") && typeof tg.requestFullscreen === "function";
     if (canRequestFullscreen) {
       tg.requestFullscreen();
     }
-    if (typeof tg.disableVerticalSwipes === "function") {
+    // Theme / swipe APIs log noisy warnings on WebApp 6.0 (Telegram client); only call when supported.
+    if (atLeast("7.7") && typeof tg.disableVerticalSwipes === "function") {
       tg.disableVerticalSwipes();
     }
-    const version = Number.parseFloat(tg.version || "0");
-    if (Number.isFinite(version) && version >= 6.9) {
-      tg.setHeaderColor("secondary_bg_color");
-    } else {
-      tg.setHeaderColor(BRAND_HEADER_COLOR);
-    }
-    tg.setBackgroundColor(APP_BACKGROUND_COLOR);
-    if (typeof tg.setBottomBarColor === "function") {
-      tg.setBottomBarColor(APP_BACKGROUND_COLOR);
+    if (atLeast("7.0")) {
+      try {
+        tg.setHeaderColor("secondary_bg_color");
+      } catch {
+        tg.setHeaderColor(BRAND_HEADER_COLOR);
+      }
+      tg.setBackgroundColor(APP_BACKGROUND_COLOR);
+      if (typeof tg.setBottomBarColor === "function") {
+        tg.setBottomBarColor(APP_BACKGROUND_COLOR);
+      }
     }
   } catch {
     // Prevent Telegram-specific runtime errors from breaking the app.

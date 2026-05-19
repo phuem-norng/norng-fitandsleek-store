@@ -1,8 +1,9 @@
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
+import { isAdminDarkChrome, popAdminModalChrome, pushAdminModalChrome } from "./adminDarkChrome.js";
 
 const DANGER = "#dc2626";
-const FALLBACK_PRIMARY = "#6B7E73";
+const FALLBACK_PRIMARY = "#6e8b7e";
 
 function cssVarHex(name, fallback) {
     if (typeof document === "undefined") return fallback;
@@ -12,7 +13,7 @@ function cssVarHex(name, fallback) {
 }
 
 function isDarkChrome() {
-    return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+    return isAdminDarkChrome();
 }
 
 /** English-first; Khmer legacy keys used only when English is absent. */
@@ -172,6 +173,9 @@ export const warningConfirm = async ({
         focusCancel: destructive,
         confirmButtonText: confirmLbl,
         cancelButtonText: cancelResolved,
+        didOpen: () => {
+            pushAdminModalChrome();
+        },
         didRender: () => {
             const ok = Swal.getConfirmButton();
             const cancelBtn = Swal.getCancelButton();
@@ -188,6 +192,9 @@ export const warningConfirm = async ({
                 ok.style.border = "none";
             }
             if (cancelBtn) cancelBtn.style.minWidth = "5.75rem";
+        },
+        willClose: () => {
+            popAdminModalChrome();
         },
     });
 };

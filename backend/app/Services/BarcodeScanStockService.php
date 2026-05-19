@@ -127,9 +127,17 @@ class BarcodeScanStockService
         }
 
         return Product::query()
-            ->whereNotNull('barcode_code')
-            ->where('barcode_code', '!=', '')
-            ->whereRaw('LOWER(barcode_code) = LOWER(?)', [$canonicalSlug])
+            ->where(function ($q) use ($canonicalSlug) {
+                $q->where(function ($q2) use ($canonicalSlug) {
+                    $q2->whereNotNull('barcode_code')
+                        ->where('barcode_code', '!=', '')
+                        ->whereRaw('LOWER(barcode_code) = LOWER(?)', [$canonicalSlug]);
+                })->orWhere(function ($q2) use ($canonicalSlug) {
+                    $q2->whereNotNull('sku')
+                        ->where('sku', '!=', '')
+                        ->whereRaw('LOWER(sku) = LOWER(?)', [$canonicalSlug]);
+                });
+            })
             ->get();
     }
 
@@ -164,7 +172,11 @@ class BarcodeScanStockService
         }
         foreach ($products as $p) {
             if ($p->stock !== null && is_numeric($p->stock)) {
-                $mins[] = (int) $p->stock;
+                $mins[] = PaidOrderInventory::effectiveProductStockCap($p);
+            }
+            if (ProductVariantInventory::usesMatrix($p)) {
+                $fallbackVariant = ProductVariantInventory::firstAvailableVariant($p);
+                $mins[] = $fallbackVariant ? ProductVariantInventory::effectiveCapForCartLine($p, $fallbackVariant['color'], $fallbackVariant['size']) : 0;
             }
         }
 
@@ -189,15 +201,24 @@ class BarcodeScanStockService
             $canonical = trim($raw);
         }
         $products = self::findLinkedProductsAmongCandidates($candidates);
+        $variantMatch = ProductVariantInventory::findBySkuBarcodeCandidates($candidates);
 
-        if (! $bundle && $products->isEmpty()) {
+        if (! $bundle && $products->isEmpty() && ! $variantMatch) {
             return null;
         }
 
-        $name = (string) ($bundle?->name ?? $products->first()?->name ?? 'Item');
+        $variantProduct = $variantMatch['product'] ?? null;
+        $variant = $variantMatch['variant'] ?? null;
+        $variantName = $variantProduct && $variant
+            ? $variantProduct->name.' - '.$variant['color'].' / '.$variant['size']
+            : null;
+        $name = (string) ($variantName ?? $bundle?->name ?? $products->first()?->name ?? 'Item');
 
         $price = 0.0;
-        if ($bundle && $bundle->price !== null && (float) $bundle->price > 0) {
+        if ($variantProduct) {
+            $variantProduct->loadMissing('activeSale');
+            $price = (float) ($variantProduct->final_price ?? $variantProduct->price ?? 0);
+        } elseif ($bundle && $bundle->price !== null && (float) $bundle->price > 0) {
             $price = (float) $bundle->price;
         } elseif ($products->isNotEmpty()) {
             $p = $products->first();
@@ -205,17 +226,27 @@ class BarcodeScanStockService
             $price = (float) ($p->final_price ?? $p->price ?? 0);
         }
 
-        $imageUrl = $bundle?->image_url ?? ($products->isNotEmpty() ? $products->first()->image_url : null);
-        $maxSellable = self::maxSellableQty($bundle, $products);
+        $linkedBundle = $bundle;
+        if (! $linkedBundle && $variantProduct) {
+            $linkedBundle = PaidOrderInventory::findBarcodeBundleByCode((string) ($variantProduct->barcode_code ?? ''));
+        }
+        if (! $linkedBundle && $products->isNotEmpty()) {
+            $linkedBundle = PaidOrderInventory::findBarcodeBundleByCode((string) ($products->first()->barcode_code ?? ''));
+        }
+
+        $imageUrl = $variantProduct?->image_url ?? $bundle?->image_url ?? ($products->isNotEmpty() ? $products->first()->image_url : null);
+        $maxSellable = $variantProduct && $variant
+            ? ProductVariantInventory::effectiveCapForCartLine($variantProduct, $variant['color'], $variant['size'])
+            : self::maxSellableQty($bundle, $products);
 
         return [
-            'code' => (string) ($bundle?->slug ?? $canonical),
+            'code' => (string) ($variant['sku_barcode'] ?? $bundle?->slug ?? $canonical),
             'name' => $name,
             'price' => round($price, 2),
             'image_url' => $imageUrl ? (string) $imageUrl : null,
-            'has_label' => (bool) $bundle,
-            'label_stock' => $bundle?->stock,
-            'manage_label_stock' => (bool) ($bundle?->manage_stock ?? false),
+            'has_label' => (bool) $linkedBundle,
+            'label_stock' => $linkedBundle?->stock,
+            'manage_label_stock' => (bool) ($linkedBundle?->manage_stock ?? false),
             'max_sellable_qty' => $maxSellable,
         ];
     }
@@ -239,8 +270,14 @@ class BarcodeScanStockService
         $bundle = self::findBundleAmongCandidates($candidates);
         $canonical = $bundle?->slug ?? ($candidates[0] ?? $trimmed);
         $products = self::findLinkedProductsAmongCandidates($candidates);
+        $variantMatch = ProductVariantInventory::findBySkuBarcodeCandidates($candidates);
+        $variantProduct = $variantMatch['product'] ?? null;
+        $variant = $variantMatch['variant'] ?? null;
+        $productsToDeduct = $variantProduct
+            ? $products->reject(fn (Product $p) => (int) $p->id === (int) $variantProduct->id)->values()
+            : $products;
 
-        if (! $bundle && $products->isEmpty()) {
+        if (! $bundle && $products->isEmpty() && ! $variantMatch) {
             throw ValidationException::withMessages([
                 'code' => ['No Barcode & QR label or linked product matches this code. Use the label slug, store URL from the QR (/category/…), or a product barcode code.'],
             ]);
@@ -254,15 +291,33 @@ class BarcodeScanStockService
             }
         }
 
-        foreach ($products as $p) {
-            if ($p->stock !== null && is_numeric($p->stock) && (int) $p->stock < $qty) {
+        foreach ($productsToDeduct as $p) {
+            if ($p->stock !== null && is_numeric($p->stock) && PaidOrderInventory::effectiveProductStockCap($p) < $qty) {
                 throw ValidationException::withMessages([
                     'code' => ['Not enough stock for product: ' . $p->name],
                 ]);
             }
+
+            if (ProductVariantInventory::usesMatrix($p)) {
+                $fallbackVariant = ProductVariantInventory::firstAvailableVariant($p);
+                if (! $fallbackVariant || ProductVariantInventory::effectiveCapForCartLine($p, $fallbackVariant['color'], $fallbackVariant['size']) < $qty) {
+                    throw ValidationException::withMessages([
+                        'code' => ['Not enough stock for product variant: ' . $p->name],
+                    ]);
+                }
+            }
         }
 
-        DB::transaction(function () use ($bundle, $products, $qty) {
+        if ($variantProduct && $variant) {
+            $cap = ProductVariantInventory::effectiveCapForCartLine($variantProduct, $variant['color'], $variant['size']);
+            if ($cap < $qty) {
+                throw ValidationException::withMessages([
+                    'code' => ['Not enough stock for product variant: '.$variantProduct->name.' '.$variant['color'].' / '.$variant['size']],
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($bundle, $productsToDeduct, $qty, $variantProduct, $variant) {
             if ($bundle && ($bundle->manage_stock ?? false) && $bundle->stock !== null) {
                 $bundle->refresh();
                 $bundle->update([
@@ -270,22 +325,48 @@ class BarcodeScanStockService
                 ]);
             }
 
-            foreach ($products as $p) {
+            foreach ($productsToDeduct as $p) {
                 if ($p->stock !== null && is_numeric($p->stock)) {
                     $p->refresh();
                     $p->update([
                         'stock' => max(0, (int) $p->stock - $qty),
                     ]);
                 }
+                if (ProductVariantInventory::usesMatrix($p)) {
+                    $fallbackVariant = ProductVariantInventory::firstAvailableVariant($p);
+                    if ($fallbackVariant) {
+                        ProductVariantInventory::decrementVariantMatrix($p, $fallbackVariant['color'], $fallbackVariant['size'], $qty);
+                    }
+                }
+                if (! $bundle) {
+                    PaidOrderInventory::decrementBarcodeBundleStock((string) ($p->barcode_code ?? ''), $qty);
+                }
+            }
+
+            if ($variantProduct && $variant) {
+                $variantProduct->refresh();
+                if ($variantProduct->stock !== null && is_numeric($variantProduct->stock)) {
+                    $variantProduct->update([
+                        'stock' => max(0, (int) $variantProduct->stock - $qty),
+                    ]);
+                }
+                ProductVariantInventory::decrementVariantMatrix($variantProduct, $variant['color'], $variant['size'], $qty);
+                PaidOrderInventory::decrementBarcodeBundleStock((string) ($variantProduct->barcode_code ?? ''), $qty);
             }
         });
 
         $freshBundle = $bundle?->fresh();
-        $slugOut = (string) ($freshBundle?->slug ?? $canonical);
+        $slugOut = (string) ($variant['sku_barcode'] ?? $freshBundle?->slug ?? $canonical);
 
         $freshProducts = self::findLinkedProductsAmongCandidates(
             array_values(array_unique(array_merge([$slugOut], $candidates)))
         );
+        if ($variantProduct) {
+            $freshVariantProduct = $variantProduct->fresh();
+            if ($freshVariantProduct) {
+                $freshProducts->push($freshVariantProduct);
+            }
+        }
 
         return [
             'slug' => $slugOut,

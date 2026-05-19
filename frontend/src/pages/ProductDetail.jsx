@@ -1,57 +1,143 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../lib/api";
 import { resolveImageUrl } from "../lib/images";
+import { PRODUCT_GALLERY_ASPECT_CLASS, PRODUCT_GALLERY_THUMB_CLASS } from "../lib/productImages";
 import {
   ChevronLeft,
   ChevronRight,
   Heart,
   Minus,
   Plus,
-  ShoppingBag,
   Zap,
   Phone,
   CreditCard,
-  User,
   X,
   Package,
   RotateCcw,
-  Eye,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { useCart } from "../state/cart";
 import { useWishlist } from "../state/wishlist";
 import ProductCard from "../components/shop/ProductCard.jsx";
 import { useLanguage } from "../lib/i18n.jsx";
+import { clientVariantMaxQty, matrixQtyForCombo, parseVariantMatrix } from "../lib/variantMatrix.js";
 
 function Money({ value }) {
   const n = Number(value || 0);
-  return <span>${n.toFixed(2)}</span>;
+  return <span>US ${n.toFixed(2)}</span>;
 }
 
-// Service Badge Component
+const NAMED_COLOR_HEX = {
+  black: "#171717",
+  white: "#fafafa",
+  red: "#dc2626",
+  blue: "#2563eb",
+  green: "#16a34a",
+  yellow: "#eab308",
+  orange: "#ea580c",
+  purple: "#9333ea",
+  pink: "#ec4899",
+  gray: "#6b7280",
+  grey: "#6b7280",
+  brown: "#78350f",
+  navy: "#1e3a8a",
+  beige: "#d6c8b4",
+  gold: "#ca8a04",
+  silver: "#94a3b8",
+  coconut: "#f5f0e8",
+  "coconut milk": "#f5f0e8",
+  metallic: "#a8a29e",
+  "metallic silver": "#9ca3af",
+  khaki: "#854d0e",
+  cream: "#faf5eb",
+  maroon: "#7f1d1d",
+  teal: "#0d9488",
+  mint: "#99f6e4",
+  coral: "#fb7185",
+  lavender: "#c4b5fd",
+  charcoal: "#374151",
+};
+
+function colorSwatchFill(name) {
+  if (!name || typeof name !== "string") return null;
+  const key = name.toLowerCase().trim();
+  if (NAMED_COLOR_HEX[key]) return NAMED_COLOR_HEX[key];
+  const first = key.split(/\s+/)[0];
+  return NAMED_COLOR_HEX[first] || null;
+}
+
+function ProductBodyText({ text }) {
+  if (!text || typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("<")) {
+    return (
+      <div
+        className="text-sm leading-relaxed text-zinc-600 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_a]:text-zinc-900 [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: trimmed }}
+      />
+    );
+  }
+  return <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">{trimmed}</p>;
+}
+
+function AccordionRow({ title, open, onToggle, children }) {
+  return (
+    <div className="border-b border-zinc-200 last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 bg-zinc-100 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200/80"
+      >
+        <span>{title}</span>
+        <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+      {open ? <div className="border-t border-zinc-200 bg-white px-4 py-3">{children}</div> : null}
+    </div>
+  );
+}
+
+// Service Badge — compact row (reference storefront style)
 function ServiceBadge({ icon, title, description }) {
   return (
-    <div className="flex items-start gap-3 p-3 bg-zinc-50 rounded-xl">
-      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
-        {icon}
-      </div>
-      <div>
+    <div className="flex flex-1 min-w-0 items-start gap-2 border border-zinc-200 bg-white px-3 py-2.5">
+      <div className="mt-0.5 shrink-0 text-zinc-700">{icon}</div>
+      <div className="min-w-0">
         <div className="text-xs font-semibold text-zinc-900">{title}</div>
-        <div className="text-xs text-zinc-600">{description}</div>
+        <div className="text-[11px] leading-snug text-zinc-600">{description}</div>
       </div>
     </div>
   );
 }
 
-// Helper to parse colors array
-function parseColors(colorsData) {
+/** @returns {{ name: string, image_url: string | null }[]} */
+function parseColorVariants(colorsData) {
   if (!colorsData) return [];
-  if (Array.isArray(colorsData)) return colorsData;
-  if (typeof colorsData === 'string') return colorsData.split(',').map(c => c.trim()).filter(Boolean);
-  return [];
+  const raw = Array.isArray(colorsData)
+    ? colorsData
+    : typeof colorsData === "string"
+      ? colorsData.split(",").map((c) => c.trim()).filter(Boolean)
+      : [];
+  const out = [];
+  for (const item of raw) {
+    if (typeof item === "string") {
+      const name = item.trim();
+      if (name) out.push({ name, image_url: null });
+      continue;
+    }
+    if (item && typeof item === "object") {
+      const name = String(item.name ?? item.label ?? "").trim();
+      if (!name) continue;
+      const imgRaw = item.image_url ?? item.imageUrl ?? null;
+      const image_url =
+        typeof imgRaw === "string" && imgRaw.trim() ? imgRaw.trim() : null;
+      out.push({ name, image_url });
+    }
+  }
+  return out;
 }
 
 // Helper to parse sizes array
@@ -70,15 +156,6 @@ function parsePaymentMethods(paymentData) {
   return [];
 }
 
-// Default size chart (cm) — shown when product has no custom `size_guide` text
-const DEFAULT_SIZE_GUIDE_ROWS = [
-  { size: "XS", chest: "86-91", waist: "71-76", hip: "86-91" },
-  { size: "S", chest: "91-96", waist: "76-81", hip: "91-96" },
-  { size: "M", chest: "96-101", waist: "81-86", hip: "96-101" },
-  { size: "L", chest: "101-106", waist: "86-91", hip: "101-106" },
-  { size: "XL", chest: "106-111", waist: "91-96", hip: "106-111" },
-];
-
 export default function ProductDetail() {
   const { slug } = useParams();
   const location = useLocation();
@@ -94,9 +171,7 @@ export default function ProductDetail() {
   const [selectedColor, setSelectedColor] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
   const [activeImage, setActiveImage] = useState(0);
-  const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [similarProducts, setSimilarProducts] = useState([]);
-  const thumbScrollerRef = useRef(null);
   const mainImageRef = useRef(null);
   const [hoverZoom, setHoverZoom] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
@@ -108,6 +183,7 @@ export default function ProductDetail() {
   const zoomViewportRef = useRef(null);
   const zoomPanDragRef = useRef(null);
   const modalZoomRef = useRef(1);
+  const [detailAcc, setDetailAcc] = useState({ model: false, details: false });
 
   // useEffect hook
   useEffect(() => {
@@ -118,18 +194,26 @@ export default function ProductDetail() {
         setP(data);
         setActiveImage(0);
 
-        // Set default selections after data is loaded
-        if (data && data.colors) {
-          const colors = parseColors(data.colors);
-          if (colors.length > 0) {
-            setSelectedColor(colors[0]);
+        // Set default selections after data is loaded (matrix inventory takes precedence)
+        const vm = parseVariantMatrix(data.variant_matrix);
+        if (vm.length > 0) {
+          const inStock = vm.filter((r) => r.qty > 0);
+          const pick = inStock[0] || vm[0];
+          setSelectedColor(pick.color);
+          setSelectedSize(pick.size);
+        } else {
+          if (data && data.colors) {
+            const cv = parseColorVariants(data.colors);
+            if (cv.length > 0) {
+              setSelectedColor(cv[0].name);
+            }
           }
-        }
 
-        if (data && data.sizes) {
-          const sizes = parseSizes(data.sizes);
-          if (sizes.length > 0) {
-            setSelectedSize(sizes[0]);
+          if (data && data.sizes) {
+            const sz = parseSizes(data.sizes);
+            if (sz.length > 0) {
+              setSelectedSize(sz[0]);
+            }
           }
         }
 
@@ -148,25 +232,85 @@ export default function ProductDetail() {
   }, [slug]);
 
   // All useMemo hooks - always called in same order
+  const colorVariants = useMemo(() => parseColorVariants(p?.colors), [p?.colors]);
+
   const images = useMemo(() => {
     if (!p) return ["/placeholder.svg"];
     const gallery = [];
     if (p.image_url) gallery.push(p.image_url);
     if (p.gallery && Array.isArray(p.gallery)) {
-      p.gallery.forEach(img => {
+      p.gallery.forEach((img) => {
         if (img && !gallery.includes(img)) gallery.push(img);
       });
     }
+    for (const cv of colorVariants) {
+      if (cv.image_url && !gallery.includes(cv.image_url)) gallery.push(cv.image_url);
+    }
     return gallery.length > 0 ? gallery : ["/placeholder.svg"];
+  }, [p, colorVariants]);
+  const sizes = useMemo(() => parseSizes(p?.sizes), [p?.sizes]);
+  const variantMatrix = useMemo(() => parseVariantMatrix(p?.variant_matrix), [p?.variant_matrix]);
+  const usesVariantMatrix = variantMatrix.length > 0;
+  const displaySizes = useMemo(() => {
+    if (!usesVariantMatrix) return sizes;
+    const sel = String(selectedColor || "").trim().toLowerCase();
+    const ordered = [];
+    const seen = new Set();
+    for (const r of variantMatrix) {
+      if (sel && r.color.toLowerCase() !== sel) continue;
+      if (seen.has(r.size)) continue;
+      seen.add(r.size);
+      ordered.push(r.size);
+    }
+    return ordered;
+  }, [usesVariantMatrix, variantMatrix, sizes, selectedColor]);
+  const paymentMethods = useMemo(() => parsePaymentMethods(p?.payment_methods), [p?.payment_methods]);
+
+  const pricing = useMemo(() => {
+    if (!p) {
+      return { sale: 0, compare: null, pctLabel: null };
+    }
+    const sale = Number(p.discount?.sale_price ?? p.activeSale?.sale_price ?? p.price ?? 0);
+    const onSale = Boolean(p.discount || p.activeSale);
+    const compareRaw = onSale
+      ? Number(p.discount?.original_price ?? p.price ?? 0)
+      : p.compare_at_price != null
+        ? Number(p.compare_at_price)
+        : null;
+    const compare = compareRaw != null && compareRaw > sale ? compareRaw : null;
+
+    let pctLabel = null;
+    if (onSale) {
+      const isPct = p.discount?.type === "percentage" || p.activeSale?.discount_type === "percentage";
+      if (isPct) {
+        const v = Math.round(Number(p.discount?.value ?? p.activeSale?.discount_value ?? 0));
+        if (v > 0) pctLabel = `-${v}%`;
+      } else if (typeof p.discount?.discount_percentage === "number" && p.discount.discount_percentage > 0) {
+        pctLabel = `-${Math.round(p.discount.discount_percentage)}%`;
+      } else if (compare != null && compare > sale) {
+        pctLabel = `-${Math.round(((compare - sale) / compare) * 100)}%`;
+      }
+    }
+
+    return { sale, compare, pctLabel };
   }, [p]);
 
-  const colors = useMemo(() => parseColors(p?.colors), [p?.colors]);
-  const sizes = useMemo(() => parseSizes(p?.sizes), [p?.sizes]);
-  const paymentMethods = useMemo(() => parsePaymentMethods(p?.payment_methods), [p?.payment_methods]);
+  useEffect(() => {
+    if (!p || !usesVariantMatrix || !selectedColor) return;
+    const matchQty = variantMatrix.filter(
+      (r) => r.color.toLowerCase() === String(selectedColor).toLowerCase() && r.qty > 0
+    );
+    if (matchQty.length === 0) return;
+    const ok = matchQty.some((r) => r.size.toLowerCase() === String(selectedSize).toLowerCase());
+    if (!ok) setSelectedSize(matchQty[0].size);
+  }, [p, usesVariantMatrix, variantMatrix, selectedColor, selectedSize]);
 
   const deliveryInfo = p?.delivery_info || t('deliveryFromToDays');
   const supportPhone = p?.support_phone || "+855 12 345 678";
-  const maxQty = Number.isFinite(Number(p?.stock)) ? Math.max(0, Number(p.stock)) : 99;
+  const maxQty = useMemo(
+    () => clientVariantMaxQty(p, selectedColor, selectedSize),
+    [p, selectedColor, selectedSize]
+  );
   const backToImageSearch = Boolean(location.state?.fromImageSearch);
   const backTarget = location.state?.backTo || "/image-search";
   const fromOrder = Boolean(location.state?.fromOrder);
@@ -223,12 +367,15 @@ export default function ProductDetail() {
 
   const add = async () => {
     setStockError("");
-    const currentStock = Number.isFinite(Number(p?.stock)) ? Number(p.stock) : null;
-    if (currentStock !== null && currentStock <= 0) {
+    if (maxQty <= 0) {
       await showStockLimitAlert({ stock: 0, requestedQuantity: qty });
       return;
     }
-    if (colors.length > 0 && !selectedColor) {
+    if (qty > maxQty) {
+      await showStockLimitAlert({ stock: maxQty, requestedQuantity: qty });
+      return;
+    }
+    if (colorVariants.length > 0 && !selectedColor) {
       await Swal.fire({
         icon: "info",
         text: t('selectColorFirst') || "Please select a color",
@@ -236,7 +383,7 @@ export default function ProductDetail() {
       });
       return;
     }
-    if (sizes.length > 0 && !selectedSize) {
+    if (displaySizes.length > 0 && !selectedSize) {
       await Swal.fire({
         icon: "info",
         text: t('selectSizeFirst') || "Please select a size",
@@ -419,15 +566,22 @@ export default function ProductDetail() {
 
   if (loading) {
     return (
-      <div className="container-safe py-10">
-        <div className="fs-card p-10 animate-pulse">
-          <div className="h-6 w-48 bg-zinc-100 rounded" />
-          <div className="mt-6 grid md:grid-cols-2 gap-8">
-            <div className="aspect-square bg-zinc-100 rounded-2xl" />
-            <div>
-              <div className="h-4 w-64 bg-zinc-100 rounded" />
-              <div className="mt-3 h-4 w-40 bg-zinc-100 rounded" />
-              <div className="mt-6 h-10 w-40 bg-zinc-100 rounded-full" />
+      <div className="container-safe py-8 md:py-10">
+        <div className="animate-pulse border border-zinc-200 bg-white p-6 md:p-8">
+          <div className="grid gap-8 lg:grid-cols-2 lg:gap-14">
+            <div className="flex flex-col gap-4 md:flex-row md:gap-4">
+              <div className="hidden shrink-0 flex-col gap-2 md:flex">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className={`${PRODUCT_GALLERY_THUMB_CLASS} bg-zinc-100`} />
+                ))}
+              </div>
+              <div className={`w-full bg-zinc-100 md:min-h-0 md:flex-1 ${PRODUCT_GALLERY_ASPECT_CLASS}`} />
+            </div>
+            <div className="space-y-5 pt-1">
+              <div className="h-9 w-4/5 max-w-lg bg-zinc-100" />
+              <div className="h-7 w-48 bg-zinc-100" />
+              <div className="h-12 w-full bg-zinc-100" />
+              <div className="h-24 w-full bg-zinc-100" />
             </div>
           </div>
         </div>
@@ -445,21 +599,18 @@ export default function ProductDetail() {
 
   return (
     <div className="container-safe py-8">
-      {/* Breadcrumb */}
-      <div className="flex items-center justify-between text-xs text-zinc-600 mb-6">
-        <div>
-          <Link className="hover:underline" to="/search">{t('shop')}</Link> / <span className="text-zinc-800">{p.name}</span>
-        </div>
-        {backToImageSearch && (
+      {backToImageSearch && (
+        <div className="flex justify-end mb-6">
           <button
+            type="button"
             onClick={() => nav(backTarget)}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-200 bg-white text-sm text-zinc-700 hover:bg-zinc-50"
           >
             <ChevronLeft className="w-4 h-4" />
             Back to Image Search
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {fromOrder && orderItem && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
@@ -475,328 +626,326 @@ export default function ProductDetail() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-8 lg:gap-12 items-start">
-        {/* Image Gallery */}
-        <div className="grid grid-cols-1 md:grid-cols-[80px_1fr] gap-3 md:gap-4 items-start">
-          {/* Vertical Thumbnails */}
-          <div className="order-2 md:order-1 mt-2 md:mt-0 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden no-scrollbar md:h-[520px]">
-            <div className="flex gap-3 md:flex-col">
+      <div className="mx-auto max-w-6xl">
+        <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-12 xl:gap-16">
+          {/* Gallery — thumbs left, main 3∶4 (1215×1620) */}
+          <div className="flex flex-col gap-4 md:flex-row md:gap-4">
+            <div className="order-2 flex gap-2 overflow-x-auto pb-1 md:order-1 md:w-[72px] md:flex-col md:overflow-y-auto md:overflow-x-hidden md:pb-0 no-scrollbar md:max-h-[min(560px,70vh)]">
               {images.slice(0, 5).map((img, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => setActiveImage(idx)}
                   onMouseEnter={() => setActiveImage(idx)}
-                  className={`h-16 w-16 shrink-0 md:h-20 md:w-20 rounded-xl overflow-hidden transition-colors border ${activeImage === idx ? 'border-zinc-900' : 'border-zinc-200 hover:border-zinc-400'
-                    }`}
+                  className={`${PRODUCT_GALLERY_THUMB_CLASS} border transition-colors ${
+                    activeImage === idx ? "border-zinc-900 ring-1 ring-zinc-900" : "border-zinc-200 hover:border-zinc-400"
+                  }`}
                 >
                   <img
                     src={resolveImageUrl(img)}
                     alt={`${p.name} ${idx + 1}`}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </button>
               ))}
             </div>
-          </div>
 
-          {/* Main Image */}
-          <div
-            ref={mainImageRef}
-            className="order-1 md:order-2 aspect-[4/5] bg-zinc-50 rounded-md overflow-hidden relative cursor-zoom-in"
-            onMouseEnter={() => setHoverZoom(true)}
-            onMouseLeave={() => setHoverZoom(false)}
-            onMouseMove={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = ((e.clientX - rect.left) / rect.width) * 100;
-              const y = ((e.clientY - rect.top) / rect.height) * 100;
-              setZoomPos({ x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) });
-            }}
-            onClick={() => setShowZoomModal(true)}
-          >
-            <img
-              src={resolveImageUrl(images[activeImage])}
-              onError={(e) => (e.currentTarget.src = "/placeholder.svg")}
-              alt={p.name}
-              className="w-full h-full object-cover rounded-md"
-            />
-            {hoverZoom && (
-              <div
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `url(${resolveImageUrl(images[activeImage])})`,
-                  backgroundPosition: `${zoomPos.x}% ${zoomPos.y}%`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundSize: "180%",
+            <div
+              ref={mainImageRef}
+              className={`relative order-1 w-full cursor-zoom-in overflow-hidden border border-zinc-200 bg-zinc-50 md:order-2 md:min-h-0 md:flex-1 ${PRODUCT_GALLERY_ASPECT_CLASS}`}
+              onMouseEnter={() => setHoverZoom(true)}
+              onMouseLeave={() => setHoverZoom(false)}
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                setZoomPos({ x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) });
+              }}
+              onClick={() => setShowZoomModal(true)}
+            >
+              <img
+                src={resolveImageUrl(images[activeImage])}
+                onError={(e) => {
+                  e.currentTarget.src = "/placeholder.svg";
                 }}
+                alt={p.name}
+                className="h-full w-full object-cover"
               />
-            )}
-            {/* Image Navigation Arrows */}
-            {images.length > 1 && (
-              <>
-                <button
-                  onClick={() => setActiveImage((prev) => (prev - 1 + images.length) % images.length)}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white"
-                >
-                  <ChevronLeft className="w-5 h-5" strokeWidth={2} />
-                </button>
-                <button
-                  onClick={() => setActiveImage((prev) => (prev + 1) % images.length)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center hover:bg-white"
-                >
-                  <ChevronRight className="w-5 h-5" strokeWidth={2} />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Product Info */}
-        <div className="space-y-6">
-          {/* Header */}
-          {stockError && (
-            <div className="mt-3 text-sm text-red-600">
-              {stockError}
-            </div>
-          )}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="fs-pill">{p.category?.name || t('category')}</span>
-              {p.is_active && <span className="fs-pill bg-emerald-100 text-emerald-700">{t('inStock')}</span>}
-            </div>
-            <div className="flex items-start justify-between gap-3">
-              <h1 className="text-3xl font-black tracking-tight">{p.name}</h1>
-              <button
-                onClick={() => wishlist.toggle(p.id)}
-                className={
-                  `h-10 w-10 rounded-full border flex items-center justify-center ` +
-                  (wishlist.has(p.id)
-                    ? "bg-zinc-900 text-white border-zinc-900"
-                    : "bg-white border-zinc-200")
-                }
-                aria-label={t('wishlist')}
-                title={t('wishlist')}
-              >
-                <Heart
-                  className="w-5 h-5"
-                  strokeWidth={1.5}
-                  fill={wishlist.has(p.id) ? "currentColor" : "none"}
+              {hoverZoom && (
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    backgroundImage: `url(${resolveImageUrl(images[activeImage])})`,
+                    backgroundPosition: `${zoomPos.x}% ${zoomPos.y}%`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundSize: "180%",
+                  }}
                 />
-              </button>
-            </div>
-            <div className="flex items-center gap-4 mt-3">
-              <div className="text-2xl font-black text-rose-600">
-                <Money value={p.discount?.sale_price ?? p.activeSale?.sale_price ?? p.price} />
-              </div>
-              {(p.discount?.original_price || p.activeSale?.sale_price || p.compare_at_price) && (
-                <div className="text-lg text-zinc-400 line-through">
-                  <Money value={p.discount?.original_price ?? p.price ?? p.compare_at_price} />
-                </div>
+              )}
+              {images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImage((prev) => (prev - 1 + images.length) % images.length);
+                    }}
+                    className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center border border-zinc-200 bg-white/95 shadow-sm transition hover:bg-white md:left-4 md:h-10 md:w-10"
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-5 w-5" strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveImage((prev) => (prev + 1) % images.length);
+                    }}
+                    className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center border border-zinc-200 bg-white/95 shadow-sm transition hover:bg-white md:right-4 md:h-10 md:w-10"
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-5 w-5" strokeWidth={2} />
+                  </button>
+                </>
               )}
             </div>
+          </div>
 
-            {/* Discount Badge */}
-            {(p.discount || p.activeSale) && (
-              <div className="flex items-center gap-2 mt-3">
-                <span className="text-sm font-bold px-3 py-1 bg-rose-100 text-rose-700 rounded-full">
-                  {p.discount?.type === 'percentage' || p.activeSale?.discount_type === 'percentage'
-                    ? `${Math.round(p.discount?.value ?? p.activeSale?.discount_value ?? 0)}% OFF`
-                    : `$${Math.round(p.discount?.value ?? p.activeSale?.discount_value ?? 0)} OFF`}
+          {/* Product info — typography + controls aligned to reference */}
+          <div className="space-y-6 lg:pt-1">
+            {stockError ? <div className="text-sm text-red-600">{stockError}</div> : null}
+
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-900 md:text-3xl">{p.name}</h1>
+
+              <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-2xl font-bold tabular-nums text-red-600 md:text-[1.75rem]">
+                  <Money value={pricing.sale} />
                 </span>
-                {(p.discount?.end_date || p.activeSale?.end_date) && (
-                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">{t('limitedTime')}</span>
-                )}
+                {pricing.pctLabel ? (
+                  <span className="text-sm font-semibold text-zinc-900">{pricing.pctLabel}</span>
+                ) : null}
+                {pricing.compare != null ? (
+                  <span className="text-sm text-zinc-400 line-through tabular-nums">
+                    <Money value={pricing.compare} />
+                  </span>
+                ) : null}
               </div>
-            )}
-          </div>
 
-          {/* Product Code */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-500">{t('code')}:</span>
-              <span className="font-semibold text-zinc-900">{p.sku || "—"}</span>
+              {(p.discount?.end_date || p.activeSale?.end_date) && (p.discount || p.activeSale) ? (
+                <p className="mt-2 text-xs font-medium text-amber-800">{t("limitedTime")}</p>
+              ) : null}
             </div>
-          </div>
 
-          {/* Description */}
-          {p.description && (
-            <p className="text-sm text-zinc-700 leading-relaxed">{p.description}</p>
-          )}
-
-          {/* Colors */}
-          {colors.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-zinc-900">{t('colorsAvailable')}</span>
+            {colorVariants.length > 0 ? (
+              <div>
+                <p className="mb-3 text-sm font-semibold text-zinc-900">{t("colorsAvailable")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {colorVariants.map((cv, idx) => {
+                    const fill = colorSwatchFill(cv.name);
+                    const isActive = selectedColor === cv.name;
+                    return (
+                      <button
+                        key={`${cv.name}-${idx}`}
+                        type="button"
+                        onClick={() => {
+                          setSelectedColor(cv.name);
+                          if (cv.image_url) {
+                            const ix = images.indexOf(cv.image_url);
+                            if (ix >= 0) setActiveImage(ix);
+                          } else {
+                            setActiveImage(0);
+                          }
+                        }}
+                        className="flex w-12 flex-col items-center gap-2 text-center md:w-[72px]"
+                      >
+                        <span
+                          className={`${PRODUCT_GALLERY_THUMB_CLASS} flex items-center justify-center border transition-colors ${
+                            isActive ? "border-zinc-900 ring-1 ring-zinc-900" : "border-zinc-300 hover:border-zinc-500"
+                          }`}
+                          style={
+                            cv.image_url
+                              ? undefined
+                              : fill
+                                ? { backgroundColor: fill }
+                                : {
+                                    backgroundImage:
+                                      "linear-gradient(135deg, #e4e4e7 25%, #fafafa 25%, #fafafa 50%, #e4e4e7 50%, #e4e4e7 75%, #fafafa 75%)",
+                                    backgroundSize: "8px 8px",
+                                  }
+                          }
+                          title={cv.name}
+                        >
+                          {cv.image_url ? (
+                            <img
+                              src={resolveImageUrl(cv.image_url)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : null}
+                        </span>
+                        <span className="max-w-[4.5rem] truncate text-xs font-medium text-zinc-800 md:max-w-[4.5rem]">{cv.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {colors.map((color, idx) => {
-                  const swatchImage = images[idx] || images[0];
-                  const isActive = selectedColor === color;
-                  return (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => {
-                        setSelectedColor(color);
-                        if (swatchImage) setActiveImage(Math.min(idx, images.length - 1));
-                      }}
-                      className={`flex items-center gap-3 rounded-xl border px-2 py-2 text-left ${isActive ? 'border-zinc-900' : 'border-zinc-200 hover:border-zinc-400'
+            ) : null}
+
+            {displaySizes.length > 0 ? (
+              <div>
+                <p className="mb-3 text-sm font-semibold text-zinc-900">{t("sizeAvailable")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {displaySizes.map((size) => {
+                    const isActive = selectedSize === size;
+                    const rowQty = usesVariantMatrix
+                      ? matrixQtyForCombo(variantMatrix, selectedColor, size) ?? 0
+                      : null;
+                    const soldOut = usesVariantMatrix && rowQty <= 0;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        disabled={soldOut}
+                        onClick={() => !soldOut && setSelectedSize(size)}
+                        className={`flex h-11 min-w-[2.75rem] items-center justify-center border px-2 text-sm font-semibold transition-colors ${
+                          soldOut
+                            ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400 line-through"
+                            : isActive
+                              ? "border-zinc-900 bg-zinc-900 text-white"
+                              : "border-zinc-300 bg-white text-zinc-800 hover:border-zinc-500"
                         }`}
-                    >
-                      <span className="h-12 w-12 rounded-lg overflow-hidden bg-zinc-50 border border-zinc-200">
-                        <img
-                          src={resolveImageUrl(swatchImage)}
-                          alt={color}
-                          className="h-full w-full object-cover"
-                        />
-                      </span>
-                      <span className="text-sm font-medium text-zinc-900 truncate">{color}</span>
-                    </button>
-                  );
-                })}
+                        title={soldOut ? "Out of stock for this color" : undefined}
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            ) : null}
 
-          {/* Size */}
-          {sizes.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-zinc-900">{t('sizeAvailable')}</span>
-                {sizes.length > 0 && (
-                  <button
-                    onClick={() => setShowSizeGuide(true)}
-                    className="text-xs text-zinc-600 hover:text-zinc-900 underline"
-                  >
-                    {t('sizeGuide')}
-                  </button>
-                )}
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {sizes.map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => setSelectedSize(size)}
-                    className={`w-12 h-12 rounded-xl text-sm font-semibold transition-all ${selectedSize === size
-                        ? 'bg-zinc-900 text-white'
-                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                      }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Quantity & Add to Cart */}
-          <div className="space-y-4">
-            {fromOrder && orderItem && (
-              <button
-                onClick={reorderAsBefore}
-                disabled={maxQty === 0}
-                className="w-full rounded-xl bg-blue-600 text-white py-4 font-bold hover:opacity-90 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <RotateCcw className="w-5 h-5" strokeWidth={2} />
-                {t('reorderAsBefore') || `Reorder as before (${orderItem.quantity}x)`}
-              </button>
-            )}
-
-            {/* Quantity Controls */}
-            <div className="flex items-center justify-center sm:justify-start gap-4">
-              <div className="inline-flex items-center rounded-xl border border-gray-200">
+            <div className="space-y-4">
+              {fromOrder && orderItem ? (
                 <button
-                  className="h-12 w-12 flex items-center justify-center hover:bg-gray-50 transition-colors rounded-l-xl"
-                  onClick={() => setQty((x) => Math.max(1, x - 1))}
-                >
-                  <Minus className="w-5 h-5" strokeWidth={2} />
-                </button>
-                <div className="w-14 text-center text-base font-bold">{qty}</div>
-                <button
-                  className="h-12 w-12 flex items-center justify-center hover:bg-gray-50 transition-colors rounded-r-xl disabled:opacity-40"
-                  onClick={() => setQty((x) => Math.min(maxQty || 1, x + 1))}
+                  type="button"
+                  onClick={reorderAsBefore}
                   disabled={maxQty === 0}
+                  className="flex w-full items-center justify-center gap-2 rounded-sm bg-blue-600 py-3.5 text-sm font-bold text-white transition hover:opacity-95 disabled:opacity-50"
                 >
-                  <Plus className="w-5 h-5" strokeWidth={2} />
+                  <RotateCcw className="h-5 w-5" strokeWidth={2} />
+                  {t("reorderAsBefore") || `Reorder as before (${orderItem.quantity}x)`}
+                </button>
+              ) : null}
+
+              <div>
+                <p className="mb-2 text-sm font-semibold text-zinc-900">{t("quantity")}</p>
+                <div className="inline-flex w-full max-w-[220px] items-stretch border border-zinc-200 bg-zinc-100 sm:max-w-xs">
+                  <button
+                    type="button"
+                    className="flex flex-1 items-center justify-center py-3 transition hover:bg-zinc-200/80"
+                    onClick={() => setQty((x) => Math.max(1, x - 1))}
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-5 w-5 text-zinc-800" strokeWidth={2} />
+                  </button>
+                  <div className="flex min-w-[3rem] items-center justify-center border-x border-zinc-200 bg-white text-base font-semibold tabular-nums text-zinc-900">
+                    {qty}
+                  </div>
+                  <button
+                    type="button"
+                    className="flex flex-1 items-center justify-center py-3 transition hover:bg-zinc-200/80 disabled:opacity-40"
+                    onClick={() => setQty((x) => Math.min(maxQty || 1, x + 1))}
+                    disabled={maxQty === 0}
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-5 w-5 text-zinc-800" strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={add}
+                  disabled={maxQty === 0}
+                  className="min-h-[48px] flex-1 border border-black bg-black py-3 text-center text-sm font-semibold text-white transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t("addToCart")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => wishlist.toggle(p.id)}
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                    wishlist.has(p.id) ? "bg-zinc-900 text-white" : "bg-white text-zinc-900 hover:bg-zinc-100"
+                  }`}
+                  aria-label={t("wishlist")}
+                  title={t("wishlist")}
+                >
+                  <Heart className="h-5 w-5" strokeWidth={1.5} fill={wishlist.has(p.id) ? "currentColor" : "none"} />
                 </button>
               </div>
-
-              {Number.isFinite(Number(p?.stock)) && (
-                <div className="text-sm text-gray-500">
-                  {t('quantityAvailable')}: <span className="font-semibold text-gray-700">{p.stock}</span>
-                </div>
-              )}
             </div>
 
-            {/* Stock Info - Above Buttons */}
-            {Number.isFinite(Number(p?.stock)) && (
-              <div className="text-xs text-gray-400 text-center sm:text-left">
-                {p.stock > 10 ? `${p.stock} ${t('itemsAvailable') || 'items available'}` :
-                  p.stock > 0 ? `${t('onlyItemsLeft') || 'Only'} ${p.stock} ${t('itemsLeft') || 'items left'}!` :
-                    t('outOfStock') || 'Out of stock'}
+            <div className="flex flex-col gap-2 border-t border-zinc-200 pt-6 sm:flex-row sm:items-stretch">
+              <ServiceBadge
+                icon={<Zap className="h-4 w-4 text-zinc-700" strokeWidth={2} />}
+                title={t("fastDelivery")}
+                description={deliveryInfo}
+              />
+              <ServiceBadge
+                icon={<Phone className="h-4 w-4 text-zinc-700" strokeWidth={2} />}
+                title={t("supportHotline")}
+                description={supportPhone}
+              />
+              <ServiceBadge
+                icon={<CreditCard className="h-4 w-4 text-zinc-700" strokeWidth={2} />}
+                title={t("easyPayment")}
+                description={
+                  paymentMethods.length > 0 ? paymentMethods.slice(0, 4).join(", ") : t("paymentMethodsDefault")
+                }
+              />
+            </div>
+
+            {p.model_info || p.description || p.sku || p.category?.name ? (
+              <div className="overflow-hidden rounded-sm border border-zinc-200">
+                {p.model_info ? (
+                  <AccordionRow
+                    title={t("modelInfo")}
+                    open={detailAcc.model}
+                    onToggle={() => setDetailAcc((s) => ({ ...s, model: !s.model }))}
+                  >
+                    <ProductBodyText text={p.model_info} />
+                  </AccordionRow>
+                ) : null}
+                {p.description || p.sku || p.category?.name ? (
+                  <AccordionRow
+                    title={t("productDetails")}
+                    open={detailAcc.details}
+                    onToggle={() => setDetailAcc((s) => ({ ...s, details: !s.details }))}
+                  >
+                    <div className="space-y-3">
+                      {(p.sku || p.category?.name) && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                          {p.sku ? (
+                            <span>
+                              {t("code")}: <span className="font-semibold text-zinc-800">{p.sku}</span>
+                            </span>
+                          ) : null}
+                          {p.category?.name ? (
+                            <span>
+                              {t("category")}: <span className="font-semibold text-zinc-800">{p.category.name}</span>
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                      {p.description ? <ProductBodyText text={p.description} /> : null}
+                    </div>
+                  </AccordionRow>
+                ) : null}
               </div>
-            )}
-
-            {/* Premium Action Buttons */}
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={add}
-                disabled={maxQty === 0}
-                className="w-full rounded-xl bg-black text-white py-4 font-bold hover:opacity-90 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ShoppingBag className="w-5 h-5" strokeWidth={2.5} />
-                {t('addToCart')}
-              </button>
-
-              <Link
-                to="/cart"
-                className="w-full rounded-xl bg-white border border-gray-200 text-black py-4 font-semibold hover:opacity-90 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                <Eye className="w-5 h-5" strokeWidth={2} />
-                {t('viewCart')}
-              </Link>
-            </div>
+            ) : null}
           </div>
-
-          {/* Service Badges */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-zinc-200">
-            <ServiceBadge
-              icon={
-                <Zap className="w-5 h-5 text-emerald-600" strokeWidth={2} />
-              }
-              title={t('fastDelivery')}
-              description={deliveryInfo}
-            />
-            <ServiceBadge
-              icon={
-                <Phone className="w-5 h-5 text-blue-600" strokeWidth={2} />
-              }
-              title={t('supportHotline')}
-              description={supportPhone}
-            />
-            <ServiceBadge
-              icon={
-                <CreditCard className="w-5 h-5 text-amber-600" strokeWidth={2} />
-              }
-              title={t('easyPayment')}
-              description={paymentMethods.length > 0 ? paymentMethods.slice(0, 3).join(", ") : t('paymentMethodsDefault')}
-            />
-          </div>
-
-          {/* Model Info */}
-          {p.model_info && (
-            <div className="bg-zinc-50 rounded-2xl p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
-                  <User className="w-5 h-5 text-zinc-600" strokeWidth={2} />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-zinc-900 mb-1">{t('modelSize')}</div>
-                  <p className="text-sm text-zinc-600">{p.model_info}</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -811,70 +960,6 @@ export default function ProductDetail() {
           </div>
         </div>
       )}
-
-      {/* Size Guide — portal to body so it stays centered on all viewports */}
-      {showSizeGuide &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
-            <div
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-              aria-hidden
-              onClick={() => setShowSizeGuide(false)}
-            />
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="size-guide-dialog-title"
-              className="relative z-10 mx-auto w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex max-h-[min(90dvh,640px)] flex-col">
-                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4 sm:px-6">
-                  <h3 id="size-guide-dialog-title" className="text-lg font-bold tracking-tight text-zinc-900">
-                    {t("sizeGuide")}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowSizeGuide(false)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50"
-                  >
-                    <X className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                </div>
-                <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
-                  {p.size_guide ? (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">{p.size_guide}</p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-xl border border-zinc-200">
-                      <table className="w-full min-w-[280px] text-sm">
-                        <thead>
-                          <tr className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
-                            <th className="px-3 py-3 sm:px-4">{t("size")}</th>
-                            <th className="px-3 py-3 sm:px-4">{t("chestCm")}</th>
-                            <th className="px-3 py-3 sm:px-4">{t("waistCm")}</th>
-                            <th className="px-3 py-3 sm:px-4">{t("hipCm")}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100">
-                          {DEFAULT_SIZE_GUIDE_ROWS.map((row) => (
-                            <tr key={row.size} className="text-zinc-800">
-                              <td className="px-3 py-2.5 font-semibold sm:px-4">{row.size}</td>
-                              <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.chest}</td>
-                              <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.waist}</td>
-                              <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.hip}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {/* Zoom Modal */}
       {showZoomModal && typeof document !== "undefined" && createPortal(

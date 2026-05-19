@@ -7,7 +7,7 @@ use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
-use App\Services\PaidOrderInventory;
+use App\Services\ProductVariantInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -99,23 +99,18 @@ class OrderController extends Controller
             return response()->json(['message' => 'Cart is empty.'], 422);
         }
 
-        $qtyByProduct = [];
         foreach ($cart->items as $ci) {
-            $pid = (int) $ci->product_id;
-            $qtyByProduct[$pid] = ($qtyByProduct[$pid] ?? 0) + (int) $ci->quantity;
-        }
-        foreach ($qtyByProduct as $productId => $needQty) {
-            $product = Product::with('activeSale')->find($productId);
+            $product = Product::with('activeSale')->find((int) $ci->product_id);
             if (! $product || ! (bool) $product->is_active) {
                 throw ValidationException::withMessages([
                     'cart' => ['One or more products are unavailable. Please refresh your cart and try again.'],
                 ]);
             }
             if (is_numeric($product->stock)) {
-                $cap = PaidOrderInventory::effectiveProductStockCap($product);
-                if ($needQty > $cap) {
+                $cap = ProductVariantInventory::effectiveCapForCartLine($product, $ci->color, $ci->size);
+                if ((int) $ci->quantity > $cap) {
                     throw ValidationException::withMessages([
-                        'cart' => ['Not enough stock for: ' . $product->name . '.'],
+                        'cart' => ['Not enough stock for: '.$product->name.'.'],
                     ]);
                 }
             }
@@ -166,6 +161,7 @@ class OrderController extends Controller
                     'order_id' => $order->id,
                     'product_id' => $ci->product_id,
                     'size' => $ci->size ?? null,
+                    'color' => $ci->color ?? null,
                     'name' => $product->name ?? 'Product',
                     'sku' => $product->sku ?? '',
                     'price' => $unitPrice,

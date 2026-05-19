@@ -284,15 +284,18 @@ class PosSaleController extends Controller
     private function createOrderItemForLine(int $orderId, string $code, string $name, int $qty, float $unitPrice): void
     {
         $candidates = BarcodeScanStockService::collectScanCandidates($code);
+        $variantMatch = \App\Services\ProductVariantInventory::findBySkuBarcodeCandidates($candidates);
         $products = BarcodeScanStockService::findLinkedProductsAmongCandidates($candidates);
-        $product = $products->first();
+        $product = $variantMatch['product'] ?? $products->first();
+        $variant = $variantMatch['variant'] ?? null;
         $lineTotal = round($unitPrice * $qty, 2);
         $sku = Str::limit($code, 60, '');
 
         OrderItem::create([
             'order_id' => $orderId,
             'product_id' => $product?->id,
-            'size' => null,
+            'size' => $variant['size'] ?? null,
+            'color' => $variant['color'] ?? null,
             'name' => $name,
             'sku' => $sku,
             'price' => $unitPrice,

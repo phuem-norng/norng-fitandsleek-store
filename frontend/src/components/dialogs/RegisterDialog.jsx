@@ -253,7 +253,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                       <button
                         type="submit"
                         disabled={loading}
-                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#5C7E64] via-[#6F8F72] to-[#93B895] text-white text-sm font-semibold shadow-lg shadow-[#6F8F72]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
+                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#586F64] via-[#6e8b7e] to-[#9BB0A5] text-white text-sm font-semibold shadow-lg shadow-[#6e8b7e]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
                       >
                         {loading ? "Creating account..." : "Create Account"}
                       </button>
@@ -294,7 +294,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                       <button
                         type="submit"
                         disabled={loading}
-                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#5C7E64] via-[#6F8F72] to-[#93B895] text-white text-sm font-semibold shadow-lg shadow-[#6F8F72]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
+                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#586F64] via-[#6e8b7e] to-[#9BB0A5] text-white text-sm font-semibold shadow-lg shadow-[#6e8b7e]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
                       >
                         {loading ? "Verifying..." : "Verify"}
                       </button>

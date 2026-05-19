@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
 import { useTheme } from "../../state/theme.jsx";
-import { closeSwal, errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../../lib/swal";
+import { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../../lib/swal";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 
 export default function AdminCategories() {
@@ -43,6 +44,18 @@ export default function AdminCategories() {
  const [selectedIds, setSelectedIds] = useState([]);
  const [isCreating, setIsCreating] = useState(false);
  const [createError, setCreateError] = useState("");
+ const [pendingDeleteId, setPendingDeleteId] = useState(null);
+ const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+ const [deleteBusy, setDeleteBusy] = useState(false);
+
+ const closeCreateForm = () => {
+ if (isCreating) return;
+ setShowCreateForm(false);
+ };
+
+ const closeEditForm = () => {
+ setEditing(null);
+ };
 
  const getValidationMessage = (error) => {
  const responseMessage = error?.response?.data?.message;
@@ -154,6 +167,7 @@ export default function AdminCategories() {
  const startEdit = (c) => setEditing({ ...c });
 
  const saveEdit = async () => {
+ if (!editing?.id) return;
  setErr("");
  try {
  await api.patch(`/admin/categories/${editing.id}`, {
@@ -162,7 +176,7 @@ export default function AdminCategories() {
  type: editing.type || null,
  is_active: !!editing.is_active,
  });
- setEditing(null);
+ closeEditForm();
  showSuccess("Category updated successfully!");
  await load();
  } catch (e2) {
@@ -170,20 +184,30 @@ export default function AdminCategories() {
  }
  };
 
- const del = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this category?",
- enText: "This action cannot be undone. Ensure no products rely on this category.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const del = (id) => {
+ setPendingDeleteId(id);
+ };
+
+ const confirmDelete = async () => {
+ setDeleteBusy(true);
+ setErr("");
  try {
- await api.delete(`/admin/categories/${id}`);
+ if (pendingBulkDelete) {
+ await Promise.all(selectedIds.map((id) => api.delete(`/admin/categories/${id}`)));
+ showSuccess("Selected categories deleted successfully!");
+ setSelectedIds([]);
+ } else if (pendingDeleteId != null) {
+ await api.delete(`/admin/categories/${pendingDeleteId}`);
  showSuccess("Category deleted successfully!");
+ if (editing?.id === pendingDeleteId) closeEditForm();
+ }
  await load();
  } catch (e2) {
  setErr(extractErr(e2));
+ } finally {
+ setDeleteBusy(false);
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
  }
  };
 
@@ -218,23 +242,9 @@ export default function AdminCategories() {
  setSelectedIds(Array.from(next));
  };
 
- const deleteSelected = async () => {
+ const deleteSelected = () => {
  if (selectedIds.length === 0) return;
- const confirmRes = await warningConfirm({
- enTitle: "Delete selected categories?",
- enText: `Permanently remove ${selectedIds.length} categor${selectedIds.length === 1 ? "y" : "ies"}? This cannot be undone.`,
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- try {
- await Promise.all(selectedIds.map((id) => api.delete(`/admin/categories/${id}`)));
- showSuccess("Selected categories deleted successfully!");
- setSelectedIds([]);
- await load();
- } catch (e2) {
- setErr(extractErr(e2));
- }
+ setPendingBulkDelete(true);
  };
 
  return (
@@ -287,28 +297,34 @@ export default function AdminCategories() {
  </div>
  )}
 
- {/* Create Modal */}
- {showCreateForm && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div
- className="absolute inset-0 bg-black/50 backdrop-blur-sm"
- onClick={() => !isCreating && setShowCreateForm(false)}
+ <AdminConfirmDialog
+ open={pendingDeleteId != null || pendingBulkDelete}
+ onClose={() => {
+ if (deleteBusy) return;
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
+ }}
+ onConfirm={confirmDelete}
+ title={pendingBulkDelete ? "Delete selected categories?" : "Delete this category?"}
+ message={
+ pendingBulkDelete
+ ? `Permanently remove ${selectedIds.length} categor${selectedIds.length === 1 ? "y" : "ies"}? This cannot be undone.`
+ : "This action cannot be undone. Ensure no products rely on this category."
+ }
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
  />
- <div className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
- <div className="flex items-center justify-between mb-8">
- <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Add New Category</h2>
- <button
- onClick={() => !isCreating && setShowCreateForm(false)}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
- type="button"
- disabled={isCreating}
- >
- <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
 
+ <AdminModal
+ open={showCreateForm}
+ onClose={closeCreateForm}
+ title="Add New Category"
+ titleId="category-create-title"
+ maxWidthClass="max-w-3xl"
+ closeOnBackdrop={!isCreating}
+ >
  <form onSubmit={create} className="grid md:grid-cols-12 gap-4 items-end">
  <label className="md:col-span-6">
  <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Category Name</span>
@@ -394,9 +410,7 @@ export default function AdminCategories() {
  </div>
  ) : null}
  </form>
- </div>
- </div>
- )}
+ </AdminModal>
 
  {/* Categories Table */}
  <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
@@ -549,31 +563,14 @@ export default function AdminCategories() {
  </div>
  </div>
 
- {/* Edit Modal */}
- {editing && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div
- className="absolute inset-0 bg-black/50 backdrop-blur-sm"
- onClick={() => setEditing(null)}
- />
- <div className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 animate-modal-in">
- <div className="flex items-center justify-between mb-6">
- <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
- <svg className="w-6 h-6 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
- </svg>
- Edit Category
- </h3>
- <button
- onClick={() => setEditing(null)}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+ <AdminModal
+ open={!!editing}
+ onClose={closeEditForm}
+ title="Edit Category"
+ titleId="category-edit-title"
+ maxWidthClass="max-w-md"
  >
- <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
-
+ {editing ? (
  <div className="space-y-4">
  <div>
  <label className="block text-sm font-semibold text-slate-600 mb-2">Category Name</label>
@@ -631,12 +628,14 @@ export default function AdminCategories() {
 
  <div className="flex gap-3 mt-6">
  <button
- onClick={() => setEditing(null)}
+ type="button"
+ onClick={closeEditForm}
  className="flex-1 h-12 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-100 font-semibold bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-300"
  >
  Cancel
  </button>
  <button
+ type="button"
  onClick={saveEdit}
  className={`flex-1 h-12 rounded-xl font-semibold transition-all duration-300 border ${accentIsWhite ? 'border-slate-300' : ''}`}
  style={{ backgroundColor: accentColor, color: accentIsWhite ? '#0b0b0f' : '#FFFFFF', borderColor: accentIsWhite ? '#cbd5e1' : accentColor }}
@@ -645,9 +644,8 @@ export default function AdminCategories() {
  </button>
  </div>
  </div>
- </div>
- </div>
- )}
+ ) : null}
+ </AdminModal>
 
  <style>{`
  @keyframes shake {
@@ -657,19 +655,6 @@ export default function AdminCategories() {
  }
  .animate-shake {
  animation: shake 0.5s ease-in-out;
- }
- @keyframes modal-in {
- from {
- opacity: 0;
- transform: scale(0.95) translateY(-20px);
- }
- to {
- opacity: 1;
- transform: scale(1) translateY(0);
- }
- }
- .animate-modal-in {
- animation: modal-in 0.3s ease-out;
  }
  `}</style>
  </div>

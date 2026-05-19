@@ -591,7 +591,7 @@ export default function ImageSearch() {
               {/* Skeleton Cards */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                  <div key={i} className="bg-white border border-zinc-200 rounded-none overflow-hidden">
+                  <div key={i} className="bg-white rounded-none overflow-hidden">
                     <div className="aspect-[4/5] bg-gray-200 animate-pulse" />
                     <div className="p-4 space-y-3">
                       <div className="h-4 bg-gray-200 rounded animate-pulse" />
@@ -652,7 +652,7 @@ export default function ImageSearch() {
                         key={product.id}
                         to={`/p/${product.slug}`}
                         state={{ fromImageSearch: true, backTo: '/image-search' }}
-                        className="group bg-white border border-zinc-200 rounded-none overflow-hidden transition block"
+                        className="group bg-white rounded-none overflow-hidden transition block"
                       >
                       {/* Product Image */}
                       <div className="relative bg-gray-100 aspect-[4/5] overflow-hidden">
@@ -707,7 +707,7 @@ export default function ImageSearch() {
                     ) : (
                       <div
                         key={product.id}
-                        className="group bg-white border border-zinc-200 rounded-none overflow-hidden transition block opacity-80"
+                        className="group bg-white rounded-none overflow-hidden transition block opacity-80"
                         aria-disabled="true"
                       >
                         {/* Product Image */}

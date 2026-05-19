@@ -77,6 +77,10 @@ function interleaveProductGroups(groups) {
   return output;
 }
 
+const PARENT_SECTION_KEYS = new Set(["women", "men", "boys", "girls"]);
+const TAB_SECTION_MAP = { newIn: "new" };
+const PARENT_LINK_MAP = { women: "Women", men: "Men", boys: "Boys", girls: "Girls" };
+
 export default function Home() {
   const [categories, setCategories] = useState([]);
   const { settings: homepageSettings } = useHomepageSettings();
@@ -86,9 +90,14 @@ export default function Home() {
   // Load categories
   useEffect(() => {
     (async () => {
-      const { data } = await api.get("/categories");
-      const list = Array.isArray(data) ? data : data?.data;
-      setCategories(Array.isArray(list) ? list : []);
+      try {
+        const { data } = await api.get("/categories");
+        const list = Array.isArray(data) ? data : data?.data;
+        setCategories(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.error("[Home] /categories failed:", err?.response?.status, err?.message);
+        setCategories([]);
+      }
     })();
   }, []);
 
@@ -177,9 +186,40 @@ export default function Home() {
       }
     };
 
+    const loadTabSection = async (key, tab) => {
+      setSections((s) => ({ ...s, [key]: { ...(s[key] || {}), loading: true } }));
+      try {
+        const { data } = await api.get("/products", { params: { tab, per_page: 8 } });
+        const items = (data?.data || []).slice(0, 8);
+        setSections((s) => ({ ...s, [key]: { loading: false, items } }));
+      } catch (error) {
+        console.error(`Error loading section ${key}:`, error);
+        setSections((s) => ({ ...s, [key]: { loading: false, items: [] } }));
+      }
+    };
+
+    const loadParentSection = async (key) => {
+      const parent = PARENT_LINK_MAP[key] || key;
+      setSections((s) => ({ ...s, [key]: { ...(s[key] || {}), loading: true } }));
+      try {
+        const { data } = await api.get("/products", {
+          params: { parent_category: parent, per_page: 8 },
+        });
+        const items = (data?.data || []).slice(0, 8);
+        setSections((s) => ({ ...s, [key]: { loading: false, items } }));
+      } catch (error) {
+        console.error(`Error loading section ${key}:`, error);
+        setSections((s) => ({ ...s, [key]: { loading: false, items: [] } }));
+      }
+    };
+
     enabledSections.forEach((section) => {
       if (section.key === "discounts") {
         loadDiscounts();
+      } else if (TAB_SECTION_MAP[section.key]) {
+        loadTabSection(section.key, TAB_SECTION_MAP[section.key]);
+      } else if (PARENT_SECTION_KEYS.has(section.key)) {
+        loadParentSection(section.key);
       } else {
         loadSection(section.key, sectionCategories[section.key]);
       }
@@ -191,9 +231,14 @@ export default function Home() {
     const matchedCategories = sectionCategories[key] || [];
     const firstCategory = matchedCategories[0];
 
-    if (key === 'discounts') return '/discounts';
+    if (key === "discounts") return "/discounts";
+    if (key === "newIn") return "/search?tab=new";
+    if (PARENT_SECTION_KEYS.has(key)) {
+      const parent = PARENT_LINK_MAP[key] || key;
+      return `/search?parent_category=${encodeURIComponent(parent)}`;
+    }
     if (firstCategory?.slug) return `/category/${firstCategory.slug}`;
-    return `/search?search=${encodeURIComponent(section?.title || key || '')}`;
+    return `/search?search=${encodeURIComponent(section?.title || key || "")}`;
   };
 
   return (

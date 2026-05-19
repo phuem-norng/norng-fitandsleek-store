@@ -525,10 +525,28 @@ const translations = {
     easyPayment: 'Easy Payment',
     paymentMethodsDefault: 'Cash, Card, ABA',
     modelSize: 'Model Size',
+    modelInfo: 'Model info',
+    productDetails: 'Product details',
+    quantity: 'Quantity',
     chestCm: 'Chest (cm)',
     waistCm: 'Waist (cm)',
     hipCm: 'Hip (cm)',
     zoom: 'Zoom',
+
+    catalogUnavailable: "We can't load live catalogue data right now.",
+    catalogUnavailableHint:
+      "Products and promotions on this page come from our servers. Please try again after the service is available.",
+    retryPage: "Retry",
+    dismiss: "Dismiss",
+
+    heroPlaceholderBadge: "FIT & SLEEK",
+    heroPlaceholderTitle: "Browse the store",
+    heroPlaceholderSubtitle:
+      "Featured promotions will appear here when available. In the meantime, use search or the menu to find products.",
+    sectionNoProducts: "No products to show in this section right now.",
+    sectionLoadUnavailable:
+      "We couldn't load products for this section. Please try again in a moment.",
+    sectionDegradedVisibleHint: "Couldn't load this section right now.",
   },
   km: {
     // Header
@@ -1053,10 +1071,28 @@ const translations = {
     easyPayment: 'ការទូទាត់ងាយស្រួល',
     paymentMethodsDefault: 'សាច់ប្រាក់, កាត, ABA',
     modelSize: 'ទំហំម៉ូដែល',
+    modelInfo: 'ព័ត៌មានម៉ូដែល',
+    productDetails: 'លម្អិតផលិតផល',
+    quantity: 'បរិមាណ',
     chestCm: 'ទ្រូង (សម.)',
     waistCm: 'ចង្កេះ (សម.)',
     hipCm: 'ត្រគាក (សម.)',
     zoom: 'ពង្រីក',
+
+    catalogUnavailable: 'មិនអាចផ្ទុកទិន្នន័យផលិតផលពីម៉ាស៊ីនមេបានទេនៅពេលនេះ។',
+    catalogUnavailableHint:
+      'ផលិតផល និងប្រូម៉ូសិននៅទំព័រនេះមកពីម៉ាស៊ីនមេ។ សូមព្យាយាមម្តងទៀតបន្ទាប់ពីសេវាដំណើរការធម្មតា។',
+    retryPage: 'ព្យាយាមម្តងទៀត',
+    dismiss: 'បិទ',
+
+    heroPlaceholderBadge: 'FIT & SLEEK',
+    heroPlaceholderTitle: 'រកមើលហាង',
+    heroPlaceholderSubtitle:
+      'នៅពេលមានបញ្ចុះតម្លៃ ឬប្រូម៉ូសិន ពួកគេនឹងបង្ហាញនៅទីនេះ។ សូមប្រើការស្វែងរក ឬម៉ឺនុយខាងលើដើម្បីរកផលិតផល។',
+    sectionNoProducts: 'មិនមានផលិតផលបង្ហាញក្នុងផ្នែកនេះទេនៅពេលនេះ។',
+    sectionLoadUnavailable:
+      'មិនអាចផ្ទុកផលិតផលសម្រាប់ផ្នែកនេះបានទេ។ សូមព្យាយាមម្តងទៀតក្នុងរយៈពេលបន្តិចទៀត។',
+    sectionDegradedVisibleHint: 'មិនអាចផ្ទុកផ្នែកនេះបានទេនៅពេលនេះ។',
   }
 };
 

@@ -3,6 +3,7 @@ import api from '../../lib/api';
 import { resolveImageUrl } from '../../lib/images';
 import { AdminContentSkeleton } from '@/components/admin/AdminLoading';
 import { useTheme } from '../../state/theme.jsx';
+import { AdminConfirmDialog } from '../../components/admin/AdminModal.jsx';
 
 const defaultLeftMenu = [
  {
@@ -78,6 +79,7 @@ export default function CompleteHomepageManager() {
  const [initialLoading, setInitialLoading] = useState(true);
  const [error, setError] = useState('');
  const [success, setSuccess] = useState('');
+ const [pendingRemove, setPendingRemove] = useState(null);
 
  // Sections data
  const [sections, setSections] = useState({
@@ -97,7 +99,7 @@ export default function CompleteHomepageManager() {
  const [headerSettings, setHeaderSettings] = useState({
  logo_text: 'FIT&SLEEK',
  logo_url: '/logo.png',
- background_color: '#6F8F72',
+ background_color: '#6e8b7e',
  search_placeholder: 'Search items...',
  search_enabled: true,
  cart_enabled: true,
@@ -132,7 +134,7 @@ export default function CompleteHomepageManager() {
  privacy_enabled: true,
  contact_enabled: true,
  copyright_text: '© 2026 FIT&SLEEK Pro. All rights reserved.',
- background_color: '#6F8F72',
+ background_color: '#6e8b7e',
  });
 
  // Footer links sections
@@ -322,11 +324,44 @@ export default function CompleteHomepageManager() {
  };
 
  const handleRemoveSection = (sectionKey) => {
+ setPendingRemove({ type: 'section', sectionKey });
+ };
+
+ const confirmRemove = () => {
+ if (!pendingRemove) return;
+ if (pendingRemove.type === 'section') {
  setSections(prev => {
  const next = { ...prev };
- delete next[sectionKey];
+ delete next[pendingRemove.sectionKey];
  return next;
  });
+ }
+ if (pendingRemove.type === 'custom_nav') {
+ const next = (headerSettings.custom_nav || []).filter((_, i) => i !== pendingRemove.index);
+ handleHeaderChange('custom_nav', next);
+ }
+ if (pendingRemove.type === 'left_menu_section') {
+ const next = (headerSettings.left_menu || []).filter((_, i) => i !== pendingRemove.sectionIndex);
+ handleHeaderChange('left_menu', next);
+ }
+ if (pendingRemove.type === 'left_menu_item') {
+ const next = [...(headerSettings.left_menu || [])];
+ const items = [...(next[pendingRemove.sectionIndex]?.items || [])].filter((_, i) => i !== pendingRemove.itemIndex);
+ next[pendingRemove.sectionIndex] = { ...next[pendingRemove.sectionIndex], items };
+ handleHeaderChange('left_menu', next);
+ }
+ if (pendingRemove.type === 'footer_link') {
+ setFooterSections(prev => ({
+ ...prev,
+ [pendingRemove.section]: { ...prev[pendingRemove.section], items: (prev[pendingRemove.section]?.items || []).filter((_, i) => i !== pendingRemove.index) }
+ }));
+ }
+ if (pendingRemove.type === 'footer_social') {
+ setFooterSocials(prev => prev.filter((_, i) => i !== pendingRemove.index));
+ }
+ setPendingRemove(null);
+ setSuccess('Removed. Click Save to publish changes.');
+ setTimeout(() => setSuccess(''), 3000);
  };
 
  const handleHeaderChange = (key, value) => {
@@ -404,10 +439,7 @@ handleFooterChange('background_color', color);
  };
 
  const handleRemoveFooterLink = (section, index) => {
- setFooterSections(prev => ({
- ...prev,
- [section]: { ...prev[section], items: (prev[section]?.items || []).filter((_, i) => i !== index) }
- }));
+ setPendingRemove({ type: 'footer_link', section, index });
  };
 
  const saveSections = async () => {
@@ -416,7 +448,7 @@ handleFooterChange('background_color', color);
  setError('');
  await api.put('/admin/homepage-settings/sections', { sections });
  const chrome =
- headerSettings.background_color || footerSettings.background_color || '#6F8F72';
+ headerSettings.background_color || footerSettings.background_color || '#6e8b7e';
  await api.put('/admin/homepage-settings/header-extended', {
  ...headerSettings,
  background_color: chrome,
@@ -482,6 +514,16 @@ handleFooterChange('background_color', color);
  return (
  <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
  <div className="w-full min-w-0">
+ <AdminConfirmDialog
+ open={!!pendingRemove}
+ onClose={() => setPendingRemove(null)}
+ onConfirm={confirmRemove}
+ title="Remove this item?"
+ message="This removes it from the form. Click Save to publish the change."
+ confirmLabel="Remove"
+ cancelLabel="Cancel"
+ destructive
+ />
  {/* Header */}
  <div className="mb-8">
  <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">Homepage Manager</h1>
@@ -548,7 +590,7 @@ handleFooterChange('background_color', color);
  </label>
  <input
  type="color"
- value={headerSettings.background_color || footerSettings.background_color || '#6F8F72'}
+ value={headerSettings.background_color || footerSettings.background_color || '#6e8b7e'}
  onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
  className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
  />
@@ -831,10 +873,7 @@ handleFooterChange('background_color', color);
  ))}
  </select>
  <button
- onClick={() => {
- const next = (headerSettings.custom_nav || []).filter((_, i) => i !== idx);
- handleHeaderChange('custom_nav', next);
- }}
+ onClick={() => setPendingRemove({ type: 'custom_nav', index: idx })}
  title="Remove"
  className="transition-colors"
  style={deleteButtonStyle}
@@ -879,10 +918,7 @@ handleFooterChange('background_color', color);
  placeholder="Section title"
  />
  <button
- onClick={() => {
- const next = (headerSettings.left_menu || []).filter((_, i) => i !== sIdx);
- handleHeaderChange('left_menu', next);
- }}
+ onClick={() => setPendingRemove({ type: 'left_menu_section', sectionIndex: sIdx })}
  title="Remove Section"
  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600"
  >
@@ -959,12 +995,7 @@ handleFooterChange('background_color', color);
  </div>
  </div>
  <button
- onClick={() => {
- const next = [...(headerSettings.left_menu || [])];
- const items = (next[sIdx].items || []).filter((_, i) => i !== iIdx);
- next[sIdx] = { ...next[sIdx], items };
- handleHeaderChange('left_menu', next);
- }}
+ onClick={() => setPendingRemove({ type: 'left_menu_item', sectionIndex: sIdx, itemIndex: iIdx })}
  title="Remove"
  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600"
  >
@@ -1208,7 +1239,7 @@ handleFooterChange('background_color', color);
  className="h-11 rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm focus:border-[var(--admin-primary)] focus:ring-0 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
  />
  <button
- onClick={() => setFooterSocials(footerSocials.filter((_, i) => i !== idx))}
+ onClick={() => setPendingRemove({ type: 'footer_social', index: idx })}
  title="Remove"
  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600"
  >

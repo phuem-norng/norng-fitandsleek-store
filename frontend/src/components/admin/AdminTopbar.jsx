@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../state/auth";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import AdminAppearancePanel from "./AdminAppearancePanel.jsx";
 import AdminCommandPalette from "./AdminCommandPalette.jsx";
@@ -15,7 +16,8 @@ const PAGE_TITLES = {
   "/admin/pos": "Checkout",
  "/admin/categories": "Categories",
  "/admin/brands": "Brands",
-  "/admin/barcode-qr": "Stock & Inventory",
+  "/admin/stock-inventory": "Stock & Inventory",
+  "/admin/stock-received": "Stock & Inventory",
  "/admin/reports": "Reports",
  "/admin/contacts": "Contacts",
  "/admin/messages": "Messages",
@@ -318,7 +320,7 @@ export default function AdminTopbar({
  >
  <div className="h-6 w-6 rounded-full text-white text-[11px] font-semibold flex items-center justify-center overflow-hidden" style={{ backgroundColor: primaryColor }}>
  {user?.profile_image_url ? (
- <img src={user.profile_image_url} alt={user?.name} className="w-full h-full object-cover" />
+<img src={resolveImageUrl(user.profile_image_url)} alt={user?.name} className="w-full h-full object-cover" />
  ) : (
  user?.name?.charAt(0)?.toUpperCase() || "A"
  )}

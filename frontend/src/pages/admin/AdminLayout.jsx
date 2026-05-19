@@ -5,6 +5,9 @@ import { useAuth } from "../../state/auth";
 import { useHomepageSettings } from "../../state/homepageSettings.jsx";
 import AdminTopbar from "../../components/admin/AdminTopbar";
 import Logo from "../../components/Logo.jsx";
+import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
+import { errorAlert, toastSuccess } from "../../lib/swal";
 import { useTheme } from "../../state/theme.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 /** Pinned = full width; unpinned = narrow rail — label tooltip on hover (rail); light bubble in dark mode. */
@@ -136,9 +139,13 @@ function RailGroupFlyout({ group, pos, onClose }) {
               }`
             }
           >
-            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={child.icon} />
-            </svg>
+            {child.icon ? (
+              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={child.icon} />
+              </svg>
+            ) : (
+              <span className="h-1 w-1 shrink-0 rounded-[1px] bg-current opacity-45" aria-hidden />
+            )}
             <span className="truncate">{child.label}</span>
           </NavLink>
         ))}
@@ -182,9 +189,39 @@ function brandBlockClass(pinnedOpen) {
 }
 
 function groupChevronClass(pinnedOpen, isOpen) {
-  const rot = isOpen ? "rotate-90" : "";
+  const rot = isOpen ? "-rotate-90" : "rotate-90";
   if (pinnedOpen) return `h-4 w-4 shrink-0 transition-transform ${SIDEBAR_ACCORDION_EASE} ${rot}`;
   return `hidden h-4 w-4 shrink-0 ${rot} md:hidden`;
+}
+
+function NavSectionHeader({ children, pinnedOpen }) {
+  if (!pinnedOpen) return null;
+  return (
+    <div className="px-2 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+      {children}
+    </div>
+  );
+}
+
+function NavSectionDivider({ pinnedOpen }) {
+  if (!pinnedOpen) return null;
+  return <div className="mx-2 my-2 border-t border-slate-200 dark:border-slate-800" aria-hidden />;
+}
+
+function NavBadge({ count, tone = "primary" }) {
+  if (!count || count < 1) return null;
+  const display = count > 99 ? "99+" : String(count);
+  const toneCls =
+    tone === "alert"
+      ? "bg-red-500 text-white"
+      : "bg-[color:var(--admin-primary)] text-white";
+  return (
+    <span
+      className={`ml-auto flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none ${toneCls}`}
+    >
+      {display}
+    </span>
+  );
 }
 
 function sidebarNavRowClass(pinnedOpen, isActive) {
@@ -217,7 +254,7 @@ const NAV_ICON_CLASS = "h-6 w-6 shrink-0";
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
-  const { settings, loading: settingsLoading } = useHomepageSettings();
+  const { settings, loading: settingsLoading, reloadSettings } = useHomepageSettings();
   const { primaryColor, contentLayout, sidebarMode } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -228,7 +265,35 @@ export default function AdminLayout() {
     settings: false,
   });
   const [railGroupFlyout, setRailGroupFlyout] = useState(null);
+  const [navBadges, setNavBadges] = useState({ orders: 0, messages: 0 });
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoFileInputRef = useRef(null);
   const logoSrc = settings?.header?.logo_url || "/logo.png";
+
+  const onLogoFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("logo", file);
+    setLogoUploading(true);
+    try {
+      await api.post("/admin/homepage-settings/logo-upload", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      await reloadSettings?.();
+      await toastSuccess({ enText: "Store logo updated. It will show on the storefront header too." });
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        (Array.isArray(err?.response?.data?.errors?.logo) ? err.response.data.errors.logo[0] : null) ||
+        err?.message ||
+        "Upload failed.";
+      await errorAlert({ enTitle: "Logo upload failed", enText: String(msg) });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (!sidebarOpen) setOpenGroups({ users: false, settings: false });
@@ -279,7 +344,11 @@ export default function AdminLayout() {
 
   const dashboardItems = useMemo(
     () => [
-      { path: "/admin", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6", label: "Dashboard" },
+      {
+        path: "/admin",
+        icon: "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z",
+        label: "Dashboard",
+      },
     ],
     []
   );
@@ -287,12 +356,20 @@ export default function AdminLayout() {
   const commerceNavItems = useMemo(
     () => [
       { path: "/admin/products", icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", label: "Products" },
-      { path: "/admin/orders", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01", label: "Orders" },
+      {
+        path: "/admin/orders",
+        icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01",
+        label: "Orders",
+        badgeKey: "orders",
+        badgeTone: "alert",
+      },
       { path: "/admin/sales", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", label: "Sales" },
       { path: "/admin/checkout", icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z", label: "Checkout" },
       { path: "/admin/categories", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z", label: "Categories" },
       { path: "/admin/brands", icon: "M7 4h10M7 8h10M7 12h10M7 16h10M7 20h10", label: "Brands" },
-      { path: "/admin/barcode-qr", icon: "M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4", label: "Stock & Inventory" },
+      { path: "/admin/stock-inventory", icon: "M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4", label: "Stock & Inventory" },
+      { path: "/admin/stock-received", icon: "M20 13V7a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586l-.828-.828A2 2 0 0011.172 3H6a2 2 0 00-2 2v8m16 0l-4 4m4-4l-4-4m4 4H8m-4 4h6m-6 4h12", label: "Stock Received" },
+      { path: "/admin/payments", icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z", label: "Payments" },
     ],
     []
   );
@@ -300,66 +377,57 @@ export default function AdminLayout() {
   const operationsNavItems = useMemo(
     () => [
       { path: "/admin/reports", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", label: "Reports" },
-      { path: "/admin/contacts", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z", label: "Contacts" },
-      { path: "/admin/messages", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z", label: "Messages" },
+      { path: "/admin/contacts", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z", label: "Contacts" },
+      {
+        path: "/admin/messages",
+        icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
+        label: "Messages",
+        badgeKey: "messages",
+      },
       { path: "/admin/notifications", icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9", label: "Notifications" },
-      { path: "/admin/payments", icon: "M3 7h18M21 7v10M21 17H3M3 17V7M3 11h18", label: "Payments" },
-      { path: "/admin/replacement-cases", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", label: "Replacements" },
+      { path: "/admin/replacement-cases", icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15", label: "Replacements" },
     ],
     []
   );
 
-  const operationsGroups = useMemo(
-    () => [
-      {
-        key: "users",
-        label: "Users",
-        icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z",
-        children: [
-          { path: "/admin/customers", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z", label: "Customers" },
-          { path: "/admin/administrators", icon: "M17 20h5l-1.405-1.405A2.032 2.032 0 0120 17.158V14a6.002 6.002 0 00-4-5.659V8a2 2 0 10-4 0v.341C10.67 9.165 9 11.388 9 14v3.159c0 .538-.214 1.055-.595 1.436L7 20h5", label: "Administrators" },
-        ],
-      },
-      {
-        key: "settings",
-        label: "Settings",
-        icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
-        children: [
-          {
-            path: "/admin/settings",
-            icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
-            label: "Settings",
-          },
-          {
-            path: "/admin/homepage",
-            icon: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
-            label: "Home Page",
-          },
-          {
-            path: "/admin/homepage-complete",
-            icon: "M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z",
-            label: "Complete Manager",
-          },
-          {
-            path: "/admin/chatbot",
-            icon: "M12 20h9M16.5 3a5.5 5.5 0 010 11H8l-4 4V8a5 5 0 015-5h7.5z",
-            label: "Chatbot",
-          },
-          {
-            path: "/admin/profile",
-            icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
-            label: "My Profile",
-          },
-        ],
-      },
-    ],
+  const peopleNavGroup = useMemo(
+    () => ({
+      key: "users",
+      label: "Users",
+      icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
+      children: [
+        { path: "/admin/customers", label: "Customers" },
+        { path: "/admin/administrators", label: "Administrators" },
+      ],
+    }),
     []
+  );
+
+  const configNavGroup = useMemo(
+    () => ({
+      key: "settings",
+      label: "Settings",
+      icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
+      children: [
+        { path: "/admin/settings", label: "General" },
+        { path: "/admin/homepage", label: "Home Page" },
+        { path: "/admin/homepage-complete", label: "Complete Manager" },
+        { path: "/admin/chatbot", label: "Chatbot" },
+        { path: "/admin/profile", label: "My Profile" },
+      ],
+    }),
+    []
+  );
+
+  const accordionNavGroups = useMemo(
+    () => [peopleNavGroup, configNavGroup],
+    [peopleNavGroup, configNavGroup]
   );
 
   const allNavItems = useMemo(() => {
-    const groupsFlat = operationsGroups.flatMap((g) => g.children);
+    const groupsFlat = accordionNavGroups.flatMap((g) => g.children);
     return [...dashboardItems, ...commerceNavItems, ...operationsNavItems, ...groupsFlat];
-  }, [dashboardItems, commerceNavItems, operationsNavItems, operationsGroups]);
+  }, [dashboardItems, commerceNavItems, operationsNavItems, accordionNavGroups]);
 
   const bottomNavPaths = ["/admin", "/admin/reports", "/admin/orders", "/admin/payments"];
 
@@ -382,21 +450,50 @@ export default function AdminLayout() {
   );
 
   const activeRailGroup = useMemo(
-    () => operationsGroups.find((group) => group.key === railGroupFlyout?.key) || null,
-    [operationsGroups, railGroupFlyout?.key]
+    () => accordionNavGroups.find((group) => group.key === railGroupFlyout?.key) || null,
+    [accordionNavGroups, railGroupFlyout?.key]
   );
 
   useEffect(() => {
     setOpenGroups((prev) => {
       const next = { ...prev };
-      operationsGroups.forEach((group) => {
+      accordionNavGroups.forEach((group) => {
         if (group.children.some((child) => location.pathname.startsWith(child.path))) {
           next[group.key] = true;
         }
       });
       return next;
     });
-  }, [operationsGroups, location.pathname]);
+  }, [accordionNavGroups, location.pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadBadges = async () => {
+      try {
+        const [ordersRes, messagesRes] = await Promise.all([
+          api.get("/admin/orders"),
+          api.get("/admin/messages"),
+        ]);
+        if (cancelled) return;
+        const orders = ordersRes.data?.data || [];
+        const pendingOrders = orders.filter((o) => {
+          const s = String(o.status || "").toLowerCase();
+          return s === "pending" || s === "pending_payment" || s === "processing";
+        }).length;
+        const messages = messagesRes.data?.data || [];
+        const activeMessages = messages.filter((m) => m.is_active !== false).length;
+        setNavBadges({ orders: pendingOrders, messages: activeMessages });
+      } catch {
+        /* badges are optional */
+      }
+    };
+    loadBadges();
+    const intervalId = window.setInterval(loadBadges, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -437,10 +534,99 @@ export default function AdminLayout() {
   const hideMobileBottomNav =
     location.pathname.startsWith("/admin/checkout") || location.pathname.startsWith("/admin/pos");
 
+  const renderFlatNavItem = (item) => {
+    const badgeCount = item.badgeKey ? navBadges[item.badgeKey] : 0;
+    return (
+      <li key={item.path} className="relative">
+        <RailTooltipWrap className="w-full" labelsVisible={sidebarOpen} tip={item.label}>
+          <NavLink
+            to={item.path}
+            end={item.path === "/admin"}
+            className={({ isActive }) => `${sidebarNavRowClass(sidebarOpen, isActive)} w-full`}
+            aria-label={!sidebarOpen ? item.label : undefined}
+          >
+            <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+            </svg>
+            <span className={`${navLabelClass(sidebarOpen)} text-left`}>{item.label}</span>
+            {sidebarOpen ? <NavBadge count={badgeCount} tone={item.badgeTone || "primary"} /> : null}
+          </NavLink>
+        </RailTooltipWrap>
+      </li>
+    );
+  };
+
+  const renderAccordionGroup = (group) => {
+    const groupHasActive = group.children.some((child) => location.pathname.startsWith(child.path));
+    const isOpen = !!openGroups[group.key] && sidebarOpen;
+
+    return (
+      <li key={group.key} className="relative">
+        <RailTooltipWrap
+          className="w-full"
+          labelsVisible={sidebarOpen || railGroupFlyout?.key === group.key}
+          tip={group.label}
+        >
+          <button
+            type="button"
+            data-sidebar-group-trigger
+            onClick={(event) => toggleGroup(group.key, event)}
+            className={`${sidebarNavRowClass(sidebarOpen, groupHasActive)} w-full`}
+            aria-label={!sidebarOpen ? group.label : undefined}
+            aria-expanded={sidebarOpen ? isOpen : railGroupFlyout?.key === group.key}
+          >
+            <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={group.icon} />
+            </svg>
+            <span className={`${navLabelClass(sidebarOpen)} text-left`}>{group.label}</span>
+            <svg className={groupChevronClass(sidebarOpen, isOpen)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </RailTooltipWrap>
+
+        {sidebarOpen && (
+          <div
+            className={`overflow-hidden transition-[max-height,opacity] ${SIDEBAR_ACCORDION_EASE}`}
+            style={{
+              maxHeight: isOpen
+                ? `${group.children.length * 48 + Math.max(0, group.children.length - 1) * 4 + 8}px`
+                : "0px",
+              opacity: isOpen ? 1 : 0,
+            }}
+          >
+            <ul className="ml-4 mt-1 space-y-1 border-l border-slate-200 pb-1 pl-3 dark:border-slate-800">
+              {group.children.map((child) => (
+                <li key={child.path}>
+                  <NavLink to={child.path} className={({ isActive }) => sidebarSubLinkClass(isActive)}>
+                    <span
+                      className="mr-2.5 inline-block h-1 w-1 shrink-0 rounded-[1px] bg-current opacity-45"
+                      aria-hidden
+                    />
+                    <span className="truncate">{child.label}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   return (
     <div className="admin-theme admin-root admin-gemini-shell flex min-h-screen font-sans text-slate-800 dark:text-slate-100 admin-soft">
+      <input
+        ref={logoFileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/svg+xml,image/avif,.jpg,.jpeg,.png,.webp,.svg,.avif"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
+        onChange={onLogoFileChange}
+      />
       <div
-        className={`relative z-30 hidden min-w-0 shrink-0 flex-col overflow-x-hidden overflow-y-hidden border-r border-slate-200 bg-white admin-bg-canvas dark:border-slate-700 md:sticky md:top-0 md:flex md:h-screen ${SIDEBAR_WIDTH_EASE} ${sidebarOpen ? SB_W_PINNED : SB_W_RAIL}`}
+        className={`admin-sidebar relative z-30 hidden min-w-0 shrink-0 flex-col overflow-x-hidden overflow-y-hidden border-r border-slate-200 bg-white admin-bg-canvas dark:border-slate-700 md:sticky md:top-0 md:flex md:h-screen ${SIDEBAR_WIDTH_EASE} ${sidebarOpen ? SB_W_PINNED : SB_W_RAIL}`}
       >
         <aside className="relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
           <div className="flex h-[3.75rem] min-w-0 shrink-0 items-center border-b border-slate-200 px-3 dark:border-slate-800">
@@ -454,19 +640,25 @@ export default function AdminLayout() {
                   <>
                     <span className="block leading-tight text-white">Fit &amp; Sleek</span>
                     <span className="mt-0.5 block text-[11px] font-normal text-white/75">Admin</span>
+                    <span className="mt-1 block text-[11px] font-normal text-white/70">Click logo to upload a new image</span>
                   </>
                 }
               >
-                <div
-                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg text-xs font-bold text-white"
+                <button
+                  type="button"
+                  disabled={logoUploading || settingsLoading}
+                  onClick={() => logoFileInputRef.current?.click()}
+                  title="Upload store logo"
+                  aria-label="Upload store logo"
+                  className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-0 bg-transparent p-0 text-xs font-bold text-white ring-offset-2 transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:pointer-events-none disabled:opacity-50"
                   style={{ backgroundColor: primaryColor }}
                 >
                   {logoSrc ? (
-                    <img src={logoSrc} alt="Fit & Sleek" className="h-full w-full object-cover" />
+                    <img src={logoSrc} alt="" className="h-full w-full object-cover pointer-events-none" />
                   ) : (
                     "FS"
                   )}
-                </div>
+                </button>
               </RailTooltipWrap>
               <div className={brandBlockClass(sidebarOpen)}>
                 <p className="truncate text-sm font-semibold leading-none text-slate-900 dark:text-slate-100">Fit & Sleek</p>
@@ -478,137 +670,35 @@ export default function AdminLayout() {
           <nav className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-2 pb-2 pt-2">
             <ul className="scrollbar-hover min-h-0 min-w-0 flex-1 space-y-1.5 overflow-x-hidden overflow-y-auto overscroll-y-contain">
               <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Platform
-                </div>
+                <NavSectionHeader pinnedOpen={sidebarOpen}>Platform</NavSectionHeader>
               </li>
-              {dashboardItems.map((item) => (
-                <li key={item.path} className="relative">
-                  <RailTooltipWrap
-                    className="w-full"
-                    labelsVisible={sidebarOpen}
-                    tip={item.label}
-                  >
-                    <NavLink
-                      to={item.path}
-                      end={item.path === "/admin"}
-                      className={({ isActive }) => `${sidebarNavRowClass(sidebarOpen, isActive)} w-full`}
-                      aria-label={!sidebarOpen ? item.label : undefined}
-                    >
-                      <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                      </svg>
-                      <span className={navLabelClass(sidebarOpen)}>{item.label}</span>
-                    </NavLink>
-                  </RailTooltipWrap>
-                </li>
-              ))}
+              {dashboardItems.map(renderFlatNavItem)}
 
               <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <div className="px-2 pb-1 pt-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">Commerce</div>
+                <NavSectionDivider pinnedOpen={sidebarOpen} />
+                <NavSectionHeader pinnedOpen={sidebarOpen}>Commerce</NavSectionHeader>
               </li>
 
-              {commerceNavItems.map((item) => {
-                return (
-                  <li key={item.path} className="relative">
-                    <RailTooltipWrap
-                      className="w-full"
-                      labelsVisible={sidebarOpen}
-                      tip={item.label}
-                    >
-                      <NavLink
-                        to={item.path}
-                        className={({ isActive }) => `${sidebarNavRowClass(sidebarOpen, isActive)} w-full`}
-                        aria-label={!sidebarOpen ? item.label : undefined}
-                      >
-                        <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                        </svg>
-                        <span className={`${navLabelClass(sidebarOpen)} text-left`}>{item.label}</span>
-                      </NavLink>
-                    </RailTooltipWrap>
-                  </li>
-                );
-              })}
+              {commerceNavItems.map(renderFlatNavItem)}
 
               <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <div className="px-2 pb-1 pt-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">Operations</div>
+                <NavSectionDivider pinnedOpen={sidebarOpen} />
+                <NavSectionHeader pinnedOpen={sidebarOpen}>Operations</NavSectionHeader>
               </li>
 
-              {operationsNavItems.map((item) => (
-                <li key={item.path} className="relative">
-                  <RailTooltipWrap
-                    className="w-full"
-                    labelsVisible={sidebarOpen}
-                    tip={item.label}
-                  >
-                    <NavLink
-                      to={item.path}
-                      className={({ isActive }) => `${sidebarNavRowClass(sidebarOpen, isActive)} w-full`}
-                      aria-label={!sidebarOpen ? item.label : undefined}
-                    >
-                      <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                      </svg>
-                      <span className={navLabelClass(sidebarOpen)}>{item.label}</span>
-                    </NavLink>
-                  </RailTooltipWrap>
-                </li>
-              ))}
+              {operationsNavItems.map(renderFlatNavItem)}
 
-              {operationsGroups.map((group) => {
-                const groupHasActive = group.children.some((child) => location.pathname.startsWith(child.path));
-                const isOpen = !!openGroups[group.key] && sidebarOpen;
+              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                <NavSectionDivider pinnedOpen={sidebarOpen} />
+                <NavSectionHeader pinnedOpen={sidebarOpen}>People</NavSectionHeader>
+              </li>
+              {renderAccordionGroup(peopleNavGroup)}
 
-                return (
-                  <li key={group.key} className="relative">
-                    <RailTooltipWrap
-                      className="w-full"
-                      labelsVisible={sidebarOpen || railGroupFlyout?.key === group.key}
-                      tip={group.label}
-                    >
-                      <button
-                        type="button"
-                        data-sidebar-group-trigger
-                        onClick={(event) => toggleGroup(group.key, event)}
-                        className={`${sidebarNavRowClass(sidebarOpen, groupHasActive)} w-full`}
-                        aria-label={!sidebarOpen ? group.label : undefined}
-                        aria-expanded={sidebarOpen ? isOpen : railGroupFlyout?.key === group.key}
-                      >
-                        <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={group.icon} />
-                        </svg>
-                        <span className={`${navLabelClass(sidebarOpen)} text-left`}>{group.label}</span>
-                        <svg className={groupChevronClass(sidebarOpen, isOpen)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </RailTooltipWrap>
-
-                    {sidebarOpen && (
-                      <div
-                        className={`overflow-hidden transition-[max-height,opacity] ${SIDEBAR_ACCORDION_EASE}`}
-                        style={{
-                          maxHeight: isOpen
-                            ? `${group.children.length * 48 + Math.max(0, group.children.length - 1) * 4 + 8}px`
-                            : "0px",
-                          opacity: isOpen ? 1 : 0,
-                        }}
-                      >
-                        <ul className="ml-4 mt-1 space-y-1 border-l border-slate-200 pb-1 pl-3 dark:border-slate-800">
-                          {group.children.map((child) => (
-                            <li key={child.path}>
-                              <NavLink to={child.path} className={({ isActive }) => sidebarSubLinkClass(isActive)}>
-                                <span className="truncate">{child.label}</span>
-                              </NavLink>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                <NavSectionDivider pinnedOpen={sidebarOpen} />
+                <NavSectionHeader pinnedOpen={sidebarOpen}>Configuration</NavSectionHeader>
+              </li>
+              {renderAccordionGroup(configNavGroup)}
             </ul>
 
             <div className="mt-1 shrink-0 border-t border-slate-200 p-2 pt-3 dark:border-slate-800">
@@ -623,7 +713,7 @@ export default function AdminLayout() {
                     style={{ backgroundColor: primaryColor }}
                   >
                     {user?.profile_image_url ? (
-                      <img src={user.profile_image_url} alt={user?.name} className="w-full h-full object-cover" />
+                      <img src={resolveImageUrl(user.profile_image_url)} alt={user?.name} className="w-full h-full object-cover" />
                     ) : (
                       (() => {
                         const parts = (user?.name || "").trim().split(/\s+/).filter(Boolean);
@@ -663,7 +753,7 @@ export default function AdminLayout() {
                       style={{ backgroundColor: primaryColor }}
                     >
                       {user?.profile_image_url ? (
-                        <img src={user.profile_image_url} alt={user?.name} className="w-full h-full object-cover" />
+                        <img src={resolveImageUrl(user.profile_image_url)} alt={user?.name} className="w-full h-full object-cover" />
                       ) : (
                         (user?.name || "V").charAt(0).toUpperCase()
                       )}
@@ -689,7 +779,16 @@ export default function AdminLayout() {
       <main className="relative z-[1] ml-0 flex min-h-screen min-w-0 flex-1 flex-col admin-soft">
         {/* Mobile header with overflow menu */}
         <div className="sticky top-0 z-40 flex shrink-0 items-center gap-3 border-b admin-border admin-surface px-4 py-3 backdrop-blur md:hidden">
-          <Logo className="h-10 w-auto flex-shrink-0" src={logoSrc} alt="Fit&Sleek" />
+          <button
+            type="button"
+            disabled={logoUploading || settingsLoading}
+            onClick={() => logoFileInputRef.current?.click()}
+            title="Upload store logo"
+            aria-label="Upload store logo"
+            className="shrink-0 rounded-lg p-0.5 ring-offset-2 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--admin-primary-rgb),0.45)] disabled:pointer-events-none disabled:opacity-50"
+          >
+            <Logo className="h-10 w-auto max-h-10" src={logoSrc} alt="Fit&Sleek" />
+          </button>
           <div className="flex-1">
             <div className="relative">
               <svg className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

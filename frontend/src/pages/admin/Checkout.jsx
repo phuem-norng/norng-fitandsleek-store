@@ -1495,20 +1495,7 @@ export default function AdminPosScan() {
  >
  {pickupBusy ? "Saving…" : "Reduce stock"}
  </button>
- {!pickupCameraOn ? (
- <button
- type="button"
- disabled={pickupBusy}
- onClick={() => void startPickupCamera()}
- className={`h-12 rounded-xl border px-4 text-sm font-semibold transition disabled:opacity-50 ${
- isDark
- ? "border-white/40 bg-white/10 text-white hover:border-white/55 hover:bg-white/[0.18]"
- : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
- }`}
- >
- Use camera
- </button>
- ) : (
+            {pickupCameraOn ? (
  <button
  type="button"
  onClick={() => void stopPickupCamera()}
@@ -1520,7 +1507,7 @@ export default function AdminPosScan() {
  >
  Stop camera
  </button>
- )}
+            ) : null}
  </div>
  </div>
  {pickupErr ? (

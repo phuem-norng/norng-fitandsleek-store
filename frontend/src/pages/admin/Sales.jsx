@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
 import { useTheme } from "../../state/theme.jsx";
-import { warningConfirm } from "../../lib/swal";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 
 export default function AdminSales() {
@@ -41,6 +41,8 @@ export default function AdminSales() {
  const [success, setSuccess] = useState("");
  const [animate, setAnimate] = useState(false);
  const [showCreateForm, setShowCreateForm] = useState(false);
+ const [deleteTarget, setDeleteTarget] = useState(null);
+ const [deleteBusy, setDeleteBusy] = useState(false);
  const [search, setSearch] = useState("");
 
  const triggerAuthRefresh = async () => {
@@ -139,20 +141,28 @@ export default function AdminSales() {
  setShowCreateForm(true);
  };
 
- const handleDelete = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this sale?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const closeCreateForm = () => {
+ setShowCreateForm(false);
+ resetForm();
+ };
+
+ const handleDelete = (id) => {
+ setDeleteTarget(id);
+ };
+
+ const confirmDelete = async () => {
+ if (!deleteTarget) return;
+ setDeleteBusy(true);
+ setErr("");
  try {
- await api.delete(`/admin/sales/${id}`);
+ await api.delete(`/admin/sales/${deleteTarget}`);
+ setDeleteTarget(null);
  showSuccess("Sale deleted successfully");
  load();
  } catch (e) {
  setErr(extractErr(e));
+ } finally {
+ setDeleteBusy(false);
  }
  };
 
@@ -210,26 +220,24 @@ export default function AdminSales() {
  </button>
  </div>
 
- {/* Form Modal */}
- {showCreateForm && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div
- className="absolute inset-0 bg-black/50 backdrop-blur-sm"
- onClick={() => setShowCreateForm(false)}
+ <AdminConfirmDialog
+ open={deleteTarget != null}
+ onClose={() => !deleteBusy && setDeleteTarget(null)}
+ onConfirm={confirmDelete}
+ title="Delete this sale?"
+ message="This action cannot be undone."
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
  />
- <div className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
- <div className="flex items-center justify-between mb-6">
- <h2 className="text-xl font-bold text-slate-900 dark:text-white">{editing ? "Edit Sale" : "Create New Sale"}</h2>
- <button
- onClick={() => setShowCreateForm(false)}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
- >
- <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
 
+ <AdminModal
+ open={showCreateForm}
+ onClose={closeCreateForm}
+ title={editing ? "Edit Sale" : "Create New Sale"}
+ titleId="sale-form-title"
+ >
  {err && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-4">{err}</div>}
  {success && (
  <div className={`bg-slate-900 text-white p-4 rounded-xl mb-4 transition-opacity ${animate ? 'opacity-100' : 'opacity-0'}`}>
@@ -239,7 +247,6 @@ export default function AdminSales() {
 
  <form onSubmit={handleSubmit} className="grid gap-4">
  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
- {/* Product Selection */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Product *</label>
  <select
@@ -255,7 +262,6 @@ export default function AdminSales() {
  </select>
  </div>
 
- {/* Discount Type */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Discount Type *</label>
  <select
@@ -268,7 +274,6 @@ export default function AdminSales() {
  </select>
  </div>
 
- {/* Discount Value */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
  Discount Value {form.discount_type === "percentage" ? "(%)" : "($)"} *
@@ -285,7 +290,6 @@ export default function AdminSales() {
  />
  </div>
 
- {/* Sale Price */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Sale Price ($)</label>
  <input
@@ -302,7 +306,6 @@ export default function AdminSales() {
  )}
  </div>
 
- {/* Start Date */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Start Date *</label>
  <input
@@ -314,7 +317,6 @@ export default function AdminSales() {
  />
  </div>
 
- {/* End Date */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">End Date *</label>
  <input
@@ -327,7 +329,6 @@ export default function AdminSales() {
  </div>
  </div>
 
- {/* Description */}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Description</label>
  <textarea
@@ -339,7 +340,6 @@ export default function AdminSales() {
  />
  </div>
 
- {/* Active Toggle */}
  <div className="flex items-center gap-2">
  <input
  type="checkbox"
@@ -351,7 +351,6 @@ export default function AdminSales() {
  <label htmlFor="is_active" className="text-sm font-medium text-slate-700 dark:text-slate-200">Active</label>
  </div>
 
- {/* Buttons */}
  <div className="flex gap-2">
  <button
  type="submit"
@@ -370,11 +369,8 @@ export default function AdminSales() {
  )}
  </div>
  </form>
- </div>
- </div>
- )}
+ </AdminModal>
 
- {/* Table */}
  <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
  <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">All Sales</h3>

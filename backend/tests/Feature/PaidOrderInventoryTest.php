@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\BarcodeScanStockService;
 use App\Services\PaidOrderInventory;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Hash;
@@ -308,5 +309,49 @@ class PaidOrderInventoryTest extends TestCase
 
         $this->assertSame(8, (int) $product->stock);
         $this->assertSame(8, (int) $barcodeBundle->stock);
+    }
+
+    public function test_pos_scan_by_product_sku_reduces_product_stock_and_linked_barcode_qr_stock(): void
+    {
+        $productCategory = Category::create([
+            'name' => 'POS category',
+            'slug' => 'pos-cat-'.uniqid(),
+            'type' => 'clothing',
+            'is_active' => true,
+        ]);
+
+        $labelSlug = 'pos-label-'.uniqid();
+        $barcodeBundle = Category::create([
+            'name' => 'POS QR label',
+            'slug' => $labelSlug,
+            'type' => PaidOrderInventory::BARCODE_CATEGORY_TYPE,
+            'is_active' => true,
+            'manage_stock' => true,
+            'stock' => 7,
+        ]);
+
+        $sku = 'POS-SKU-'.uniqid();
+        $product = Product::create([
+            'category_id' => $productCategory->id,
+            'name' => 'POS product',
+            'slug' => 'pos-prod-'.uniqid(),
+            'sku' => $sku,
+            'description' => null,
+            'price' => 12,
+            'stock' => 9,
+            'is_active' => true,
+            'barcode_code' => $labelSlug,
+            'audience' => 'men',
+        ]);
+
+        $this->assertSame(7, BarcodeScanStockService::maxSellableQty(null, collect([$product])));
+
+        BarcodeScanStockService::applyScanDeduction($sku, 3);
+
+        $product->refresh();
+        $barcodeBundle->refresh();
+
+        $this->assertSame(6, (int) $product->stock);
+        $this->assertSame(4, (int) $barcodeBundle->stock);
     }
 }

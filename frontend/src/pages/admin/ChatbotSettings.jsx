@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import { useTheme } from "../../state/theme.jsx";
 
@@ -100,6 +101,7 @@ export default function ChatbotSettings() {
  const [showModal, setShowModal] = useState(false);
  const [editingLink, setEditingLink] = useState(null);
  const [linkForm, setLinkForm] = useState({ platform: "messenger", label: "", url: "" });
+ const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
  useEffect(() => {
  const load = async () => {
@@ -163,7 +165,14 @@ export default function ChatbotSettings() {
  setShowModal(true);
  };
 
- const deleteLink = (id) => setSocialLinks((prev) => prev.filter((l) => l.id !== id));
+ const deleteLink = (id) => setPendingDeleteId(id);
+
+ const confirmDeleteLink = () => {
+ if (pendingDeleteId == null) return;
+ setSocialLinks((prev) => prev.filter((l) => l.id !== pendingDeleteId));
+ setPendingDeleteId(null);
+ setMessage("Social link removed. Click Save settings to publish changes.");
+ };
 
  const saveLink = () => {
  const platform = PLATFORMS.find((p) => p.value === linkForm.platform) || PLATFORMS[PLATFORMS.length - 1];
@@ -191,6 +200,16 @@ export default function ChatbotSettings() {
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
+ <AdminConfirmDialog
+ open={pendingDeleteId != null}
+ onClose={() => setPendingDeleteId(null)}
+ onConfirm={confirmDeleteLink}
+ title="Delete this social link?"
+ message="This removes the link from the form. Click Save settings to publish the change."
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ />
 
  <div className="mb-8">
  <h1 className="text-2xl md:text-4xl font-semibold text-slate-800 dark:text-white mb-2">Chatbot Settings</h1>
@@ -329,7 +348,7 @@ export default function ChatbotSettings() {
  {saving ? "Saving…" : "Save settings"}
  </button>
  {message && (
- <span className={"text-sm font-medium px-3 py-1.5 rounded-full border " + (message.startsWith("Saved") ? "text-[color:var(--admin-primary)] border-[rgba(var(--admin-primary-rgb),0.35)] bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)] dark:border-[rgba(var(--admin-primary-rgb),0.4)]" : "text-red-500 border-red-200 bg-red-50 dark:bg-red-500/10 dark:border-red-400/30") }>
+ <span className={"text-sm font-medium px-3 py-1.5 rounded-full border " + (!message.startsWith("Failed") ? "text-[color:var(--admin-primary)] border-[rgba(var(--admin-primary-rgb),0.35)] bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)] dark:border-[rgba(var(--admin-primary-rgb),0.4)]" : "text-red-500 border-red-200 bg-red-50 dark:bg-red-500/10 dark:border-red-400/30") }>
  {message}
  </span>
  )}
@@ -338,26 +357,13 @@ export default function ChatbotSettings() {
  </div>
 
  {/* ── Add / Edit Modal ──────────────────────────────────────────────────── */}
- {showModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div className="absolute inset-0 bg-black/60 backdrop-blur-sm bot-overlay" onClick={() => setShowModal(false)} />
- <div className="relative bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl p-6 bot-modal-enter">
-
- <div className="flex items-center justify-between mb-6">
- <h3 className="text-lg font-bold text-slate-800 dark:text-white">
- {editingLink ? "Edit Social Media Link" : "Add Social Media Link"}
- </h3>
- <button
- type="button"
- onClick={() => setShowModal(false)}
- className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+ <AdminModal
+ open={showModal}
+ onClose={() => setShowModal(false)}
+ title={editingLink ? "Edit Social Media Link" : "Add Social Media Link"}
+ titleId="chatbot-social-link-title"
+ maxWidthClass="max-w-2xl"
  >
- <svg className="w-5 h-5 text-slate-500 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
-
  <div className="space-y-4">
 
  {/* Platform grid selector */}
@@ -426,9 +432,7 @@ export default function ChatbotSettings() {
  {editingLink ? "Update" : "Add"}
  </button>
  </div>
- </div>
- </div>
- )}
+ </AdminModal>
 
  <style>{`
  @keyframes botEnter {

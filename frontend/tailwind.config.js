@@ -1,6 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-	darkMode: 'class',
+	/**
+	 * Admin dashboard only: require `html.admin-dashboard` + `data-admin-theme="dark"`.
+	 * So storefront (no `admin-dashboard` on `<html>`) never applies `dark:` utilities, even if the
+	 * data attribute were left set by mistake.
+	 */
+	darkMode: ["selector", 'html.admin-dashboard[data-admin-theme="dark"] &'],
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     /* Full scale + line-height: consistent rhythm (16px base, common SaaS / editorial pattern) */

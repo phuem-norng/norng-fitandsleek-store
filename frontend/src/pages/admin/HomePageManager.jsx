@@ -11,7 +11,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
 import { useAuth } from "../../state/auth";
-import { warningConfirm } from "../../lib/swal";
+import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { useTheme } from "../../state/theme.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 
@@ -64,6 +64,8 @@ export default function HomePageManager() {
  const [success, setSuccess] = useState("");
  const [showBannerForm, setShowBannerForm] = useState(false);
  const [showCollectionForm, setShowCollectionForm] = useState(false);
+ const [pendingDelete, setPendingDelete] = useState(null);
+ const [deleteBusy, setDeleteBusy] = useState(false);
  const [bannerViewMode, setBannerViewMode] = useState("list");
  const [collectionViewMode, setCollectionViewMode] = useState("list");
 
@@ -259,39 +261,32 @@ export default function HomePageManager() {
  };
 
  // -------- DELETE --------
- const deleteBanner = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this banner?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- setErr("");
- try {
- await api.delete(`/admin/banners/${id}`);
- showSuccess("Banner deleted");
- await load();
- } catch (e) {
- setErr(extractErr(e, triggerAuthRefresh));
- }
+ const deleteBanner = (id) => {
+ setPendingDelete({ type: "banner", id });
  };
 
- const deleteCollection = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this collection?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const deleteCollection = (id) => {
+ setPendingDelete({ type: "collection", id });
+ };
+
+ const confirmDelete = async () => {
+ if (!pendingDelete) return;
+ setDeleteBusy(true);
  setErr("");
  try {
- await api.delete(`/admin/collections/${id}`);
+ if (pendingDelete.type === "banner") {
+ await api.delete(`/admin/banners/${pendingDelete.id}`);
+ showSuccess("Banner deleted");
+ } else {
+ await api.delete(`/admin/collections/${pendingDelete.id}`);
  showSuccess("Collection deleted");
+ }
  await load();
  } catch (e) {
  setErr(extractErr(e, triggerAuthRefresh));
+ } finally {
+ setDeleteBusy(false);
+ setPendingDelete(null);
  }
  };
 
@@ -337,6 +332,20 @@ export default function HomePageManager() {
  // -------- UI --------
  return (
  <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+ <AdminConfirmDialog
+ open={!!pendingDelete}
+ onClose={() => {
+ if (deleteBusy) return;
+ setPendingDelete(null);
+ }}
+ onConfirm={confirmDelete}
+ title={pendingDelete?.type === "collection" ? "Delete this collection?" : "Delete this banner?"}
+ message="This action cannot be undone."
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
+ />
  {success && (
  <div className="fixed top-6 right-6 z-50 rounded-xl border border-[rgba(var(--admin-primary-rgb),0.35)] dark:border-[rgba(var(--admin-primary-rgb),0.45)] bg-[color:var(--admin-primary)] dark:bg-[rgba(var(--admin-primary-rgb),0.88)] px-5 py-3 text-white flex items-center gap-3 shadow-lg">
  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

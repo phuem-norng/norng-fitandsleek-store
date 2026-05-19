@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../../lib/api";
 import { useTheme } from "../../state/theme.jsx";
-import { closeSwal, errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../../lib/swal";
+import { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../../lib/swal";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 
 const emptyForm = {
@@ -50,6 +51,18 @@ export default function AdminBrands() {
  const [dragId, setDragId] = useState(null);
  const [isCreating, setIsCreating] = useState(false);
  const [createError, setCreateError] = useState("");
+ const [pendingDeleteId, setPendingDeleteId] = useState(null);
+ const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+ const [deleteBusy, setDeleteBusy] = useState(false);
+
+ const closeCreateForm = () => {
+ if (isCreating) return;
+ setShowCreateForm(false);
+ };
+
+ const closeEditForm = () => {
+ setEditing(null);
+ };
 
  const getValidationMessage = (error) => {
  const responseMessage = error?.response?.data?.message;
@@ -185,7 +198,7 @@ export default function AdminBrands() {
  headers: { "Content-Type": "multipart/form-data" },
  });
 
- setEditing(null);
+ closeEditForm();
  showSuccess("Brand updated");
  await load();
  } catch (e2) {
@@ -194,21 +207,30 @@ export default function AdminBrands() {
  };
 
 
- const del = async (id) => {
- const confirmRes = await warningConfirm({
- enTitle: "Delete this brand?",
- enText: "This action cannot be undone.",
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
+ const del = (id) => {
+ setPendingDeleteId(id);
+ };
+
+ const confirmDelete = async () => {
+ setDeleteBusy(true);
  setErr("");
  try {
- await api.delete(`/admin/brands/${id}`);
+ if (pendingBulkDelete) {
+ await Promise.all(selectedIds.map((id) => api.delete(`/admin/brands/${id}`)));
+ showSuccess("Selected brands deleted");
+ setSelectedIds([]);
+ } else if (pendingDeleteId != null) {
+ await api.delete(`/admin/brands/${pendingDeleteId}`);
  showSuccess("Brand deleted");
+ if (editing?.id === pendingDeleteId) closeEditForm();
+ }
  await load();
  } catch (e2) {
  setErr(e2?.response?.data?.message || "Delete failed.");
+ } finally {
+ setDeleteBusy(false);
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
  }
  };
 
@@ -266,24 +288,9 @@ export default function AdminBrands() {
  setSelectedIds(Array.from(next));
  };
 
- const deleteSelected = async () => {
+ const deleteSelected = () => {
  if (selectedIds.length === 0) return;
- const confirmRes = await warningConfirm({
- enTitle: "Delete selected brands?",
- enText: `Permanently remove ${selectedIds.length} brand(s)? This cannot be undone.`,
- enConfirm: "Delete",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- setErr("");
- try {
- await Promise.all(selectedIds.map((id) => api.delete(`/admin/brands/${id}`)));
- showSuccess("Selected brands deleted");
- setSelectedIds([]);
- await load();
- } catch (e2) {
- setErr(e2?.response?.data?.message || "Delete failed.");
- }
+ setPendingBulkDelete(true);
  };
 
  const moveItem = (list, fromIndex, toIndex) => {
@@ -424,27 +431,34 @@ export default function AdminBrands() {
  </div>
  )}
 
- {/* Create Modal */}
- {showCreateForm && (
- <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
- <div
- className="absolute inset-0 bg-black/50 backdrop-blur-sm"
- onClick={() => !isCreating && setShowCreateForm(false)}
+ <AdminConfirmDialog
+ open={pendingDeleteId != null || pendingBulkDelete}
+ onClose={() => {
+ if (deleteBusy) return;
+ setPendingDeleteId(null);
+ setPendingBulkDelete(false);
+ }}
+ onConfirm={confirmDelete}
+ title={pendingBulkDelete ? "Delete selected brands?" : "Delete this brand?"}
+ message={
+ pendingBulkDelete
+ ? `Permanently remove ${selectedIds.length} brand(s)? This cannot be undone.`
+ : "This action cannot be undone."
+ }
+ confirmLabel="Delete"
+ cancelLabel="Cancel"
+ destructive
+ busy={deleteBusy}
  />
- <div className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
- <div className="flex items-center justify-between mb-6">
- <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Add Brand</h2>
- <button
- onClick={() => !isCreating && setShowCreateForm(false)}
- className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
- type="button"
- disabled={isCreating}
+
+ <AdminModal
+ open={showCreateForm}
+ onClose={closeCreateForm}
+ title="Add Brand"
+ titleId="brand-create-title"
+ maxWidthClass="max-w-3xl"
+ closeOnBackdrop={!isCreating}
  >
- <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
 
  <form onSubmit={create} className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <div>
@@ -527,9 +541,7 @@ export default function AdminBrands() {
  </button>
  </div>
  </form>
- </div>
- </div>
- )}
+ </AdminModal>
 
  {/* List */}
  <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -657,24 +669,16 @@ export default function AdminBrands() {
  </div>
  </div>
 
- {/* Edit Modal */}
- {editing && (
- <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
- <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800">
- <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
- <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Edit Brand</h3>
- <button
- type="button"
- onClick={() => setEditing(null)}
- className="text-slate-500 hover:text-slate-700"
+ <AdminModal
+ open={!!editing}
+ onClose={closeEditForm}
+ title="Edit Brand"
+ titleId="brand-edit-title"
+ maxWidthClass="max-w-2xl"
  >
- <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
- </svg>
- </button>
- </div>
-
- <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+ {editing ? (
+ <>
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <div>
  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Name</label>
  <input
@@ -737,10 +741,10 @@ export default function AdminBrands() {
  </div>
  </div>
 
- <div className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+ <div className="mt-6 border-t border-slate-200 bg-slate-50 pt-6 dark:border-slate-800 dark:bg-slate-900 flex items-center justify-end gap-3">
  <button
  type="button"
- onClick={() => setEditing(null)}
+ onClick={closeEditForm}
  className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-semibold"
  >
  Cancel
@@ -754,9 +758,9 @@ export default function AdminBrands() {
  Save
  </button>
  </div>
- </div>
- </div>
- )}
+ </>
+ ) : null}
+ </AdminModal>
  </div>
  );
 }

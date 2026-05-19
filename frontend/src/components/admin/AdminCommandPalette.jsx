@@ -47,7 +47,7 @@ const PAGE_ITEMS = [
   { id: "page-checkout", title: "Checkout / POS", description: "Point of sale", path: "/admin/checkout", icon: CreditCard, keywords: "point of sale register cashier pos" },
   { id: "page-categories", title: "Categories", description: "Product categories", path: "/admin/categories", icon: Tag, keywords: "taxonomy groups" },
   { id: "page-brands", title: "Brands", description: "Brand directory", path: "/admin/brands", icon: Bookmark, keywords: "manufacturers labels" },
-  { id: "page-inventory", title: "Stock & Inventory", description: "Stock levels & barcodes", path: "/admin/barcode-qr", icon: Boxes, keywords: "barcode qr warehouse stock" },
+  { id: "page-inventory", title: "Stock & Inventory", description: "Stock levels & barcodes", path: "/admin/stock-inventory", icon: Boxes, keywords: "barcode qr warehouse stock" },
   { id: "page-reports", title: "Reports", description: "Business reports", path: "/admin/reports", icon: FileText, keywords: "export pdf statistics" },
   { id: "page-customers", title: "Customers", description: "Customer accounts", path: "/admin/customers", icon: Users, keywords: "clients shoppers users" },
   { id: "page-admins", title: "Administrators", description: "Admin team & roles", path: "/admin/administrators", icon: ShieldCheck, keywords: "team staff roles permissions" },
@@ -105,7 +105,7 @@ function highlight(text, query) {
       part && part.toLowerCase() === needle ? (
         <mark
           key={idx}
-          className="bg-transparent font-semibold text-[var(--cmd-accent,#6B7E73)] dark:text-[var(--cmd-accent,#6B7E73)]"
+          className="bg-transparent font-semibold text-[var(--cmd-accent,#6e8b7e)] dark:text-[var(--cmd-accent,#6e8b7e)]"
         >
           {part}
         </mark>

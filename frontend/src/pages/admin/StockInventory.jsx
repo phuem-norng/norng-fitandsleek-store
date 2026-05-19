@@ -7,18 +7,128 @@ import { useTheme } from "../../state/theme.jsx";
 import { resolveImageUrl } from "../../lib/images";
 import { closeSwal, errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../../lib/swal";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
+import { formatCountryLabel } from "../../lib/countries";
+import CountryOriginPicker from "../../components/admin/CountryOriginPicker";
+import CategoryPicker from "../../components/admin/CategoryPicker";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 const BARCODE_QR_TYPE = "barcode_qr";
 
-const PRODUCT_TYPES = ["Clothes", "Shoes", "Bags", "Accessories", "Other"];
+const STOCK_ADMIN_BASES = ["/admin/stock-inventory", "/admin/stock-received"];
 
-const SIZE_PRESETS = {
-    Clothes: ["XS", "S", "M", "L", "XL", "XXL"],
-    Shoes: ["38", "39", "40", "41", "42", "43"],
-    Bags: ["One Size", "Free Size"],
-    Accessories: ["One Size", "Free Size"],
-    Other: [],
+const resolveStockAdminBase = (pathname) => {
+    const p = (pathname || "").replace(/\/$/, "");
+    if (p.includes("/admin/stock-received")) return "/admin/stock-received";
+    return "/admin/stock-inventory";
+};
+
+const STOCK_AGE_NEW_MAX_DAYS = 90;
+const STOCK_AGE_AGING_MAX_DAYS = 180;
+
+const todayYmd = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const parseDateOnly = (value) => {
+    if (!value) return null;
+    const s = String(value).slice(0, 10);
+    const [y, m, d] = s.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    const dt = new Date(y, m - 1, d);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
+const effectiveDateIn = (item) => {
+    if (!item) return null;
+    if (item.date_in) return String(item.date_in).slice(0, 10);
+    if (item.created_at) return String(item.created_at).slice(0, 10);
+    return null;
+};
+
+const daysSinceDateIn = (dateIn) => {
+    const d = parseDateOnly(dateIn);
+    if (!d) return null;
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startIn = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return Math.floor((start - startIn) / (1000 * 60 * 60 * 24));
+};
+
+const getStockAgeStatus = (dateIn) => {
+    const days = daysSinceDateIn(dateIn);
+    if (days === null) {
+        return {
+            label: "—",
+            tone: "bg-slate-100 text-slate-500 ring-slate-200 dark:bg-white/10 dark:text-slate-400 dark:ring-white/10",
+        };
+    }
+    if (days > STOCK_AGE_AGING_MAX_DAYS) {
+        return {
+            label: "Old Stock",
+            tone: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
+        };
+    }
+    if (days >= STOCK_AGE_NEW_MAX_DAYS) {
+        return {
+            label: "Aging",
+            tone: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20",
+        };
+    }
+    return {
+        label: "New Stock",
+        tone: "bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-400/20",
+    };
+};
+
+const formatDateIn = (dateIn) => {
+    const d = parseDateOnly(dateIn);
+    if (!d) return "—";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const CONDITION_BADGE_NEW =
+    "inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 ring-1 ring-emerald-300/80 dark:bg-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-400/50";
+
+const CONDITION_CHIP_SECOND_HAND =
+    "inline-flex max-w-full items-center gap-2 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-xs font-bold ring-1 ring-amber-200 dark:border-amber-400/45 dark:bg-amber-500/20 dark:ring-amber-400/35";
+
+const getProductConditionDisplay = (item) => {
+    const condition = item?.product_condition || "new";
+    if (condition !== "second_hand") {
+        return { kind: "new" };
+    }
+    const saleType = item?.second_hand_sale_type || "single";
+    return {
+        kind: "second_hand",
+        saleLabel: saleType === "average_bundle" ? "Average" : "Single",
+    };
+};
+
+const formatOriginLabel = formatCountryLabel;
+const formatOriginCsv = (value) => formatOriginLabel(value).replace(/—/g, "");
+
+const resolveItemCategoryId = (item) => {
+    if (!item) return "";
+    if (item.category_id != null && item.category_id !== "") return String(item.category_id);
+    if (Array.isArray(item.category_ids) && item.category_ids.length) return String(item.category_ids[0]);
+    return "";
+};
+
+const formatCategoryLabel = (id, catalogCategories) => {
+    if (!id) return "—";
+    return catalogCategories.find((c) => String(c.id) === String(id))?.name || "—";
+};
+
+const matchesDateInRange = (item, fromYmd, toYmd) => {
+    if (!fromYmd && !toYmd) return true;
+    const dateIn = effectiveDateIn(item);
+    if (!dateIn) return false;
+    if (fromYmd && dateIn < fromYmd) return false;
+    if (toYmd && dateIn > toYmd) return false;
+    return true;
 };
 
 const LABEL_COLORS = [
@@ -54,13 +164,19 @@ const EMPTY_FORM = {
     sku: "",
     cost: "",
     unit: "",
+    origin: "",
     brand_id: "",
     category_id: "",
+    product_condition: "new",
+    second_hand_sale_type: "single",
+    bundle_total_cost: "",
+    bundle_total_quantity: "",
     barcode_code: "",
     is_active: true,
-    manage_stock: false,
+    manage_stock: true,
     stock: "",
     min_stock: "",
+    date_in: todayYmd(),
     show_stock_movement: false,
     has_variation: false,
     variation_product_type: "Clothes",
@@ -71,6 +187,113 @@ const EMPTY_FORM = {
 
 const parseGallery = (v) =>
     String(v || "").split("\n").map((s) => s.trim()).filter(Boolean);
+
+const parsePositiveNumber = (value) => {
+    const n = parseFloat(String(value ?? "").trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+const parsePositiveInteger = (value) => {
+    const n = parseInt(String(value ?? "").trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+const calculateBundleUnitCost = (totalCost, totalQuantity) => {
+    const cost = parsePositiveNumber(totalCost);
+    const quantity = parsePositiveInteger(totalQuantity);
+    if (!cost || !quantity) return "";
+    return (cost / quantity).toFixed(2);
+};
+
+const isAverageBundleForm = (state) =>
+    (state.product_condition || "new") === "second_hand" &&
+    (state.second_hand_sale_type || "single") === "average_bundle";
+
+const isSimpleStockForm = (state) => !isAverageBundleForm(state);
+
+const applySecondHandBundleDefaults = (state) => {
+    if (!isAverageBundleForm(state)) {
+        const simpleState = state.product_condition === "second_hand"
+            ? { ...state, second_hand_sale_type: state.second_hand_sale_type || "single" }
+            : { ...state, second_hand_sale_type: "single" };
+
+        return {
+            ...simpleState,
+            price: "",
+            compare_at_price: "",
+            cost: "",
+            bundle_total_cost: "",
+            bundle_total_quantity: "",
+            manage_stock: true,
+        };
+    }
+
+    const unitCost = calculateBundleUnitCost(state.bundle_total_cost, state.bundle_total_quantity);
+    return {
+        ...state,
+        cost: unitCost || "",
+        manage_stock: true,
+        stock: state.bundle_total_quantity || "",
+    };
+};
+
+const normalizeSaleFieldsForPayload = (state) => {
+    const normalized = applySecondHandBundleDefaults(state);
+    if ((normalized.product_condition || "new") !== "second_hand") {
+        return {
+            ...normalized,
+            product_condition: "new",
+            second_hand_sale_type: null,
+            price: null,
+            compare_at_price: null,
+            cost: null,
+            bundle_total_cost: null,
+            bundle_total_quantity: null,
+        };
+    }
+
+    if ((normalized.second_hand_sale_type || "single") !== "average_bundle") {
+        return {
+            ...normalized,
+            second_hand_sale_type: "single",
+            price: null,
+            compare_at_price: null,
+            cost: null,
+            bundle_total_cost: null,
+            bundle_total_quantity: null,
+        };
+    }
+
+    return {
+        ...normalized,
+        product_condition: "second_hand",
+        second_hand_sale_type: "average_bundle",
+    };
+};
+
+const validateSaleFields = (state) => {
+    const normalized = normalizeSaleFieldsForPayload(state);
+    if (isSimpleStockForm(normalized)) {
+        const stock = parseInt(String(normalized.stock ?? "").trim(), 10);
+        if (!Number.isFinite(stock) || stock < 0) {
+            return "Please enter the total stock for this item.";
+        }
+        return "";
+    }
+
+    const price = Number(normalized.price);
+    if (!Number.isFinite(price) || price < 0) {
+        return "Please enter a valid price.";
+    }
+
+    const totalCost = parsePositiveNumber(normalized.bundle_total_cost);
+    const totalQuantity = parsePositiveInteger(normalized.bundle_total_quantity);
+    if (!totalCost || !totalQuantity) {
+        return "Please enter total bundle cost and total quantity.";
+    }
+
+    return "";
+};
 
 /** Strip current hero image: next gallery becomes `image_url` (or cleared). Repeats on each × on first slot. */
 const removeLeadingProductPhoto = (state) => {
@@ -92,11 +315,16 @@ function mapItemToEditForm(item) {
         ...item,
         barcode_code: item.slug || "",
         compare_at_price: item.compare_at_price ?? "",
-        category_id: item.category_id != null ? String(item.category_id) : "",
+        category_id: resolveItemCategoryId(item),
         brand_id: item.brand_id != null ? String(item.brand_id) : "",
+        product_condition: item.product_condition || "new",
+        second_hand_sale_type: item.second_hand_sale_type || "single",
+        bundle_total_cost: item.bundle_total_cost != null ? String(item.bundle_total_cost) : "",
+        bundle_total_quantity: item.bundle_total_quantity != null ? String(item.bundle_total_quantity) : "",
         manage_stock: item.manage_stock ?? false,
         stock: item.stock != null ? String(item.stock) : "",
         min_stock: item.min_stock != null ? String(item.min_stock) : "",
+        date_in: effectiveDateIn(item) || todayYmd(),
         show_stock_movement: false,
         has_variation: item.has_variation ?? false,
         variation_product_type: item.variation_product_type || "Clothes",
@@ -106,57 +334,27 @@ function mapItemToEditForm(item) {
     };
 }
 
-function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0, className = "" }) {
-    const [displayValue, setDisplayValue] = useState(0);
-
-    useEffect(() => {
-        const target = Number(value) || 0;
-        const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-        if (prefersReducedMotion) {
-            setDisplayValue(target);
-            return undefined;
-        }
-
-        let raf = 0;
-        const start = performance.now();
-        const duration = 620;
-        setDisplayValue(0);
-
-        const tick = (now) => {
-            const progress = Math.min(1, (now - start) / duration);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setDisplayValue(target * eased);
-            if (progress < 1) raf = requestAnimationFrame(tick);
-        };
-
-        raf = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(raf);
-    }, [value]);
-
-    const formatted = displayValue.toLocaleString("en-US", {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-    });
-
-    return <span className={className}>{prefix}{formatted}{suffix}</span>;
-}
-
 export default function AdminBarcodeQR() {
     const navigate = useNavigate();
     const location = useLocation();
     const { id: editRouteId } = useParams();
     const pathname = (location.pathname || "").replace(/\/$/, "");
-    const isNewPage = pathname.endsWith("/barcode-qr/new");
-    const isEditPage = Boolean(editRouteId && pathname.endsWith("/edit"));
+    const stockBase = useMemo(() => resolveStockAdminBase(pathname), [pathname]);
+    const isNewPage = pathname === `${stockBase}/new`;
+    const isEditPage = Boolean(
+        editRouteId
+        && pathname.endsWith("/edit")
+        && STOCK_ADMIN_BASES.some((base) => pathname.startsWith(base)),
+    );
 
     const { user, refresh: refreshAuth } = useAuth();
-    const [createHighlight, setCreateHighlight] = useState(false);
     const { primaryColor, mode } = useTheme();
     const isDark = mode === "dark";
     const accentColor = primaryColor;
     const accentIsWhite = (accentColor || "").toUpperCase() === "#FFFFFF";
 
     const [rows, setRows] = useState([]);
+    const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [brands, setBrands] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -170,18 +368,13 @@ export default function AdminBarcodeQR() {
     const [animate, setAnimate] = useState(false);
     const [aiBusy, setAiBusy] = useState(false);
     const [stockFilter, setStockFilter] = useState("all");
+    const [dateInFrom, setDateInFrom] = useState("");
+    const [dateInTo, setDateInTo] = useState("");
     const [selectedIds, setSelectedIds] = useState(() => new Set());
-    const [favorites, setFavorites] = useState(() => {
-        try {
-            const raw = localStorage.getItem("bqr_favorites");
-            const arr = raw ? JSON.parse(raw) : [];
-            return Array.isArray(arr) ? arr.map(Number) : [];
-        } catch {
-            return [];
-        }
-    });
     const [previewItem, setPreviewItem] = useState(null);
-    const [metricsAnimated, setMetricsAnimated] = useState(false);
+    const [linkedProductsItem, setLinkedProductsItem] = useState(null);
+    const [pendingDelete, setPendingDelete] = useState(null);
+    const [deleteBusy, setDeleteBusy] = useState(false);
     const [appearance, setAppearance] = useState({ ...DEFAULT_APPEARANCE });
     const [activeTab, setActiveTab] = useState("Appearance");
     const printRef = useRef(null);
@@ -213,14 +406,16 @@ export default function AdminBarcodeQR() {
     const load = async () => {
         setLoading(true);
         try {
-            const [catRes, brandRes] = await Promise.all([
+            const [catRes, brandRes, productRes] = await Promise.all([
                 api.get("/admin/categories"),
                 api.get("/admin/brands"),
+                api.get("/admin/products"),
             ]);
             const all = catRes?.data?.data || [];
             setRows(all.filter((c) => c.type === BARCODE_QR_TYPE));
             setCategories(all.filter((c) => c.type !== BARCODE_QR_TYPE));
             setBrands(brandRes?.data?.data || []);
+            setProducts(productRes?.data?.data || productRes?.data || []);
         } catch (e) {
             setErr(extractErr(e));
         } finally {
@@ -232,22 +427,7 @@ export default function AdminBarcodeQR() {
 
     useEffect(() => {
         if (!isNewPage) return;
-        let fromSession = null;
-        try {
-            const raw = sessionStorage.getItem("bqr_duplicate_once");
-            if (raw) {
-                fromSession = JSON.parse(raw);
-                sessionStorage.removeItem("bqr_duplicate_once");
-            }
-        } catch {
-            /* ignore */
-        }
-        if (fromSession && typeof fromSession === "object") {
-            setForm({ ...EMPTY_FORM, ...fromSession, barcode_code: fromSession.barcode_code || "" });
-        } else {
-            setForm({ ...EMPTY_FORM });
-        }
-        setCreateHighlight(false);
+        setForm({ ...EMPTY_FORM });
         setErr("");
     }, [isNewPage, location.key]);
 
@@ -261,16 +441,16 @@ export default function AdminBarcodeQR() {
                 const item = data?.data;
                 if (cancelled) return;
                 if (!item || item.type !== BARCODE_QR_TYPE) {
-                    navigate("/admin/barcode-qr", { replace: true });
+                    navigate(stockBase, { replace: true });
                     return;
                 }
                 setEditing(mapItemToEditForm(item));
             } catch {
-                if (!cancelled) navigate("/admin/barcode-qr", { replace: true });
+                if (!cancelled) navigate(stockBase, { replace: true });
             }
         })();
         return () => { cancelled = true; };
-    }, [isEditPage, editRouteId, navigate]);
+    }, [isEditPage, editRouteId, navigate, stockBase]);
 
     useEffect(() => {
         if (!isEditPage) setEditing(null);
@@ -425,47 +605,54 @@ export default function AdminBarcodeQR() {
         }
     };
 
-    const sizeOptionsFor = (data) => SIZE_PRESETS[data.variation_product_type || "Clothes"] || SIZE_PRESETS.Other;
-
     /* ── CRUD ── */
     const create = async (e) => {
         e.preventDefault();
         if (!form.name.trim()) { setErr("Product name is required"); return; }
+        const validationError = validateSaleFields(form);
+        if (validationError) { setErr(validationError); return; }
         setIsCreating(true);
         loadingAlert({ khTitle: "កំពុងបង្កើត", enTitle: "Creating…", khText: "សូមរង់ចាំ", enText: "Please wait" });
         try {
             const finalCode = form.barcode_code.trim() ? sanitizeCode(form.barcode_code) : generateCode();
+            const saleForm = normalizeSaleFieldsForPayload(form);
             await api.post("/admin/categories", {
-                name: form.name.trim(),
+                name: saleForm.name.trim(),
                 slug: finalCode,
                 type: BARCODE_QR_TYPE,
-                description: form.description || null,
-                details: form.details || null,
-                price: form.price || null,
-                compare_at_price: form.compare_at_price || null,
-                label_color: form.label_color || null,
-                image_url: form.image_url || null,
-                gallery: form.gallery || null,
-                sku: form.sku || null,
-                cost: form.cost || null,
-                unit: form.unit || null,
-                brand_id: form.brand_id || null,
-                category_id: form.category_id ? parseInt(form.category_id, 10) : null,
-                is_active: form.is_active,
+                description: saleForm.description || null,
+                details: saleForm.details || null,
+                price: saleForm.price || null,
+                compare_at_price: saleForm.compare_at_price || null,
+                label_color: saleForm.label_color || null,
+                image_url: saleForm.image_url || null,
+                gallery: saleForm.gallery || null,
+                sku: saleForm.sku || null,
+                cost: saleForm.cost || null,
+                unit: saleForm.unit || null,
+                origin: saleForm.origin || null,
+                brand_id: saleForm.brand_id || null,
+                category_id: saleForm.category_id ? parseInt(saleForm.category_id, 10) : null,
+                product_condition: saleForm.product_condition || "new",
+                second_hand_sale_type: saleForm.second_hand_sale_type || null,
+                bundle_total_cost: saleForm.bundle_total_cost || null,
+                bundle_total_quantity: saleForm.bundle_total_quantity || null,
+                is_active: saleForm.is_active,
                 sort_order: 0,
-                manage_stock: !!form.manage_stock,
-                stock: form.manage_stock && form.stock !== "" ? parseInt(form.stock, 10) : null,
-                min_stock: form.manage_stock && form.min_stock !== "" ? parseInt(form.min_stock, 10) : null,
-                has_variation: !!form.has_variation,
-                variation_product_type: form.has_variation ? (form.variation_product_type || null) : null,
-                variation_colors: form.has_variation ? (form.variation_colors || null) : null,
-                variation_sizes: form.has_variation && Array.isArray(form.variation_sizes) && form.variation_sizes.length ? form.variation_sizes : null,
+                manage_stock: !!saleForm.manage_stock,
+                stock: saleForm.manage_stock && saleForm.stock !== "" ? parseInt(saleForm.stock, 10) : null,
+                min_stock: saleForm.manage_stock && saleForm.min_stock !== "" ? parseInt(saleForm.min_stock, 10) : null,
+                date_in: saleForm.date_in || todayYmd(),
+                has_variation: !!saleForm.has_variation,
+                variation_product_type: saleForm.has_variation ? (saleForm.variation_product_type || null) : null,
+                variation_colors: saleForm.has_variation ? (saleForm.variation_colors || null) : null,
+                variation_sizes: saleForm.has_variation && Array.isArray(saleForm.variation_sizes) && saleForm.variation_sizes.length ? saleForm.variation_sizes : null,
             });
             closeSwal();
             resetForm();
             await toastSuccess({ khText: "បង្កើតដោយជោគជ័យ", enText: "Created successfully!" });
             await load();
-            navigate("/admin/barcode-qr");
+            navigate(stockBase);
         } catch (e2) {
             closeSwal();
             const msg = e2?.response?.data?.message || extractErr(e2);
@@ -478,76 +665,95 @@ export default function AdminBarcodeQR() {
 
     const saveEdit = async () => {
         if (!editing?.name?.trim()) { setErr("Product name is required"); return; }
+        const validationError = validateSaleFields(editing);
+        if (validationError) { setErr(validationError); return; }
         const editCode = editing.barcode_code?.trim()
             ? sanitizeCode(editing.barcode_code)
             : (editing.slug || generateCode());
         try {
+            const saleEditing = normalizeSaleFieldsForPayload(editing);
             await api.patch(`/admin/categories/${editing.id}`, {
-                name: editing.name,
+                name: saleEditing.name,
                 slug: editCode,
-                description: editing.description || null,
-                details: editing.details || null,
-                price: editing.price || null,
-                compare_at_price: editing.compare_at_price || null,
-                label_color: editing.label_color || null,
-                image_url: editing.image_url || null,
-                gallery: editing.gallery || null,
-                sku: editing.sku || null,
-                cost: editing.cost || null,
-                unit: editing.unit || null,
-                brand_id: editing.brand_id || null,
-                category_id: editing.category_id ? parseInt(editing.category_id, 10) : null,
-                is_active: editing.is_active,
+                description: saleEditing.description || null,
+                details: saleEditing.details || null,
+                price: saleEditing.price || null,
+                compare_at_price: saleEditing.compare_at_price || null,
+                label_color: saleEditing.label_color || null,
+                image_url: saleEditing.image_url || null,
+                gallery: saleEditing.gallery || null,
+                sku: saleEditing.sku || null,
+                cost: saleEditing.cost || null,
+                unit: saleEditing.unit || null,
+                origin: saleEditing.origin || null,
+                brand_id: saleEditing.brand_id || null,
+                category_id: saleEditing.category_id ? parseInt(saleEditing.category_id, 10) : null,
+                product_condition: saleEditing.product_condition || "new",
+                second_hand_sale_type: saleEditing.second_hand_sale_type || null,
+                bundle_total_cost: saleEditing.bundle_total_cost || null,
+                bundle_total_quantity: saleEditing.bundle_total_quantity || null,
+                is_active: saleEditing.is_active,
                 type: BARCODE_QR_TYPE,
-                manage_stock: !!editing.manage_stock,
-                stock: editing.manage_stock && editing.stock !== "" ? parseInt(editing.stock, 10) : null,
-                min_stock: editing.manage_stock && editing.min_stock !== "" ? parseInt(editing.min_stock, 10) : null,
-                has_variation: !!editing.has_variation,
-                variation_product_type: editing.has_variation ? (editing.variation_product_type || null) : null,
-                variation_colors: editing.has_variation ? (editing.variation_colors || null) : null,
-                variation_sizes: editing.has_variation && Array.isArray(editing.variation_sizes) && editing.variation_sizes.length ? editing.variation_sizes : null,
+                manage_stock: !!saleEditing.manage_stock,
+                stock: saleEditing.manage_stock && saleEditing.stock !== "" ? parseInt(saleEditing.stock, 10) : null,
+                min_stock: saleEditing.manage_stock && saleEditing.min_stock !== "" ? parseInt(saleEditing.min_stock, 10) : null,
+                date_in: saleEditing.date_in || null,
+                has_variation: !!saleEditing.has_variation,
+                variation_product_type: saleEditing.has_variation ? (saleEditing.variation_product_type || null) : null,
+                variation_colors: saleEditing.has_variation ? (saleEditing.variation_colors || null) : null,
+                variation_sizes: saleEditing.has_variation && Array.isArray(saleEditing.variation_sizes) && saleEditing.variation_sizes.length ? saleEditing.variation_sizes : null,
             });
             showSuccess("Updated successfully!");
             await load();
-            navigate("/admin/barcode-qr");
+            navigate(stockBase);
         } catch (e2) {
             setErr(extractErr(e2));
         }
     };
 
-    const del = async (id, navigateAfter = false) => {
-        const res = await warningConfirm({
-            enTitle: "Delete this preset?",
-            enText: "This action cannot be undone.",
-            enConfirm: "Delete",
-            intent: "destructive",
-        });
-        if (!res.isConfirmed) return;
+    const del = (id, navigateAfter = false) => {
+        setPendingDelete({ type: "preset", id, navigateAfter });
+    };
+
+    const deleteLinkedProduct = (product) => {
+        setLinkedProductsItem(null);
+        setPendingDelete({ type: "product", product });
+    };
+
+    const confirmDelete = async () => {
+        if (!pendingDelete) return;
+        setDeleteBusy(true);
+        setErr("");
         try {
-            await api.delete(`/admin/categories/${id}`);
-            showSuccess("Deleted successfully!");
+            if (pendingDelete.type === "product") {
+                await api.delete(`/admin/products/${pendingDelete.product.id}`);
+                await toastSuccess({ khText: "បានលុបទំនិញ", enText: "Product deleted." });
+            } else {
+                await api.delete(`/admin/categories/${pendingDelete.id}`);
+                showSuccess("Deleted successfully!");
+            }
             await load();
-            if (navigateAfter) navigate("/admin/barcode-qr");
+            if (pendingDelete.type === "preset" && pendingDelete.navigateAfter) {
+                navigate(stockBase);
+            }
         } catch (e2) {
             setErr(extractErr(e2));
+        } finally {
+            setDeleteBusy(false);
+            setPendingDelete(null);
         }
     };
 
-    const duplicateCurrentEdit = () => {
+    /** Clear all editable fields; keep `id` and `slug` so this stays the same record until Save. */
+    const resetEditFormToEmpty = () => {
         if (!editing) return;
-        const copy = mapItemToEditForm({
-            ...editing,
-            name: `${editing.name || "Item"} (copy)`,
+        setErr("");
+        setEditing((prev) => ({
+            ...EMPTY_FORM,
+            id: prev.id,
+            slug: prev.slug,
             barcode_code: "",
-            slug: "",
-        });
-        const { id: _omitId, ...copyWithoutId } = copy;
-        try {
-            sessionStorage.setItem("bqr_duplicate_once", JSON.stringify(copyWithoutId));
-        } catch {
-            /* ignore */
-        }
-        navigate("/admin/barcode-qr/new");
+        }));
     };
 
     const handlePrint = () => {
@@ -783,204 +989,115 @@ export default function AdminBarcodeQR() {
             });
         } else if (stockFilter === "out") {
             list = list.filter((r) => r.manage_stock && (parseInt(r.stock, 10) || 0) === 0);
-        } else if (stockFilter === "inactive") {
-            list = list.filter((r) => !r.is_active);
+        }
+        if (dateInFrom || dateInTo) {
+            list = list.filter((r) => matchesDateInRange(r, dateInFrom, dateInTo));
         }
         return list;
-    }, [searchFiltered, stockFilter]);
+    }, [searchFiltered, stockFilter, dateInFrom, dateInTo]);
 
-    const inventoryStats = useMemo(() => {
-        let totalValue = 0;
-        let totalCost = 0;
-        let lowStock = 0;
-        let outStock = 0;
+    const hasDateInRangeFilter = Boolean(dateInFrom || dateInTo);
+    const clearDateInRange = () => {
+        setDateInFrom("");
+        setDateInTo("");
+    };
+
+    const trackedUnits = useMemo(() => {
         let units = 0;
         for (const r of displayRows) {
-            const price = parseFloat(r.price) || 0;
-            const cost = parseFloat(r.cost) || 0;
             if (r.manage_stock) {
-                const st = parseInt(r.stock, 10) || 0;
-                const mn = parseInt(r.min_stock, 10) || 0;
-                totalValue += price * st;
-                totalCost += cost * st;
-                units += st;
-                if (st === 0) outStock += 1;
-                else if (mn > 0 && st <= mn) lowStock += 1;
+                units += parseInt(r.stock, 10) || 0;
             }
         }
-        return {
-            totalValue,
-            totalCost,
-            projectedProfit: totalValue - totalCost,
-            lowStock,
-            outStock,
-            units,
-        };
+        return units;
     }, [displayRows]);
 
-    const formatMoney = (value) => `$${Number(value || 0).toFixed(2)}`;
-
-    const inventoryInsights = useMemo(() => {
-        const trackedRows = displayRows.filter((r) => r.manage_stock);
-        const activeRows = displayRows.filter((r) => r.is_active);
-        const inStockRows = trackedRows.filter((r) => (parseInt(r.stock, 10) || 0) > 0);
-        const health = trackedRows.length
-            ? Math.round((inStockRows.length / trackedRows.length) * 100)
-            : 0;
-        const profitPercent = inventoryStats.totalValue > 0
-            ? Math.round((inventoryStats.projectedProfit / inventoryStats.totalValue) * 100)
-            : 0;
-
-        const stockMix = [
-            { key: "available", label: "Available", value: inStockRows.length, color: "bg-emerald-500" },
-            { key: "low", label: "Low", value: inventoryStats.lowStock, color: "bg-amber-500" },
-            { key: "out", label: "Out", value: inventoryStats.outStock, color: "bg-red-500" },
-        ];
-        const maxMix = Math.max(1, ...stockMix.map((item) => item.value));
-
-        const categoryValue = new Map();
-        for (const item of displayRows) {
-            const category = categories.find((c) => String(c.id) === String(item.category_id));
-            const label = category?.name || "Uncategorized";
-            const stock = item.manage_stock ? (parseInt(item.stock, 10) || 0) : 1;
-            const price = parseFloat(item.price) || 0;
-            categoryValue.set(label, (categoryValue.get(label) || 0) + price * stock);
-        }
-        const categoryBars = Array.from(categoryValue.entries())
-            .map(([label, value]) => ({ label, value }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 5);
-        const maxCategoryValue = Math.max(1, ...categoryBars.map((item) => item.value));
-
-        return {
-            activeRows: activeRows.length,
-            health,
-            profitPercent,
-            stockMix,
-            maxMix,
-            categoryBars,
-            maxCategoryValue,
-        };
-    }, [categories, displayRows, inventoryStats.lowStock, inventoryStats.outStock, inventoryStats.projectedProfit, inventoryStats.totalValue]);
-
-    const kpiCards = useMemo(
-        () => [
-            {
-                title: "Total Inventory Value",
-                value: inventoryStats.totalValue,
-                prefix: "$",
-                decimals: 2,
-                note: "Full stock value",
-                tone: "from-blue-500/12 to-cyan-500/5 text-blue-600 dark:text-blue-300",
-                icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
-                trend: `${displayRows.length} products`,
-            },
-            {
-                title: "Cost of Inventory",
-                value: inventoryStats.totalCost,
-                prefix: "$",
-                decimals: 2,
-                note: "Capital in stock",
-                tone: "from-slate-500/12 to-slate-500/5 text-slate-600 dark:text-slate-300",
-                icon: "M9 14l6-6m-5.5.5h.01m5.99 5.99h.01M19 5h-1a2 2 0 00-2 2v10a2 2 0 002 2h1M5 5h1a2 2 0 012 2v10a2 2 0 01-2 2H5",
-                trend: "Cost basis",
-            },
-            {
-                title: "Projected Profit",
-                value: inventoryStats.projectedProfit,
-                prefix: "$",
-                decimals: 2,
-                note: "Estimated margin",
-                tone: "from-emerald-500/15 to-teal-500/5 text-emerald-600 dark:text-emerald-300",
-                icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
-                trend: `${inventoryInsights.profitPercent}% margin`,
-            },
-            {
-                title: "Low Stock Alerts",
-                value: inventoryStats.lowStock,
-                decimals: 0,
-                note: "Need attention",
-                tone: "from-amber-500/15 to-orange-500/5 text-amber-600 dark:text-amber-300",
-                icon: "M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z",
-                trend: "Reorder soon",
-            },
-            {
-                title: "Out of Stock",
-                value: inventoryStats.outStock,
-                decimals: 0,
-                note: "Products unavailable",
-                tone: "from-red-500/15 to-rose-500/5 text-red-600 dark:text-red-300",
-                icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636",
-                trend: "Restock needed",
-            },
-            {
-                title: "Total Units Available",
-                value: inventoryStats.units,
-                decimals: 0,
-                note: "Tracked units",
-                tone: "from-violet-500/15 to-indigo-500/5 text-violet-600 dark:text-violet-300",
-                icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
-                trend: `${inventoryInsights.health}% healthy`,
-            },
-        ],
-        [displayRows.length, inventoryInsights.health, inventoryInsights.profitPercent, inventoryStats.lowStock, inventoryStats.outStock, inventoryStats.projectedProfit, inventoryStats.totalCost, inventoryStats.totalValue, inventoryStats.units],
-    );
-
-    useEffect(() => {
-        if (loading) return undefined;
-        setMetricsAnimated(false);
-        let raf1 = 0;
-        let raf2 = 0;
-        raf1 = requestAnimationFrame(() => {
-            raf2 = requestAnimationFrame(() => setMetricsAnimated(true));
-        });
-        return () => {
-            cancelAnimationFrame(raf1);
-            cancelAnimationFrame(raf2);
-        };
-    }, [
-        loading,
-        rows.length,
-        stockFilter,
-        search,
-        inventoryStats.totalValue,
-        inventoryStats.totalCost,
-        inventoryStats.projectedProfit,
-        inventoryStats.lowStock,
-        inventoryStats.outStock,
-        inventoryStats.units,
-    ]);
-
-    const toggleFavorite = (id) => {
-        setFavorites((prev) => {
-            const n = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-            try { localStorage.setItem("bqr_favorites", JSON.stringify(n)); } catch { }
-            return n;
-        });
+    const linkedProductsForLabel = (item) => {
+        const code = String(item?.slug || "").trim().toLowerCase();
+        if (!code) return [];
+        return products.filter((product) => String(product?.barcode_code || "").trim().toLowerCase() === code);
     };
 
-    const toggleCatalogActive = async (item) => {
-        try {
-            await api.patch(`/admin/categories/${item.id}`, {
-                name: item.name,
-                slug: item.slug,
-                type: BARCODE_QR_TYPE,
-                is_active: !item.is_active,
-            });
-            await load();
-        } catch (e2) {
-            setErr(extractErr(e2));
+    const totalPriceForLabel = (item) => {
+        const isAverageBundle =
+            item?.product_condition === "second_hand" &&
+            (item?.second_hand_sale_type || "single") === "average_bundle";
+
+        if (isAverageBundle) {
+            const price = Number(item?.price);
+            const stock = Number(item?.stock);
+            const units = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+            return Number.isFinite(price) ? { amount: price * units, sourceCount: 0, units } : null;
         }
+
+        const linked = linkedProductsForLabel(item);
+        const labelStock = Number(item?.stock);
+        let remainingUnits = item?.manage_stock && Number.isFinite(labelStock)
+            ? Math.max(0, labelStock)
+            : null;
+        let total = 0;
+        let count = 0;
+        let units = 0;
+        for (const product of linked) {
+            const price = Number(product?.price);
+            if (!Number.isFinite(price)) continue;
+            const stock = Number(product?.stock);
+            let qty = Number.isFinite(stock) ? Math.max(0, stock) : 1;
+            if (remainingUnits !== null) {
+                if (remainingUnits <= 0) break;
+                qty = Math.min(qty, remainingUnits);
+                remainingUnits -= qty;
+            }
+            total += price * qty;
+            count += 1;
+            units += qty;
+        }
+
+        return count > 0 ? { amount: total, sourceCount: count, units } : null;
     };
+
+    const averageUnitPriceForLabel = (item) => {
+        const isAverageBundle =
+            item?.product_condition === "second_hand" &&
+            (item?.second_hand_sale_type || "single") === "average_bundle";
+        if (!isAverageBundle) return null;
+        const price = Number(item?.price);
+        return Number.isFinite(price) ? price : null;
+    };
+
+    const canShowPrintLabel = (item) =>
+        item?.product_condition === "second_hand" &&
+        (item?.second_hand_sale_type || "single") === "average_bundle";
 
     const exportCsv = () => {
         const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-        const header = ["Name", "Code", "Category", "Stock", "Price", "Active"];
+        const header = ["Product", "Category", "Origin", "Stock", "Date In", "Status", "Price Unit", "Total Price"];
         const lines = [header.join(",")];
         for (const r of displayRows) {
-            const cat = categories.find((c) => String(c.id) === String(r.category_id));
+            const catLabel = formatCategoryLabel(resolveItemCategoryId(r), categories);
             const st = r.manage_stock ? (parseInt(r.stock, 10) || 0) : "";
-            lines.push([esc(r.name), esc(r.slug || r.sku || ""), esc(cat?.name || ""), st, r.price ?? "", r.is_active ? "yes" : "no"].join(","));
+            const mn = r.manage_stock ? (parseInt(r.min_stock, 10) || 0) : 0;
+            const stockLabel = !r.manage_stock
+                ? "Untracked"
+                : st === 0
+                    ? "Out of stock"
+                    : mn > 0 && st <= mn
+                        ? "Low Stock"
+                        : `${st} units`;
+            const dateIn = effectiveDateIn(r);
+            const status = getStockAgeStatus(dateIn).label;
+            const averageUnitPrice = averageUnitPriceForLabel(r);
+            const totalPrice = totalPriceForLabel(r);
+            lines.push([
+                esc(r.name),
+                esc(catLabel === "—" ? "-" : catLabel),
+                esc(formatOriginCsv(r.origin)),
+                esc(stockLabel),
+                esc(formatDateIn(dateIn)),
+                esc(status),
+                averageUnitPrice != null ? `$${averageUnitPrice.toFixed(2)}` : "-",
+                totalPrice ? `$${totalPrice.amount.toFixed(2)} (${totalPrice.units} units)` : "-",
+            ].join(","));
         }
         const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
         const a = document.createElement("a");
@@ -1035,52 +1152,28 @@ export default function AdminBarcodeQR() {
                 !Number.isNaN(parseFloat(String(data.compare_at_price)))
                 ? parseFloat(String(data.compare_at_price)).toFixed(2)
                 : "";
-        const highlightOn = data.id ? favorites.includes(data.id) : createHighlight;
-        const toggleHighlight = () => {
-            if (data.id) toggleFavorite(data.id);
-            else setCreateHighlight((v) => !v);
+        const productCondition = data.product_condition || "new";
+        const isSecondHand = productCondition === "second_hand";
+        const saleType = data.second_hand_sale_type || "single";
+        const isAverageBundle = isSecondHand && saleType === "average_bundle";
+        const usesSimpleTotalStock = !isAverageBundle;
+        const bundleUnitCost = calculateBundleUnitCost(data.bundle_total_cost, data.bundle_total_quantity);
+
+        const hasAnyPhotos = Boolean(storedPrimaryImg || galleryUrls.length > 0);
+        const confirmClearAllPhotos = async () => {
+            const res = await warningConfirm({
+                enTitle: "Remove all photos?",
+                enText:
+                    "This clears the main image and every gallery photo from this form. For an existing product, click Save after to update the server.",
+                enConfirm: "Remove photos",
+                intent: "destructive",
+            });
+            if (!res.isConfirmed) return;
+            setData((s) => ({ ...s, image_url: "", gallery: "" }));
         };
 
         return (
             <div className="w-full min-w-0 pb-1">
-                <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white px-4 py-4 ring-1 ring-slate-950/[0.02] dark:border-slate-700 dark:bg-slate-900 dark:ring-white/[0.03] sm:px-5">
-                    <button
-                        type="button"
-                        onClick={toggleHighlight}
-                        className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${highlightOn
-                            ? "border-slate-400 bg-slate-100 text-slate-900 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100"
-                            : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-                            }`}
-                    >
-                        <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
-                            <path
-                                className={
-                                    highlightOn
-                                        ? "fill-slate-600 stroke-none dark:fill-slate-300"
-                                        : "fill-none stroke-slate-400 dark:stroke-slate-500"
-                                }
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                            />
-                        </svg>
-                        Highlight product
-                    </button>
-                    <div className="flex items-center gap-3 sm:ml-auto">
-                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Show on Online Catalog</span>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={data.is_active}
-                            onClick={() => setData((s) => ({ ...s, is_active: !s.is_active }))}
-                            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${data.is_active ? "bg-[color:var(--admin-primary)]" : "bg-slate-300 dark:bg-slate-600"}`}
-                        >
-                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${data.is_active ? "translate-x-5" : "translate-x-0"}`} />
-                        </button>
-                    </div>
-                </div>
-
                 <div className="grid grid-cols-1 items-start gap-8 lg:gap-10 xl:grid-cols-12">
                     <div className="min-w-0 space-y-6 xl:col-span-7">
                         <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white ring-1 ring-slate-950/[0.02] dark:border-slate-700 dark:bg-slate-900 dark:ring-white/[0.03]">
@@ -1115,17 +1208,62 @@ export default function AdminBarcodeQR() {
                                     aria-hidden
                                 />
                                 <div className="relative z-[1] -mt-[7.25rem] flex justify-center px-4 pb-5 sm:-mt-[8rem] sm:px-8 sm:pb-6">
-                                    <div className="flex w-full max-w-[min(100%,240px)] flex-col overflow-hidden rounded-xl border border-black/[0.07] bg-white shadow-[0_22px_50px_rgba(15,23,42,0.16),0_4px_12px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.04] dark:border-white/12 dark:bg-slate-900 dark:shadow-black/45 dark:ring-white/[0.05]">
-                                        <div className="aspect-square w-full shrink-0 overflow-hidden rounded-t-xl bg-neutral-100 dark:bg-slate-800/80">
+                                    <div className="relative flex w-full max-w-[min(100%,240px)] flex-col overflow-hidden rounded-xl border border-black/[0.07] bg-white shadow-[0_22px_50px_rgba(15,23,42,0.16),0_4px_12px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.04] dark:border-white/12 dark:bg-slate-900 dark:shadow-black/45 dark:ring-white/[0.05]">
+                                        {hasAnyPhotos && (
+                                            <div className="absolute right-1 top-1 z-30 flex flex-col items-end gap-1 sm:right-2 sm:top-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={isUploading}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        void confirmClearAllPhotos();
+                                                    }}
+                                                    title="Remove all photos"
+                                                    aria-label="Remove all photos from this product"
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200/90 bg-white/95 text-slate-600 shadow-sm backdrop-blur-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:border-white/15 dark:bg-slate-900/95 dark:text-slate-200 dark:hover:border-red-900/50 dark:hover:bg-red-950/50 dark:hover:text-red-200"
+                                                >
+                                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6M12 3a9 9 0 110 18 9 9 0 010-18z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="group/hero aspect-square w-full shrink-0 overflow-hidden rounded-t-xl bg-neutral-100 dark:bg-slate-800/80">
                                             {heroPhotoUrl ? (
-                                                <img src={resolveImageUrl(heroPhotoUrl)} alt="" className="h-full w-full object-cover object-center" />
+                                                <button
+                                                    type="button"
+                                                    disabled={isUploading}
+                                                    onClick={() => (isEdit ? editProductImageInputRef : productImageInputRef).current?.click()}
+                                                    title="Click to replace photo"
+                                                    aria-label="Replace product photo — upload a new image"
+                                                    className="relative h-full w-full cursor-pointer overflow-hidden rounded-t-xl border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--admin-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <img
+                                                        src={resolveImageUrl(heroPhotoUrl)}
+                                                        alt=""
+                                                        className="pointer-events-none h-full w-full object-cover object-center"
+                                                    />
+                                                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover/hero:bg-black/40 group-hover/hero:opacity-100">
+                                                        <span className="rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-slate-900 shadow-md">
+                                                            Change photo
+                                                        </span>
+                                                    </span>
+                                                </button>
                                             ) : (
-                                                <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-slate-400 dark:text-slate-500">
+                                                <button
+                                                    type="button"
+                                                    disabled={isUploading}
+                                                    onClick={() => (isEdit ? editProductImageInputRef : productImageInputRef).current?.click()}
+                                                    title="Add product photo"
+                                                    aria-label="Add product photo"
+                                                    className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 border-0 bg-transparent p-4 text-center text-slate-400 transition hover:bg-slate-100/80 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:bg-slate-800/60 dark:hover:text-slate-400"
+                                                >
                                                     <svg className="h-9 w-9 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.25} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                     </svg>
-                                                    <span className="text-[11px] font-medium leading-snug">Add a photo below.</span>
-                                                </div>
+                                                    <span className="text-[11px] font-medium leading-snug">Click here or + below to add a photo.</span>
+                                                </button>
                                             )}
                                         </div>
                                         <div
@@ -1197,26 +1335,33 @@ export default function AdminBarcodeQR() {
                                                         <button
                                                             type="button"
                                                             disabled={isUploading}
-                                                            title="Replace this photo"
+                                                            title="Click to replace this photo"
                                                             aria-label="Replace this gallery photo"
                                                             onClick={() => {
                                                                 pendingReplaceGalleryIndexRef.current = galleryRmIndex;
                                                                 replaceGalleryInputRef.current?.click();
                                                             }}
-                                                            className="absolute inset-0 z-0 hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--admin-primary)] disabled:opacity-50"
+                                                            className="absolute inset-0 z-0 cursor-pointer hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--admin-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                                                         />
-                                                        <img src={resolveImageUrl(url)} alt="" className="h-full w-full object-cover" />
+                                                        <img
+                                                            src={resolveImageUrl(url)}
+                                                            alt=""
+                                                            className="relative z-0 h-full w-full object-cover pointer-events-none"
+                                                        />
                                                         <button
                                                             type="button"
                                                             disabled={isUploading}
-                                                            onClick={() =>
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 setData((s) => {
                                                                     const next = parseGallery(s.gallery).filter((_, i) => i !== galleryRmIndex);
                                                                     return { ...s, gallery: next.join("\n") };
-                                                                })
-                                                            }
-                                                            className="absolute inset-0 flex items-center justify-center bg-slate-900/50 text-[10px] font-semibold text-white opacity-0 transition group-hover:opacity-100"
+                                                                });
+                                                            }}
+                                                            className="absolute right-0 top-0 z-10 flex h-4 min-w-[1rem] items-center justify-center rounded-bl-md bg-slate-900/75 text-[9px] font-bold leading-none text-white opacity-95 hover:bg-red-600"
                                                             title="Remove from gallery"
+                                                            aria-label="Remove this gallery photo"
                                                         >
                                                             ×
                                                         </button>
@@ -1280,93 +1425,165 @@ export default function AdminBarcodeQR() {
                             />
                         </div>
 
-                        {/* Price */}
-                        <div>
-                            <label className={labelCls}>Price ($) *</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={data.price}
-                                onChange={(e) => setData((s) => ({ ...s, price: e.target.value }))}
-                                className={inputCls}
-                                placeholder="0.00"
-                            />
-                        </div>
+                        <CategoryPicker
+                            categories={categories}
+                            value={data.category_id || ""}
+                            onChange={(id) => setData((s) => ({ ...s, category_id: id }))}
+                            labelCls={labelCls}
+                            inputCls={inputCls}
+                            disabled={isUploading}
+                        />
 
-                        {/* Details */}
-                        <div>
-                            <label className={labelCls}>Details</label>
-                            <textarea
-                                value={data.details || ""}
-                                onChange={(e) => setData((s) => ({ ...s, details: e.target.value }))}
-                                rows={2}
-                                className={textareaCls}
-                                placeholder="Short product details or notes…"
-                            />
-                        </div>
-
-                        {/* Reduced price */}
-                        <div className="space-y-3 rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Reduced price</p>
-                                    <p className="text-xs text-slate-400 mt-0.5">Sales price will be crossed out</p>
+                        <div className="space-y-4 rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30">
+                            <div>
+                                <label className={labelCls}>Product condition</label>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    {[
+                                        { value: "new", label: "New", hint: "ទំនិញថ្មី" },
+                                        { value: "second_hand", label: "Second-hand", hint: "ទំនិញមួយទឹក" },
+                                    ].map((option) => (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => setData((s) => applySecondHandBundleDefaults({
+                                                ...s,
+                                                product_condition: option.value,
+                                            }))}
+                                            className={`rounded-xl border px-4 py-3 text-left transition ${productCondition === option.value
+                                                ? "border-[color:var(--admin-primary)] bg-[rgba(var(--admin-primary-rgb),0.08)] text-slate-900 ring-2 ring-[rgba(var(--admin-primary-rgb),0.12)] dark:text-white"
+                                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-slate-500"
+                                                }`}
+                                        >
+                                            <span className="flex items-center gap-2 text-sm font-bold">
+                                                <span className={`h-3 w-3 rounded-full border ${productCondition === option.value ? "border-[color:var(--admin-primary)] bg-[color:var(--admin-primary)]" : "border-slate-300 dark:border-slate-500"}`} />
+                                                {option.label}
+                                            </span>
+                                            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{option.hint}</span>
+                                        </button>
+                                    ))}
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setData((s) => ({ ...s, compare_at_price: s.compare_at_price ? "" : (s.price || "10.00") }))}
-                                    className={`w-11 h-6 rounded-full transition-all flex items-center ${data.compare_at_price ? "bg-[color:var(--admin-primary)]" : "bg-slate-300 dark:bg-slate-600"}`}
-                                >
-                                    <span className={`w-4 h-4 bg-white rounded-full transform transition-transform mx-0.5 ${data.compare_at_price ? "translate-x-5" : "translate-x-0"}`} />
-                                </button>
                             </div>
-                            {data.compare_at_price !== "" && data.compare_at_price !== undefined && (
-                                <>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={data.compare_at_price}
-                                        onChange={(e) => setData((s) => ({ ...s, compare_at_price: e.target.value }))}
-                                        className={inputCls}
-                                        placeholder="Original price (will be crossed out)"
-                                    />
-                                    {data.compare_at_price && data.price && (
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                                            Sales price will be crossed out, for example:{" "}
-                                            <span className="line-through text-slate-400">${parseFloat(data.compare_at_price || 0).toFixed(2)}</span>{" "}
-                                            for{" "}
-                                            <span className="font-semibold text-[color:var(--admin-primary)]">${parseFloat(data.price || 0).toFixed(2)}</span>
-                                        </p>
+
+                            {isSecondHand && (
+                                <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
+                                    <div>
+                                        <label className={labelCls}>Sale type</label>
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                            {[
+                                                { value: "single", label: "Single Item", hint: "លក់រាយមួយៗ" },
+                                                { value: "average_bundle", label: "Average Bundle", hint: "លក់តម្លៃរួម" },
+                                            ].map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    onClick={() => setData((s) => applySecondHandBundleDefaults({
+                                                        ...s,
+                                                        second_hand_sale_type: option.value,
+                                                    }))}
+                                                    className={`rounded-xl border px-4 py-3 text-left transition ${saleType === option.value
+                                                        ? "border-amber-500 bg-white text-slate-900 ring-2 ring-amber-400/20 dark:bg-slate-900 dark:text-white"
+                                                        : "border-amber-200 bg-white/70 text-slate-700 hover:bg-white dark:border-amber-400/20 dark:bg-slate-900/50 dark:text-slate-200"
+                                                        }`}
+                                                >
+                                                    <span className="flex items-center gap-2 text-sm font-bold">
+                                                        <span className={`h-3 w-3 rounded-full border ${saleType === option.value ? "border-amber-500 bg-amber-500" : "border-slate-300 dark:border-slate-500"}`} />
+                                                        {option.label}
+                                                    </span>
+                                                    <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{option.hint}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {isAverageBundle && (
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                <div>
+                                                    <label className={labelCls}>Total bundle cost ($)</label>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step="0.01"
+                                                        value={data.bundle_total_cost || ""}
+                                                        onChange={(e) => setData((s) => applySecondHandBundleDefaults({ ...s, bundle_total_cost: e.target.value }))}
+                                                        className={inputCls}
+                                                        placeholder="150.00"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}>Total quantity</label>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        value={data.bundle_total_quantity || ""}
+                                                        onChange={(e) => setData((s) => applySecondHandBundleDefaults({ ...s, bundle_total_quantity: e.target.value }))}
+                                                        className={inputCls}
+                                                        placeholder="50"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="rounded-lg bg-white/80 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-slate-900/70 dark:text-amber-200">
+                                                System will set Cost ($) to {bundleUnitCost ? `$${bundleUnitCost}` : "$0.00"} and fill On hand from Total quantity automatically.
+                                            </p>
+                                        </div>
                                     )}
-                                </>
+                                </div>
                             )}
                         </div>
 
-                        {/* Category */}
-                        <div>
-                            <label className={labelCls}>Category</label>
-                            <select
-                                value={data.category_id != null && data.category_id !== "" ? String(data.category_id) : ""}
-                                onChange={(e) => setData((s) => ({ ...s, category_id: e.target.value }))}
-                                className={selectCls}
-                            >
-                                <option value="">Select category</option>
-                                {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-                            </select>
-                        </div>
+                        {!usesSimpleTotalStock && (
+                            <>
+                                {/* Price */}
+                                <div>
+                                    <label className={labelCls}>Price ($) *</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={data.price}
+                                        onChange={(e) => setData((s) => ({ ...s, price: e.target.value }))}
+                                        className={inputCls}
+                                        placeholder="0.00"
+                                    />
+                                </div>
 
-                        {/* Label name (Brand) */}
-                        <div>
-                            <label className={labelCls}>Label name (Brand)</label>
-                            <select
-                                value={data.brand_id != null && data.brand_id !== "" ? String(data.brand_id) : ""}
-                                onChange={(e) => setData((s) => ({ ...s, brand_id: e.target.value }))}
-                                className={selectCls}
-                            >
-                                <option value="">Select brand</option>
-                                {brands.map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
-                            </select>
-                        </div>
+                                {/* Reduced price */}
+                                <div className="space-y-3 rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Reduced price</p>
+                                            <p className="text-xs text-slate-400 mt-0.5">Sales price will be crossed out</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setData((s) => ({ ...s, compare_at_price: s.compare_at_price ? "" : (s.price || "10.00") }))}
+                                            className={`w-11 h-6 rounded-full transition-all flex items-center ${data.compare_at_price ? "bg-[color:var(--admin-primary)]" : "bg-slate-300 dark:bg-slate-600"}`}
+                                        >
+                                            <span className={`w-4 h-4 bg-white rounded-full transform transition-transform mx-0.5 ${data.compare_at_price ? "translate-x-5" : "translate-x-0"}`} />
+                                        </button>
+                                    </div>
+                                    {data.compare_at_price !== "" && data.compare_at_price !== undefined && (
+                                        <>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={data.compare_at_price}
+                                                onChange={(e) => setData((s) => ({ ...s, compare_at_price: e.target.value }))}
+                                                className={inputCls}
+                                                placeholder="Original price (will be crossed out)"
+                                            />
+                                            {data.compare_at_price && data.price && (
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    Sales price will be crossed out, for example:{" "}
+                                                    <span className="line-through text-slate-400">${parseFloat(data.compare_at_price || 0).toFixed(2)}</span>{" "}
+                                                    for{" "}
+                                                    <span className="font-semibold text-[color:var(--admin-primary)]">${parseFloat(data.price || 0).toFixed(2)}</span>
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
 
                         {/* Description + Suggest */}
                         <div>
@@ -1378,88 +1595,62 @@ export default function AdminBarcodeQR() {
                                 className={textareaCls}
                                 placeholder="Product description…"
                             />
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!data.name) return;
-                                    const cat = categories.find((c) => String(c.id) === String(data.category_id));
-                                    const brand = brands.find((b) => String(b.id) === String(data.brand_id));
-                                    const suggested = [
-                                        `${data.name}${brand ? ` by ${brand.name}` : ""}${cat ? ` — ${cat.name}` : ""}.`,
-                                        "Premium quality product crafted for everyday comfort and style.",
-                                        data.price ? `Available at $${parseFloat(data.price).toFixed(2)}.` : "",
-                                    ].filter(Boolean).join(" ");
-                                    setData((s) => ({ ...s, description: suggested }));
-                                }}
-                                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                </svg>
-                                Suggest description
-                            </button>
                         </div>
 
-                        {/* Product code */}
-                        <div>
-                            <label className={labelCls}>Product code (SKU)</label>
-                            <input
-                                value={data.sku || ""}
-                                onChange={(e) => setData((s) => ({ ...s, sku: e.target.value }))}
-                                className={`${inputCls} font-mono`}
-                                placeholder="SKU-001"
-                            />
-                        </div>
-
-                        {/* Barcode Code */}
-                        <div>
-                            <label className={labelCls}>Barcode Code</label>
-                            <div className="flex gap-2">
-                                <input
-                                    value={data.barcode_code || ""}
-                                    onChange={(e) => setData((s) => ({ ...s, barcode_code: sanitizeCode(e.target.value) }))}
-                                    maxLength={30}
-                                    className={`${inputCls} flex-1 font-mono tracking-widest`}
-                                    placeholder="Custom code or auto-generate…"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setData((s) => ({ ...s, barcode_code: generateCode() }))}
-                                    className="px-3 py-2 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all whitespace-nowrap flex items-center gap-1.5"
-                                >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    Auto
-                                </button>
-                            </div>
-                            {(data.barcode_code || data.slug) && (
-                                <div className="mt-2 p-2 bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col items-center overflow-hidden">
-                                    <Barcode
-                                        value={data.barcode_code || data.slug || "CODE"}
-                                        width={1.3}
-                                        height={42}
-                                        fontSize={10}
-                                        margin={4}
-                                        background="transparent"
-                                        lineColor={isDark ? "#e2e8f0" : "#1e293b"}
+                        {!usesSimpleTotalStock && (
+                            <div>
+                                <label className={labelCls}>Barcode Code</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        value={data.barcode_code || ""}
+                                        onChange={(e) => setData((s) => ({ ...s, barcode_code: sanitizeCode(e.target.value) }))}
+                                        maxLength={30}
+                                        className={`${inputCls} flex-1 font-mono tracking-widest`}
+                                        placeholder="Custom code or auto-generate…"
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setData((s) => ({ ...s, barcode_code: generateCode() }))}
+                                        className="px-3 py-2 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all whitespace-nowrap flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Auto
+                                    </button>
                                 </div>
-                            )}
-                        </div>
+                                {(data.barcode_code || data.slug) && (
+                                    <div className="mt-2 p-2 bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col items-center overflow-hidden">
+                                        <Barcode
+                                            value={data.barcode_code || data.slug || "CODE"}
+                                            width={1.3}
+                                            height={42}
+                                            fontSize={10}
+                                            margin={4}
+                                            background="transparent"
+                                            lineColor={isDark ? "#e2e8f0" : "#1e293b"}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-                        {/* Cost */}
-                        <div>
-                            <label className={labelCls}>Cost ($)</label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={data.cost || ""}
-                                onChange={(e) => setData((s) => ({ ...s, cost: e.target.value }))}
-                                className={inputCls}
-                                placeholder="Cost price (internal)"
-                            />
-                        </div>
+                        {isAverageBundle && (
+                            <div>
+                                <label className={labelCls}>Cost ($)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={bundleUnitCost}
+                                    disabled
+                                    className={`${inputCls} cursor-not-allowed opacity-60`}
+                                    placeholder="Auto-calculated from bundle"
+                                />
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    Cost is calculated from Total bundle cost divided by Total quantity.
+                                </p>
+                            </div>
+                        )}
 
                         {/* Unit */}
                         <div>
@@ -1479,36 +1670,67 @@ export default function AdminBarcodeQR() {
                             </select>
                         </div>
 
+                        <CountryOriginPicker
+                            value={data.origin || ""}
+                            onChange={(code) => setData((s) => ({ ...s, origin: code }))}
+                            labelCls={labelCls}
+                            inputCls={inputCls}
+                        />
+
                     </div>
 
                     <div className="min-w-0 space-y-6 xl:col-span-5">
                         {/* ── Stock ── */}
                         <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-5 ring-1 ring-slate-950/[0.02] dark:border-slate-700 dark:bg-slate-900 dark:ring-white/[0.03]">
                             <div className="flex items-center justify-between gap-3">
-                                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Stock</h3>
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Stock</h3>
+                                    {usesSimpleTotalStock && (
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">This listing uses one total stock count for the web store and POS.</p>
+                                    )}
+                                </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400 text-right max-w-[140px] sm:max-w-none">Manage stock for this product</span>
+                                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400 text-right max-w-[140px] sm:max-w-none">
+                                        {usesSimpleTotalStock ? "Stock is tracked" : "Manage stock for this product"}
+                                    </span>
                                     <button
                                         type="button"
+                                        disabled={usesSimpleTotalStock}
                                         onClick={() => setData((s) => ({ ...s, manage_stock: !s.manage_stock, show_stock_movement: s.manage_stock ? false : s.show_stock_movement }))}
-                                        className={`w-11 h-6 rounded-full transition-all flex items-center shrink-0 ${data.manage_stock ? "bg-[color:var(--admin-primary)]" : "bg-slate-300 dark:bg-slate-600"}`}
+                                        className={`w-11 h-6 rounded-full transition-all flex items-center shrink-0 ${usesSimpleTotalStock || data.manage_stock ? "bg-[color:var(--admin-primary)]" : "bg-slate-300 dark:bg-slate-600"} ${usesSimpleTotalStock ? "cursor-not-allowed opacity-80" : ""}`}
                                     >
-                                        <span className={`w-4 h-4 bg-white rounded-full transform transition-transform mx-0.5 ${data.manage_stock ? "translate-x-5" : "translate-x-0"}`} />
+                                        <span className={`w-4 h-4 bg-white rounded-full transform transition-transform mx-0.5 ${usesSimpleTotalStock || data.manage_stock ? "translate-x-5" : "translate-x-0"}`} />
                                     </button>
                                 </div>
                             </div>
+                            <div>
+                                <label className={labelCls}>Date in</label>
+                                <input
+                                    type="date"
+                                    value={data.date_in || ""}
+                                    onChange={(e) => setData((s) => ({ ...s, date_in: e.target.value }))}
+                                    className={inputCls}
+                                />
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Warehouse stock-in date for aging status</p>
+                            </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className={labelCls}>On hand</label>
+                                    <label className={labelCls}>{usesSimpleTotalStock ? "Total stock" : "On hand"}</label>
                                     <input
                                         type="number"
                                         min={0}
                                         value={data.stock ?? ""}
                                         onChange={(e) => setData((s) => ({ ...s, stock: e.target.value }))}
-                                        disabled={!data.manage_stock}
-                                        className={`${inputCls} ${!data.manage_stock ? "opacity-50 cursor-not-allowed" : ""}`}
+                                        disabled={(!data.manage_stock && !usesSimpleTotalStock) || isAverageBundle}
+                                        className={`${inputCls} ${(!data.manage_stock && !usesSimpleTotalStock) || isAverageBundle ? "opacity-50 cursor-not-allowed" : ""}`}
                                         placeholder="0"
                                     />
+                                    {isAverageBundle && (
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Auto-filled from Total quantity.</p>
+                                    )}
+                                    {usesSimpleTotalStock && (
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">New and second-hand single items deduct from this count one unit at a time.</p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className={labelCls}>Minimum</label>
@@ -1517,8 +1739,8 @@ export default function AdminBarcodeQR() {
                                         min={0}
                                         value={data.min_stock ?? ""}
                                         onChange={(e) => setData((s) => ({ ...s, min_stock: e.target.value }))}
-                                        disabled={!data.manage_stock}
-                                        className={`${inputCls} ${!data.manage_stock ? "opacity-50 cursor-not-allowed" : ""}`}
+                                        disabled={!data.manage_stock && !usesSimpleTotalStock}
+                                        className={`${inputCls} ${!data.manage_stock && !usesSimpleTotalStock ? "opacity-50 cursor-not-allowed" : ""}`}
                                         placeholder="0"
                                     />
                                 </div>
@@ -1558,130 +1780,6 @@ export default function AdminBarcodeQR() {
                             </div>
                         </div>
 
-                        {/* ── Product with variation (NEW) ── */}
-                        <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-5 ring-1 ring-slate-950/[0.02] dark:border-slate-700 dark:bg-slate-900 dark:ring-white/[0.03]">
-                            <div className="flex items-start gap-4">
-                                <div className="shrink-0 w-[100px] flex flex-col items-center gap-1">
-                                    <div className="relative w-full flex justify-center">
-                                        <div className="w-14 h-16 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-[10px] text-slate-400 text-center px-1">tee</div>
-                                        <span className="absolute -right-1 top-1/2 -translate-y-1/2 text-pink-500 text-lg">→</span>
-                                        <div className="flex flex-col gap-0.5 ml-2">
-                                            <div className="w-7 h-5 rounded-sm bg-[color:var(--admin-primary)]" />
-                                            <div className="w-7 h-5 rounded-sm bg-slate-200 dark:bg-slate-600" />
-                                            <div className="w-7 h-5 rounded-sm bg-slate-700" />
-                                        </div>
-                                    </div>
-                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">T-Shirts</span>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Product with variation</h3>
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md text-white bg-[color:var(--admin-primary)]">NEW</span>
-                                    </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
-                                        Add variations like color, size, voltage, or flavor to your products, keep your stock organized, and make sales easier.
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setData((s) => ({ ...s, has_variation: true }))}
-                                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-semibold text-sm text-white transition-opacity hover:brightness-110 bg-[color:var(--admin-primary)]"
-                                    >
-                                        Add variation
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Enable variation fields</span>
-                                <button
-                                    type="button"
-                                    onClick={() => setData((s) => ({ ...s, has_variation: !s.has_variation }))}
-                                    className={`w-11 h-6 rounded-full transition-all flex items-center ${data.has_variation ? "bg-[color:var(--admin-primary)]" : "bg-slate-300 dark:bg-slate-600"}`}
-                                >
-                                    <span className={`w-4 h-4 bg-white rounded-full transform transition-transform mx-0.5 ${data.has_variation ? "translate-x-5" : "translate-x-0"}`} />
-                                </button>
-                            </div>
-                            {data.has_variation && (
-                                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-4">
-                                    <div>
-                                        <label className={labelCls}>Product type</label>
-                                        <select
-                                            value={data.variation_product_type || "Clothes"}
-                                            onChange={(e) => setData((s) => ({ ...s, variation_product_type: e.target.value, variation_sizes: [] }))}
-                                            className={selectCls}
-                                        >
-                                            {PRODUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className={labelCls}>Colors</label>
-                                        <input
-                                            value={data.variation_colors || ""}
-                                            onChange={(e) => setData((s) => ({ ...s, variation_colors: e.target.value }))}
-                                            className={inputCls}
-                                            placeholder="Black, White, Red"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className={labelCls}>Sizes</label>
-                                        <div className="flex flex-wrap gap-2 mb-2">
-                                            {sizeOptionsFor(data).map((size) => {
-                                                const sizes = Array.isArray(data.variation_sizes) ? data.variation_sizes : [];
-                                                const on = sizes.includes(size);
-                                                return (
-                                                    <label key={size} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm cursor-pointer transition ${on ? "border-slate-400 bg-slate-100 dark:bg-slate-700 dark:border-slate-500 font-semibold" : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"}`}>
-                                                        <input
-                                                            type="checkbox"
-                                                            className="hidden"
-                                                            checked={on}
-                                                            onChange={() => setData((s) => {
-                                                                const cur = Array.isArray(s.variation_sizes) ? s.variation_sizes : [];
-                                                                return { ...s, variation_sizes: cur.includes(size) ? cur.filter((v) => v !== size) : [...cur, size] };
-                                                            })}
-                                                        />
-                                                        {size}
-                                                    </label>
-                                                );
-                                            })}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input
-                                                value={data.variation_custom_size || ""}
-                                                onChange={(e) => setData((s) => ({ ...s, variation_custom_size: e.target.value }))}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter") {
-                                                        e.preventDefault();
-                                                        const v = (data.variation_custom_size || "").trim();
-                                                        if (!v) return;
-                                                        setData((s) => {
-                                                            const cur = Array.isArray(s.variation_sizes) ? s.variation_sizes : [];
-                                                            return { ...s, variation_sizes: cur.includes(v) ? cur : [...cur, v], variation_custom_size: "" };
-                                                        });
-                                                    }
-                                                }}
-                                                placeholder="Custom size…"
-                                                className="flex-1 h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-sm outline-none"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const v = (data.variation_custom_size || "").trim();
-                                                    if (!v) return;
-                                                    setData((s) => {
-                                                        const cur = Array.isArray(s.variation_sizes) ? s.variation_sizes : [];
-                                                        return { ...s, variation_sizes: cur.includes(v) ? cur : [...cur, v], variation_custom_size: "" };
-                                                    });
-                                                }}
-                                                className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white shrink-0"
-                                                style={{ backgroundColor: accentIsWhite ? "#0b0b0f" : accentColor, color: accentIsWhite ? "#fff" : "#fff" }}
-                                            >
-                                                Add
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
                     </div>
                 </div>
 
@@ -1706,16 +1804,16 @@ export default function AdminBarcodeQR() {
 
     if (isNewPage) {
         return (
-            <div className="min-h-screen w-full min-w-0 bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
+            <div className="w-full min-w-0 font-sans text-slate-950 dark:text-slate-100">
                 {successToast}
-                <header className="sticky top-0 z-20 border-b border-slate-200/90 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
-                    <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-4 py-4">
-                        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                <div className="w-full min-w-0 space-y-6 pb-28">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
                             <button
                                 type="button"
-                                onClick={() => navigate("/admin/barcode-qr")}
+                                onClick={() => navigate(stockBase)}
                                 disabled={isCreating}
-                                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1724,26 +1822,27 @@ export default function AdminBarcodeQR() {
                             </button>
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white">Add a product</h1>
-                                    <span className="inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                    <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a product</h1>
+                                    <span className="inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-transparent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-400">
                                         Stock &amp; Inventory
                                     </span>
                                 </div>
-                                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Fill in the details below, then create your catalog item.</p>
+                                <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                                    Fill in the details below, then create your catalog item.
+                                </p>
                             </div>
                         </div>
                         <button
                             type="button"
-                            className="hidden rounded-xl border border-transparent p-2 text-slate-400 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-600 sm:inline-flex dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-[5px] border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                             title="Form tips: use a clear product name and price. Barcode can be auto-generated."
                         >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </button>
                     </div>
-                </header>
-                <main className="w-full min-w-0 py-8 pb-28">
+                <div className="w-full min-w-0 pt-2">
                     {err && (
                         <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50/95 p-4 dark:border-red-900/60 dark:bg-red-950/40">
                             <span className="flex-1 text-sm font-medium text-red-700 dark:text-red-200">{err}</span>
@@ -1757,7 +1856,7 @@ export default function AdminBarcodeQR() {
                         <div className="mt-10 flex max-w-none flex-col-reverse gap-3 border-t border-slate-200 pt-8 sm:flex-row dark:border-slate-800">
                             <button
                                 type="button"
-                                onClick={() => navigate("/admin/barcode-qr")}
+                                onClick={() => navigate(stockBase)}
                                 disabled={isCreating}
                                 className={`flex-1 rounded-xl border py-3.5 text-sm font-semibold transition disabled:opacity-50 ${isDark
                                     ? "border-slate-600 bg-slate-900/70 text-white hover:bg-slate-800"
@@ -1778,7 +1877,8 @@ export default function AdminBarcodeQR() {
                             </button>
                         </div>
                     </form>
-                </main>
+                </div>
+                </div>
             </div>
         );
     }
@@ -1794,15 +1894,15 @@ export default function AdminBarcodeQR() {
 
     if (isEditPage) {
         return (
-            <div className="min-h-screen w-full min-w-0 bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
+            <div className="w-full min-w-0 font-sans text-slate-950 dark:text-slate-100">
                 {successToast}
-                <header className="sticky top-0 z-20 border-b border-slate-200/90 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95">
-                    <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-4 py-4">
-                        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+                <div className="w-full min-w-0 space-y-6 pb-28">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
                             <button
                                 type="button"
-                                onClick={() => navigate("/admin/barcode-qr")}
-                                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                                onClick={() => navigate(stockBase)}
+                                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1810,45 +1910,25 @@ export default function AdminBarcodeQR() {
                                 Back
                             </button>
                             <div className="min-w-0">
-                                <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white">Edit product</h1>
-                                <p className="truncate text-sm text-slate-500 dark:text-slate-400">{editing.name}</p>
+                                <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Edit product</h1>
+                                <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">{editing.name}</p>
                             </div>
                         </div>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
                             <button
                                 type="button"
-                                className="rounded-xl border border-transparent p-2 text-slate-400 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-600 dark:hover:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                                title="Help"
+                                onClick={resetEditFormToEmpty}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                title="Clear all fields on this form (does not save until you click Save)"
                             >
-                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={duplicateCurrentEdit}
-                                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                Duplicate
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => del(editing.id, true)}
-                                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold ${isDark
-                                    ? "border-red-900/60 bg-red-950/40 text-white hover:bg-red-950/70"
-                                    : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                                    }`}
-                            >
-                                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                Delete
+                                Reset
                             </button>
                         </div>
                     </div>
-                </header>
-                <main className="w-full min-w-0 py-8 pb-28">
+                <div className="w-full min-w-0 pt-2">
                     {err && (
                         <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50/95 p-4 dark:border-red-900/60 dark:bg-red-950/40">
                             <span className="flex-1 text-sm font-medium text-red-700 dark:text-red-200">{err}</span>
@@ -1862,7 +1942,7 @@ export default function AdminBarcodeQR() {
                         <div className="mt-10 flex flex-col-reverse gap-3 border-t border-slate-200 pt-8 sm:flex-row dark:border-slate-800">
                             <button
                                 type="button"
-                                onClick={() => navigate("/admin/barcode-qr")}
+                                onClick={() => navigate(stockBase)}
                                 className={`flex-1 rounded-xl border py-3.5 text-sm font-semibold transition ${isDark
                                     ? "border-slate-600 bg-slate-900/70 text-white hover:bg-slate-800"
                                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -1879,39 +1959,47 @@ export default function AdminBarcodeQR() {
                             </button>
                         </div>
                     </div>
-                </main>
+                </div>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-[#F6F8FB] p-0 font-sans text-slate-950 dark:bg-slate-950 dark:text-slate-100">
+        <div className="font-sans text-slate-950 dark:text-slate-100">
             {successToast}
+            <AdminConfirmDialog
+                open={!!pendingDelete}
+                onClose={() => {
+                    if (deleteBusy) return;
+                    setPendingDelete(null);
+                }}
+                onConfirm={confirmDelete}
+                title={pendingDelete?.type === "product" ? "Delete this product?" : "Delete this preset?"}
+                message={
+                    pendingDelete?.type === "product"
+                        ? `${pendingDelete.product?.name || "This product"} will be removed from Products.`
+                        : "This action cannot be undone."
+                }
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                destructive
+                busy={deleteBusy}
+            />
 
-            <div className="w-full min-w-0 space-y-4">
-                <section className="relative overflow-hidden rounded-[24px] border border-white/80 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.07)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:shadow-black/30 dark:ring-white/10 sm:p-5">
-                    <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/10" />
-                    <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-60 rounded-full bg-blue-300/15 blur-3xl dark:bg-blue-500/10" />
-
-                    <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                        <div className="min-w-0 max-w-3xl">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
-                                Inventory Control
-                            </div>
-                            <h1 className="mt-2 text-2xl font-black tracking-[-0.045em] text-slate-950 dark:text-white sm:text-3xl">
-                                Stock &amp; Inventory
-                            </h1>
-                            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-                                {rows.length} registered item{rows.length !== 1 ? "s" : ""}. Manage labels, scan sales, product availability, and catalog visibility from one polished workspace.
+            <div className="w-full min-w-0 space-y-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Stock &amp; Inventory</h1>
+                            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                                {rows.length} registered item{rows.length !== 1 ? "s" : ""}. Manage labels, scan sales, and catalog visibility.
                             </p>
                         </div>
-
-                        <div className="flex flex-col gap-2 sm:flex-row">
+                        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
                             <button
                                 type="button"
                                 onClick={exportCsv}
-                                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+                                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -1920,63 +2008,16 @@ export default function AdminBarcodeQR() {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => navigate("/admin/barcode-qr/new")}
-                                className="inline-flex h-11 min-w-[9.75rem] items-center justify-center gap-2 rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-5 text-sm font-black text-white shadow-[0_16px_34px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition-all duration-300 hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_20px_44px_rgba(16,185,129,0.55)] hover:ring-emerald-500/25 active:translate-y-0 dark:border-emerald-300 dark:shadow-[0_18px_42px_rgba(16,185,129,0.32)] dark:ring-emerald-400/20"
+                                onClick={() => navigate(`${stockBase}/new`)}
+                                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[5px] bg-[color:var(--admin-primary)] px-3 text-sm font-medium text-white transition hover:brightness-110"
                             >
-                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                 </svg>
-                                Add product
+                                Add Product
                             </button>
                         </div>
-                    </div>
-
-                    <div className="relative mt-4 grid gap-3 md:grid-cols-3">
-                        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Inventory health</p>
-                            <div className="mt-3 flex items-end justify-between gap-3">
-                                <p className="text-3xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                                    <AnimatedNumber value={inventoryInsights.health} suffix="%" />
-                                </p>
-                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20">Live</span>
-                            </div>
-                            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                                <div
-                                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-[width] duration-700 ease-out"
-                                    style={{ width: metricsAnimated ? `${Math.min(100, inventoryInsights.health)}%` : "0%" }}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Active catalog</p>
-                            <p className="mt-3 text-3xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
-                                <AnimatedNumber value={inventoryInsights.activeRows} />
-                            </p>
-                            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Visible products ready for customers.</p>
-                        </div>
-
-                        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Stock mix</p>
-                            <div className="mt-3 space-y-2.5">
-                                {inventoryInsights.stockMix.map((item) => (
-                                    <div key={item.key} className="grid grid-cols-[5.5rem_1fr_2rem] items-center gap-3 text-sm">
-                                        <span className="font-semibold text-slate-600 dark:text-slate-300">{item.label}</span>
-                                        <span className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                                            <span
-                                                className={`block h-full rounded-full transition-[width] duration-700 ease-out ${item.color}`}
-                                                style={{ width: metricsAnimated ? `${Math.max(8, (item.value / inventoryInsights.maxMix) * 100)}%` : "0%" }}
-                                            />
-                                        </span>
-                                        <span className="text-right font-black text-slate-900 dark:text-white">
-                                            <AnimatedNumber value={item.value} />
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </section>
+                </div>
 
                 {err && (
                     <div className="flex items-center gap-3 rounded-3xl border border-red-200 bg-red-50/95 p-4 text-sm font-semibold text-red-700 shadow-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
@@ -2015,27 +2056,54 @@ export default function AdminBarcodeQR() {
                                 <option value="all">All items</option>
                                 <option value="low">Low in stock</option>
                                 <option value="out">Out of stock</option>
-                                <option value="inactive">Inactive catalog</option>
                             </select>
-                            <button
-                                type="button"
-                                onClick={() => document.getElementById("bqr-category-anchor")?.scrollIntoView({ behavior: "smooth" })}
-                                className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
-                            >
-                                Categories
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setPreviewItem(displayRows[0] || null)}
-                                disabled={!displayRows.length}
-                                className="h-10 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
-                            >
-                                Preview
-                            </button>
                         </div>
                     </div>
 
-                    {(search || stockFilter !== "all") && (
+                    <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-[#ECE8DD] bg-[#F4EFE8]/80 px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-[#6b6b64] dark:text-slate-300">
+                            <svg className="h-4 w-4 text-[#9a948a] dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Date In range:
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <label className="flex items-center gap-2 text-sm font-medium text-[#6b6b64] dark:text-slate-400">
+                                <span>From</span>
+                                <input
+                                    type="date"
+                                    value={dateInFrom}
+                                    onChange={(e) => setDateInFrom(e.target.value)}
+                                    max={dateInTo || undefined}
+                                    className="h-9 min-w-[9.5rem] rounded-lg border border-[#E0DAD0] bg-white px-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/15 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100"
+                                />
+                            </label>
+                            <label className="flex items-center gap-2 text-sm font-medium text-[#6b6b64] dark:text-slate-400">
+                                <span>To</span>
+                                <input
+                                    type="date"
+                                    value={dateInTo}
+                                    onChange={(e) => setDateInTo(e.target.value)}
+                                    min={dateInFrom || undefined}
+                                    className="h-9 min-w-[9.5rem] rounded-lg border border-[#E0DAD0] bg-white px-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/15 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100"
+                                />
+                            </label>
+                            {hasDateInRangeFilter && (
+                                <button
+                                    type="button"
+                                    onClick={clearDateInRange}
+                                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#E0DAD0] bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10"
+                                >
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {(search || stockFilter !== "all" || hasDateInRangeFilter) && (
                         <div className="mt-4 flex flex-wrap gap-2">
                             {search && (
                                 <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20">
@@ -2047,100 +2115,14 @@ export default function AdminBarcodeQR() {
                                     Filter: {stockFilter} x
                                 </button>
                             )}
+                            {hasDateInRangeFilter && (
+                                <button type="button" onClick={clearDateInRange} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
+                                    Date in: {dateInFrom ? formatDateIn(dateInFrom) : "…"} – {dateInTo ? formatDateIn(dateInTo) : "…"} x
+                                </button>
+                            )}
                         </div>
                     )}
                 </section>
-
-                {rows.length > 0 && (
-                    <>
-                        <section className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                            {kpiCards.map((card) => (
-                                <article
-                                    key={card.title}
-                                    className="group relative overflow-hidden rounded-[22px] border border-white/80 bg-white p-4 shadow-[0_12px_36px_rgba(15,23,42,0.055)] ring-1 ring-slate-950/[0.03] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(15,23,42,0.09)] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10"
-                                >
-                                    <div className={`absolute inset-x-0 top-0 h-16 bg-gradient-to-br ${card.tone} opacity-70`} />
-                                    <div className="relative flex items-start justify-between gap-3">
-                                        <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${card.tone} ring-1 ring-current/10`}>
-                                            <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
-                                            </svg>
-                                        </div>
-                                        <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
-                                            {card.trend}
-                                        </span>
-                                    </div>
-                                    <div className="relative mt-3">
-                                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{card.title}</p>
-                                        <p className="mt-1 text-[1.45rem] font-black leading-none tracking-[-0.04em] text-slate-950 dark:text-white">
-                                            <AnimatedNumber value={card.value} prefix={card.prefix || ""} decimals={card.decimals || 0} />
-                                        </p>
-                                        <p className="mt-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{card.note}</p>
-                                    </div>
-                                </article>
-                            ))}
-                        </section>
-
-                        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
-                            <article id="bqr-category-anchor" className="rounded-[24px] border border-white/80 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">Category value</p>
-                                        <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">Inventory distribution</h2>
-                                    </div>
-                                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-200 dark:bg-blue-400/10 dark:text-blue-300 dark:ring-blue-400/20">
-                                        Top {inventoryInsights.categoryBars.length || 0}
-                                    </span>
-                                </div>
-                                <div className="mt-4 space-y-3.5">
-                                    {inventoryInsights.categoryBars.length ? inventoryInsights.categoryBars.map((item) => (
-                                        <div key={item.label} className="space-y-2">
-                                            <div className="flex items-center justify-between gap-4 text-sm">
-                                                <span className="font-bold text-slate-700 dark:text-slate-200">{item.label}</span>
-                                                <span className="font-black tabular-nums text-slate-950 dark:text-white">
-                                                    <AnimatedNumber value={item.value} prefix="$" decimals={2} />
-                                                </span>
-                                            </div>
-                                            <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                                                <div
-                                                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-400 to-blue-500 transition-[width] duration-700 ease-out"
-                                                    style={{ width: metricsAnimated ? `${Math.max(8, (item.value / inventoryInsights.maxCategoryValue) * 100)}%` : "0%" }}
-                                                />
-                                            </div>
-                                        </div>
-                                    )) : (
-                                        <p className="rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500 dark:bg-white/5 dark:text-slate-400">No category value yet.</p>
-                                    )}
-                                </div>
-                            </article>
-
-                            <article className="rounded-[24px] border border-slate-200 bg-white p-4 text-slate-950 shadow-[0_18px_50px_rgba(15,23,42,0.06)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:ring-white/10">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-300">Smart insights</p>
-                                <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-slate-950 dark:text-white">Operational snapshot</h2>
-                                <div className="mt-4 grid gap-2.5">
-                                    <div className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-200 dark:bg-white/10 dark:ring-white/10">
-                                        <p className="text-sm font-semibold text-slate-500 dark:text-white/60">Stock coverage</p>
-                                        <p className="mt-1 text-lg font-black text-slate-950 dark:text-white">
-                                            <AnimatedNumber value={inventoryStats.units} /> units available
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl bg-emerald-50 p-3 ring-1 ring-emerald-100 dark:bg-white/10 dark:ring-white/10">
-                                        <p className="text-sm font-semibold text-slate-500 dark:text-white/60">Profit runway</p>
-                                        <p className="mt-1 text-lg font-black text-emerald-700 dark:text-emerald-300">
-                                            <AnimatedNumber value={inventoryStats.projectedProfit} prefix="$" decimals={2} />
-                                        </p>
-                                    </div>
-                                    <div className="rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-100 dark:bg-white/10 dark:ring-white/10">
-                                        <p className="text-sm font-semibold text-slate-500 dark:text-white/60">Action needed</p>
-                                        <p className="mt-1 text-lg font-black text-amber-700 dark:text-amber-200">
-                                            <AnimatedNumber value={inventoryStats.lowStock + inventoryStats.outStock} /> products
-                                        </p>
-                                    </div>
-                                </div>
-                            </article>
-                        </section>
-                    </>
-                )}
 
                 {rows.length === 0 ? (
                     <div className="rounded-[30px] border border-white/80 bg-white p-14 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10">
@@ -2151,7 +2133,7 @@ export default function AdminBarcodeQR() {
                         </div>
                         <p className="text-xl font-black tracking-tight text-slate-950 dark:text-white">No inventory items yet</p>
                         <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">Create your first product to start tracking labels, units, and catalog visibility.</p>
-                        <button type="button" onClick={() => navigate("/admin/barcode-qr/new")} className="mt-6 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_22px_50px_rgba(16,185,129,0.55)] dark:border-emerald-300 dark:ring-emerald-400/20">
+                        <button type="button" onClick={() => navigate(`${stockBase}/new`)} className="mt-6 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_22px_50px_rgba(16,185,129,0.55)] dark:border-emerald-300 dark:ring-emerald-400/20">
                             Add product
                         </button>
                     </div>
@@ -2169,28 +2151,32 @@ export default function AdminBarcodeQR() {
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#6b6b64] ring-1 ring-[#ECE8DD] dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">{displayRows.length} products</span>
-                                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">{inventoryStats.units} units</span>
+                                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">{trackedUnits} units</span>
                             </div>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[880px] border-collapse text-sm">
+                            <table className="w-full min-w-[1400px] border-collapse text-sm">
                                 <thead>
                                     <tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                                         <th className="w-10 px-3 py-2">
                                             <input type="checkbox" className="rounded border-slate-300 dark:border-slate-600" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
                                         </th>
-                                        <th className="min-w-[260px] px-4 py-2">Products</th>
+                                        <th className="min-w-[340px] px-4 py-2">Products</th>
                                         <th id="bqr-category-anchor" className="w-40 px-4 py-2">Category</th>
+                                        <th className="min-w-[11.5rem] w-52 px-4 py-2 text-center">Condition</th>
+                                        <th className="w-36 px-4 py-2">Origin</th>
                                         <th className="w-36 px-4 py-2 text-center">Stock</th>
-                                        <th className="w-28 px-4 py-2 text-right">Price</th>
-                                        <th className="w-28 px-4 py-2 text-center">Catalog</th>
+                                        <th className="w-32 px-4 py-2">Date in</th>
+                                        <th className="w-32 px-4 py-2 text-center">Status</th>
+                                        <th className="w-28 px-4 py-2 text-right">Price unit</th>
+                                        <th className="w-32 px-4 py-2 text-right">Total price</th>
                                         <th className="w-28 px-4 py-2 text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {displayRows.map((item) => {
                                         const barcodeVal = item.slug || slugify(item.name) || "ITEM";
-                                        const cat = categories.find((c) => String(c.id) === String(item.category_id));
+                                        const catLabel = formatCategoryLabel(resolveItemCategoryId(item), categories);
                                         const st = item.manage_stock ? (parseInt(item.stock, 10) || 0) : null;
                                         const mn = item.manage_stock ? (parseInt(item.min_stock, 10) || 0) : 0;
                                         const stockBadge = st === null
@@ -2200,6 +2186,13 @@ export default function AdminBarcodeQR() {
                                                 : mn > 0 && st <= mn
                                                     ? { label: "Low stock", tone: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20", dot: "bg-amber-500" }
                                                     : { label: `${st} units`, tone: "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20", dot: "bg-emerald-500" };
+                                        const dateIn = effectiveDateIn(item);
+                                        const ageStatus = getStockAgeStatus(dateIn);
+                                        const conditionDisplay = getProductConditionDisplay(item);
+                                        const averageUnitPrice = averageUnitPriceForLabel(item);
+                                        const totalPrice = totalPriceForLabel(item);
+                                        const showPrintLabel = canShowPrintLabel(item);
+                                        const linkedProductRows = linkedProductsForLabel(item);
                                         const cellClass = "border-b border-slate-100 bg-white px-3 py-3 align-middle dark:border-white/10 dark:bg-slate-900";
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.03]">
@@ -2209,10 +2202,10 @@ export default function AdminBarcodeQR() {
                                                 <td className={cellClass}>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setPreviewItem(item)}
-                                                        className="flex w-full max-w-xl min-w-0 items-center gap-3 rounded-xl border border-transparent p-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30"
-                                                        title="Click to preview label"
-                                                        aria-label={`Preview label: ${item.name || "item"}`}
+                                                        onClick={() => linkedProductRows.length > 0 && setLinkedProductsItem(item)}
+                                                        className={`flex w-full max-w-xl min-w-0 items-start gap-3 rounded-xl border border-transparent p-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30 ${linkedProductRows.length > 0 ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-white/[0.03]" : "cursor-default"}`}
+                                                        title={linkedProductRows.length > 0 ? "Open chosen products" : "No chosen products"}
+                                                        aria-label={linkedProductRows.length > 0 ? `Open chosen products for ${item.name || "item"}` : `${item.name || "item"} has no chosen products`}
                                                     >
                                                         <div className="relative h-12 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950">
                                                             {item.image_url ? (
@@ -2237,10 +2230,26 @@ export default function AdminBarcodeQR() {
                                                         </div>
                                                     </button>
                                                 </td>
-                                                <td className={cellClass} title={cat?.name || ""}>
+                                                <td className={cellClass} title={catLabel === "—" ? "" : catLabel}>
                                                     <span className="inline-flex max-w-[10rem] items-center rounded-full bg-[#F4EFE8] px-3 py-1.5 text-xs font-semibold text-[#6b4d24] ring-1 ring-[#ECE8DD] dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
-                                                        <span className="truncate">{cat?.name || "-"}</span>
+                                                        <span className="truncate">{catLabel === "—" ? "-" : catLabel}</span>
                                                     </span>
+                                                </td>
+                                                <td className={`${cellClass} text-center`}>
+                                                    {conditionDisplay.kind === "new" ? (
+                                                        <span className={CONDITION_BADGE_NEW}>New</span>
+                                                    ) : (
+                                                        <span className={CONDITION_CHIP_SECOND_HAND} title={`Second-hand · ${conditionDisplay.saleLabel}`}>
+                                                            <span className="whitespace-nowrap text-amber-900 dark:text-amber-100">Second-hand</span>
+                                                            <span className="h-3.5 w-px shrink-0 bg-amber-400/70 dark:bg-amber-300/50" aria-hidden />
+                                                            <span className="whitespace-nowrap rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-sky-800 ring-1 ring-sky-200/80 dark:bg-sky-950/80 dark:text-sky-100 dark:ring-sky-400/40">
+                                                                {conditionDisplay.saleLabel}
+                                                            </span>
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className={`${cellClass} text-[13px] font-semibold text-slate-700 dark:text-slate-300`}>
+                                                    {formatOriginLabel(item.origin)}
                                                 </td>
                                                 <td className={`${cellClass} text-center`}>
                                                     <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold tabular-nums ring-1 ${stockBadge.tone}`}>
@@ -2248,28 +2257,40 @@ export default function AdminBarcodeQR() {
                                                         {stockBadge.label}
                                                     </span>
                                                 </td>
-                                                <td className={`${cellClass} text-right text-[15px] font-extrabold text-slate-900 tabular-nums dark:text-slate-100`}>
-                                                    {item.price != null && item.price !== "" ? `$${parseFloat(item.price).toFixed(2)}` : "-"}
+                                                <td className={`${cellClass} text-[13px] font-semibold text-slate-700 tabular-nums dark:text-slate-300`}>
+                                                    {formatDateIn(dateIn)}
                                                 </td>
                                                 <td className={`${cellClass} text-center`}>
-                                                    <button
-                                                        type="button"
-                                                        role="switch"
-                                                        aria-checked={item.is_active}
-                                                        onClick={() => toggleCatalogActive(item)}
-                                                        className={`relative mx-auto h-7 w-12 rounded-full p-1 ${item.is_active ? "bg-[#10B981]" : "bg-[#D8D2C8] dark:bg-slate-700"}`}
-                                                    >
-                                                        <span className={`block h-5 w-5 rounded-full bg-white shadow-sm ${item.is_active ? "translate-x-5" : "translate-x-0"}`} />
-                                                    </button>
+                                                    <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${ageStatus.tone}`}>
+                                                        {ageStatus.label}
+                                                    </span>
+                                                </td>
+                                                <td className={`${cellClass} text-right text-[15px] font-extrabold text-slate-900 tabular-nums dark:text-slate-100`}>
+                                                    {averageUnitPrice != null ? `$${averageUnitPrice.toFixed(2)}` : "-"}
+                                                </td>
+                                                <td
+                                                    className={`${cellClass} text-right tabular-nums`}
+                                                    title={totalPrice?.sourceCount ? `From ${totalPrice.sourceCount} linked product${totalPrice.sourceCount === 1 ? "" : "s"} / ${totalPrice.units} units` : totalPrice ? `${totalPrice.units} units` : ""}
+                                                >
+                                                    {totalPrice ? (
+                                                        <div className="flex flex-col items-end leading-tight">
+                                                            <span className="text-[15px] font-extrabold text-slate-900 dark:text-slate-100">${totalPrice.amount.toFixed(2)}</span>
+                                                            <span className="mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10">
+                                                                {totalPrice.units} units
+                                                            </span>
+                                                        </div>
+                                                    ) : "-"}
                                                 </td>
                                                 <td className={`${cellClass} text-right`}>
                                                     <div className="inline-flex items-center justify-end gap-1">
-                                                        <button type="button" onClick={() => setPreviewItem(item)} className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10" title="Open label preview & print">
-                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                                            </svg>
-                                                        </button>
-                                                        <button type="button" onClick={() => navigate(`/admin/barcode-qr/${item.id}/edit`)} className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10" title="Edit">
+                                                        {showPrintLabel ? (
+                                                            <button type="button" onClick={() => setPreviewItem(item)} className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10" title="Open label preview & print">
+                                                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                                                </svg>
+                                                            </button>
+                                                        ) : null}
+                                                        <button type="button" onClick={() => navigate(`${stockBase}/${item.id}/edit`)} className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10" title="Edit">
                                                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                             </svg>
@@ -2291,8 +2312,139 @@ export default function AdminBarcodeQR() {
                 )}
             </div>
 
+            {linkedProductsItem && (() => {
+                const linked = linkedProductsForLabel(linkedProductsItem);
+                const titleCode = linkedProductsItem.slug || slugify(linkedProductsItem.name) || "";
+                const totalUnits = linked.reduce((sum, product) => {
+                    const stock = Number(product?.stock);
+                    return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
+                }, 0);
+                return createPortal(
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4 sm:p-6">
+                        <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setLinkedProductsItem(null)} aria-hidden />
+                        <div className="relative my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl ring-1 ring-slate-950/[0.04] dark:border-slate-700/90 dark:bg-slate-900 dark:ring-white/[0.06]" role="dialog" aria-modal="true">
+                            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200/90 bg-white/90 px-5 py-4 backdrop-blur-sm dark:border-slate-700/90 dark:bg-slate-900/90 sm:px-7">
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Chosen Products</p>
+                                    <h3 className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                                        {linkedProductsItem.name || "Stock label"}
+                                    </h3>
+                                    <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
+                                        {titleCode || "-"} · {linked.length} product{linked.length === 1 ? "" : "s"} · {totalUnits} units
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setLinkedProductsItem(null)}
+                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-slate-400 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                    aria-label="Close"
+                                >
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+                                {linked.length === 0 ? (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                                        No products have chosen this label yet.
+                                    </div>
+                                ) : (
+                                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full min-w-[900px] border-collapse text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:bg-white/5 dark:text-slate-400">
+                                                        <th className="px-4 py-3">Product</th>
+                                                        <th className="px-4 py-3">Barcode</th>
+                                                        <th className="px-4 py-3">Category</th>
+                                                        <th className="px-4 py-3 text-right">Price</th>
+                                                        <th className="px-4 py-3 text-right">Stock</th>
+                                                        <th className="px-4 py-3 text-center">Status</th>
+                                                        <th className="px-4 py-3 text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {linked.map((product) => {
+                                                        const productStock = Number(product?.stock);
+                                                        const productPrice = Number(product?.price);
+                                                        const productCategory = product?.category?.name || formatCategoryLabel(product?.category_id, categories);
+                                                        return (
+                                                            <tr key={product.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                                                                <td className="px-4 py-3">
+                                                                    <div className="flex min-w-0 items-center gap-3">
+                                                                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                                                                            {product.image_url ? (
+                                                                                <img src={resolveImageUrl(product.image_url)} alt="" className="h-full w-full object-cover" />
+                                                                            ) : (
+                                                                                <div className="flex h-full w-full items-center justify-center text-xs font-bold text-slate-400">IMG</div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{product.name || "Product"}</p>
+                                                                            <p className="truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{product.brand?.name || "No brand"}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 font-mono text-xs text-slate-500 dark:text-slate-400">{product.sku || "-"}</td>
+                                                                <td className="px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-300">{productCategory === "—" ? "-" : productCategory}</td>
+                                                                <td className="px-4 py-3 text-right text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100">
+                                                                    {Number.isFinite(productPrice) ? `$${productPrice.toFixed(2)}` : "-"}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+                                                                    {Number.isFinite(productStock) ? productStock : 0}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${product.is_active ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20" : "bg-slate-100 text-slate-600 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10"}`}>
+                                                                        {product.is_active ? "Active" : "Inactive"}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <div className="inline-flex items-center justify-end gap-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setLinkedProductsItem(null);
+                                                                                navigate(`/admin/products?edit=${product.id}`);
+                                                                            }}
+                                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10"
+                                                                            title="Edit product"
+                                                                            aria-label={`Edit ${product.name || "product"}`}
+                                                                        >
+                                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                            </svg>
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => deleteLinkedProduct(product)}
+                                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                                                                            title="Delete product"
+                                                                            aria-label={`Delete ${product.name || "product"}`}
+                                                                        >
+                                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                );
+            })()}
+
             {/* ── Print Preview Modal ── */}
-            {previewItem && (() => {
+            {previewItem && canShowPrintLabel(previewItem) && (() => {
                 const barcodeVal = previewItem.slug || slugify(previewItem.name) || "ITEM";
                 const qrVal = `${window.location.origin}/category/${previewItem.slug || previewItem.id}`;
                 const showBarcode = appearance.showBarcode !== false;

@@ -185,7 +185,7 @@ export default function SupportChatWidget() {
         aria-hidden={!open}
       >
         <div
-          className="px-5 py-4 text-white bg-gradient-to-r from-[#5C7E64] via-[#6F8F72] to-[#93B895] cursor-move"
+          className="px-5 py-4 text-white bg-gradient-to-r from-[#586F64] via-[#6e8b7e] to-[#9BB0A5] cursor-move"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

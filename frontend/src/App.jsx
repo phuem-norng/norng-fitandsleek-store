@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import SiteLayout from "./components/layout/SiteLayout.jsx";
 import Home from "./pages/Home.jsx";
 import Search from "./pages/Search.jsx";
@@ -39,6 +39,7 @@ import AdminDashboard from "./pages/admin/Dashboard.jsx";
 import AdminHome from "./pages/admin/AdminHome.jsx";
 import HomePageManager from "./pages/admin/HomePageManager.jsx";
 import CompleteHomepageManager from "./pages/admin/CompleteHomepageManager.jsx";
+import { CatalogAvailabilityProvider } from "./state/catalogAvailability.jsx";
 import { HomepageSettingsProvider, useHomepageSettings } from "./state/homepageSettings.jsx";
 import { useLanguage } from "./lib/i18n.jsx";
 import CustomCursor from "./components/CustomCursor.jsx";
@@ -62,7 +63,14 @@ import AdminReplacementCases from "./pages/admin/ReplacementCases.jsx";
 import PaymentSettings from "./pages/admin/PaymentSettings.jsx";
 import DriverScanPage from "./pages/driver/Scan.jsx";
 import { useAuth } from "./state/auth.jsx";
+import { useTheme } from "./state/theme.jsx";
 import { AdminContentSkeleton } from "./components/admin/AdminLoading.jsx";
+
+/** Old URLs used `/admin/barcode-qr`; preserve redirects after rename to `/admin/stock-inventory`. */
+function LegacyBarcodeQrToStockInventoryEdit() {
+  const { id } = useParams();
+  return <Navigate to={`/admin/stock-inventory/${id}/edit`} replace />;
+}
 
 function CustomerPageSkeleton() {
   return (
@@ -130,12 +138,33 @@ function RequireAdmin({ children }) {
   return children;
 }
 
+/** Sets `data-admin-theme` on `<html>` only on `/admin` when dark mode is on. Tailwind `dark:` is scoped to `html.admin-dashboard[data-admin-theme="dark"]` so the storefront never inherits it. */
+function AdminHtmlThemeSync() {
+  const location = useLocation();
+  const { mode, hydrated } = useTheme();
+
+  React.useEffect(() => {
+    const root = document.documentElement;
+    if (!hydrated) return;
+    const onAdmin = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+    if (onAdmin && mode === "dark") {
+      root.setAttribute("data-admin-theme", "dark");
+    } else {
+      root.removeAttribute("data-admin-theme");
+    }
+  }, [location.pathname, mode, hydrated]);
+
+  return null;
+}
+
 export default function App() {
   return (
-    <HomepageSettingsProvider>
-      <FontSettingsSync />
-      <CustomCursor />
-      <Routes>
+    <CatalogAvailabilityProvider>
+      <HomepageSettingsProvider>
+        <FontSettingsSync />
+        <AdminHtmlThemeSync />
+        <CustomCursor />
+        <Routes>
         <Route element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="/search" element={<Search />} />
@@ -213,9 +242,15 @@ export default function App() {
           <Route path="sales" element={<AdminSales />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="brands" element={<AdminBrands />} />
-          <Route path="barcode-qr/new" element={<AdminBarcodeQR />} />
-          <Route path="barcode-qr/:id/edit" element={<AdminBarcodeQR />} />
-          <Route path="barcode-qr" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory/new" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory/:id/edit" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory" element={<AdminBarcodeQR />} />
+          <Route path="stock-received/new" element={<AdminBarcodeQR />} />
+          <Route path="stock-received/:id/edit" element={<AdminBarcodeQR />} />
+          <Route path="stock-received" element={<AdminBarcodeQR />} />
+          <Route path="barcode-qr/new" element={<Navigate to="/admin/stock-inventory/new" replace />} />
+          <Route path="barcode-qr/:id/edit" element={<LegacyBarcodeQrToStockInventoryEdit />} />
+          <Route path="barcode-qr" element={<Navigate to="/admin/stock-inventory" replace />} />
           <Route path="checkout" element={<AdminPosScan />} />
           <Route path="pos" element={<Navigate to="/admin/checkout" replace />} />
           <Route path="homepage" element={<HomePageManager />} />
@@ -238,8 +273,9 @@ export default function App() {
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </HomepageSettingsProvider>
+        </Routes>
+      </HomepageSettingsProvider>
+    </CatalogAvailabilityProvider>
   );
 }
 

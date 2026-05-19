@@ -20,7 +20,8 @@ const defaultAllowedHosts = [
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const proxyTarget = env.VITE_PROXY_TARGET || "http://127.0.0.1:8000";
+  // Default matches repo `docker-compose.yml`: backend published as host:8001 → container:8000.
+  const proxyTarget = env.VITE_PROXY_TARGET || "http://127.0.0.1:8001";
   const cfTunnel = env.VITE_CLOUDFLARE_TUNNEL === "1";
   const tunnelHost = (env.VITE_TUNNEL_PUBLIC_HOST || "").trim().replace(/^https?:\/\//i, "").split("/")[0] || "";
   const extraAllowedHosts = (env.VITE_EXTRA_ALLOWED_HOSTS || "")

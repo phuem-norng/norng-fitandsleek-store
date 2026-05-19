@@ -28,6 +28,7 @@ class Product extends Model
         'model_info',
         'colors',
         'sizes',
+        'variant_matrix',
         'size_guide',
         'delivery_info',
         'support_phone',
@@ -45,6 +46,7 @@ class Product extends Model
         'attributes' => 'array',
         'colors' => 'array',
         'sizes' => 'array',
+        'variant_matrix' => 'array',
         'payment_methods' => 'array',
     ];
 

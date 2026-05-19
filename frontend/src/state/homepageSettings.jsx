@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import api from "../lib/api";
 
 const HomepageSettingsContext = createContext();
@@ -7,21 +7,27 @@ export function HomepageSettingsProvider({ children }) {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const reloadSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get("/homepage-settings");
+      setSettings(data);
+    } catch (err) {
+      console.log("Could not load homepage settings");
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get("/homepage-settings");
-        setSettings(data);
-      } catch (err) {
-        console.log("Could not load homepage settings");
+        await reloadSettings();
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [reloadSettings]);
 
   return (
-    <HomepageSettingsContext.Provider value={{ settings, loading }}>
+    <HomepageSettingsContext.Provider value={{ settings, loading, reloadSettings }}>
       {children}
     </HomepageSettingsContext.Provider>
   );

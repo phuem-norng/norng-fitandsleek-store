@@ -32,15 +32,6 @@ export default function Checkout() {
     return () => clearTimeout(t);
   }, [khqrSuccessOpen, nav]);
 
-  // Force checkout to display in light mode so the page keeps a white background.
-  useEffect(() => {
-    const root = document.documentElement;
-    const hadDarkClass = root.classList.contains("dark");
-    root.classList.remove("dark");
-    return () => {
-      if (hadDarkClass) root.classList.add("dark");
-    };
-  }, []);
   const [cardDetails, setCardDetails] = useState({
     name: user?.name || "",
     number: "",

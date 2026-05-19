@@ -1,6 +1,6 @@
 # pgAdmin 4 — connect to this project’s Postgres
 
-Use these values after you start the stack (`docker-compose.fullstack.yml`):  
+Use these values after you start the stack (`docker-compose.yml`):  
 **pgAdmin (web):** http://127.0.0.1:5050  
 
 Sign in with the pgAdmin account from Compose:
@@ -26,9 +26,9 @@ pgAdmin and Postgres share the same Compose network. The database hostname is th
 |--------|--------|
 | **Host name/address** | `db` |
 | **Port** | `5432` |
-| **Maintenance database** | `fitandsleek_v3` |
+| **Maintenance database** | Same as `DB_DATABASE` in `backend/.env` (e.g. `fitandsleek_v2` or `fitandsleek_v3`) |
 | **Username** | `postgres` |
-| **Password** | `Norng@123` (same as `POSTGRES_PASSWORD` in `docker-compose.fullstack.yml`) |
+| **Password** | `Norng@123` (same as `POSTGRES_PASSWORD` in `docker-compose.yml`) |
 
 Enable **Save password** if you want.
 
@@ -41,8 +41,8 @@ Traffic goes from your Mac to the published Postgres port.
 | Field | Value |
 |--------|--------|
 | **Host name/address** | `127.0.0.1` or `localhost` |
-| **Port** | `5432` (see `ports` on the `db` service in `docker-compose.fullstack.yml`) |
-| **Maintenance database** | `fitandsleek_v3` |
+| **Port** | `5433` (see `ports` on the `db` service in `docker-compose.yml`; host port maps to 5432 inside Docker) |
+| **Maintenance database** | Same as `DB_DATABASE` in `backend/.env` (e.g. `fitandsleek_v2` or `fitandsleek_v3`) |
 | **Username** | `postgres` |
 | **Password** | `Norng@123` |
 
@@ -60,6 +60,6 @@ For local Docker, **SSL mode** can stay **Prefer** or **Disable** unless you con
 
 | Item | Value |
 |------|--------|
-| App database | `fitandsleek_v3` |
+| App database | Same as `DB_DATABASE` in `backend/.env` |
 | Postgres container | `fitandsleek_db` |
 | Compose service name (host from pgAdmin container) | `db` |

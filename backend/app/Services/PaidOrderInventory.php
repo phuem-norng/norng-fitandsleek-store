@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Services\ProductVariantInventory;
 
 class PaidOrderInventory
 {
@@ -86,6 +87,13 @@ class PaidOrderInventory
                 'stock' => max(0, (int) $product->stock - $qty),
             ]);
         }
+
+        ProductVariantInventory::decrementVariantMatrix(
+            $product,
+            $item->color ?? null,
+            $item->size ?? null,
+            $qty
+        );
 
         self::decrementBarcodeBundleStock((string) ($product->barcode_code ?? ''), $qty);
     }

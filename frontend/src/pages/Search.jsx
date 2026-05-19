@@ -264,6 +264,7 @@ export default function Search() {
         if (gender && gender !== "sale") params.gender = gender;
         if (categoryId) params.category_id = categoryId;
         if (parentCategory) params.parent_category = parentCategory;
+        if (tab && tab !== "wishlist") params.tab = tab;
         if (imageSearchResults?.colors) {
           params.colors = JSON.stringify(imageSearchResults.colors);
         }
@@ -286,6 +287,17 @@ export default function Search() {
 
     return `All ${parentCategory} Collection`;
   }, [parentCategory]);
+
+  const pageTitle = useMemo(() => {
+    if (imageSearchResults) return t("similarItems");
+    if (tab === "new") return t("newIn");
+    if (tab === "trending") return t("trendingNow");
+    if (tab === "this-week") return t("thisWeek");
+    if (tab === "sale") return t("sale");
+    if (parentCollectionLabel) return parentCollectionLabel;
+    if (q) return `"${q}"`;
+    return t("shop");
+  }, [imageSearchResults, tab, parentCollectionLabel, q, t]);
 
   // When wishlist tab is active, use the dedicated wishlist fetch result
   const products = useMemo(() => {
@@ -347,7 +359,7 @@ export default function Search() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl md:text-3xl font-black tracking-tight">
-          {imageSearchResults ? t('similarItems') : t('shop')}
+          {pageTitle}
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
           {imageSearchResults 
@@ -508,10 +520,16 @@ export default function Search() {
         </div>
 
         {/* Active Filters Display */}
-        {(q || gender || categoryId || parentCategory) && (
+        {(q || gender || categoryId || parentCategory || (tab && tab !== "wishlist")) && (
           <div className="mt-4 pt-4 border-t border-zinc-200">
             <div className="flex flex-wrap gap-2 items-center text-xs">
               <span className="text-zinc-600 font-medium">{t('activeFilters')}:</span>
+              {tab && tab !== "wishlist" && (
+                <span className="bg-zinc-100 text-zinc-800 px-3 py-1 rounded-full flex items-center gap-2">
+                  {pageTitle}
+                  <button type="button" onClick={() => change({ tab: "" })} className="hover:text-red-600">×</button>
+                </span>
+              )}
               {q && (
                 <span className="bg-zinc-100 text-zinc-800 px-3 py-1 rounded-full flex items-center gap-2">
                   📝 {q}
@@ -582,7 +600,7 @@ export default function Search() {
           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             {Array.from({ length: 8 }).map((_, idx) => (
               <div key={idx} className="fs-card overflow-hidden">
-                <div className="aspect-square bg-zinc-100 animate-pulse rounded-lg" />
+                <div className="aspect-[4/5] bg-zinc-100 animate-pulse rounded-lg" />
                 <div className="p-3 space-y-2">
                   <div className="h-3 w-2/3 bg-zinc-100 animate-pulse rounded" />
                   <div className="h-3 w-1/2 bg-zinc-100 animate-pulse rounded" />
@@ -609,7 +627,7 @@ export default function Search() {
               {tab !== "wishlist" && !imageSearchResults && (
                 <button
                   onClick={() => {
-                    change({ q: '', gender: '', category_id: '', parent_category: '' });
+                    change({ q: '', gender: '', category_id: '', parent_category: '', tab: '' });
                   }}
                   className="mt-4 px-6 py-2 bg-zinc-900 text-white rounded-full text-sm font-semibold hover:bg-zinc-800 transition-colors"
                 >
