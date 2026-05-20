@@ -470,25 +470,18 @@ export default function AdminLayout() {
     let cancelled = false;
     const loadBadges = async () => {
       try {
-        const [ordersRes, messagesRes] = await Promise.all([
-          api.get("/admin/orders"),
-          api.get("/admin/messages"),
-        ]);
+        const { data } = await api.get("/admin/nav-badges");
         if (cancelled) return;
-        const orders = ordersRes.data?.data || [];
-        const pendingOrders = orders.filter((o) => {
-          const s = String(o.status || "").toLowerCase();
-          return s === "pending" || s === "pending_payment" || s === "processing";
-        }).length;
-        const messages = messagesRes.data?.data || [];
-        const activeMessages = messages.filter((m) => m.is_active !== false).length;
-        setNavBadges({ orders: pendingOrders, messages: activeMessages });
+        setNavBadges({
+          orders: Number(data?.orders) || 0,
+          messages: Number(data?.messages) || 0,
+        });
       } catch {
         /* badges are optional */
       }
     };
     loadBadges();
-    const intervalId = window.setInterval(loadBadges, 60000);
+    const intervalId = window.setInterval(loadBadges, 120000);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);

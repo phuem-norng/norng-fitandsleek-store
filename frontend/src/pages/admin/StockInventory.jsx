@@ -82,6 +82,12 @@ const effectiveRowStock = (row, receivedPage, allRows = []) => {
     if (!row?.manage_stock) return null;
     if (receivedPage) {
         const batches = receiveBatchesForMaster(row, allRows);
+        // Master legacy row stays in the log with its own opening `stock_received`; do not substitute
+        // the sum of batch receipts (would double-count with each batch row + inflate totals).
+        if (row.parent_id == null && batches.length > 0 && row.stock_received != null) {
+            const legacy = parseInt(row.stock_received, 10);
+            return Number.isFinite(legacy) ? Math.max(0, legacy) : 0;
+        }
         if (batches.length > 0) {
             return batches.reduce((sum, batch) => {
                 const q = batch.stock_received != null
@@ -551,7 +557,7 @@ export default function AdminBarcodeQR() {
             const [catRes, brandRes, productRes] = await Promise.all([
                 api.get("/admin/categories"),
                 api.get("/admin/brands"),
-                api.get("/admin/products"),
+                api.get("/admin/products", { params: { per_page: 500 } }),
             ]);
             const all = catRes?.data?.data || [];
             setRows(all.filter((c) => c.type === BARCODE_QR_TYPE));
@@ -2300,16 +2306,18 @@ export default function AdminBarcodeQR() {
                                 </svg>
                                 Export
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => navigate(`${stockBase}/new`)}
-                                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[5px] bg-[color:var(--admin-primary)] px-3 text-sm font-medium text-white transition hover:brightness-110"
-                            >
-                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                </svg>
-                                Add Product
-                            </button>
+                            {!isReceivedLogPage ? (
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(`${stockBase}/new`)}
+                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[5px] bg-[color:var(--admin-primary)] px-3 text-sm font-medium text-white transition hover:brightness-110"
+                                >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add Product
+                                </button>
+                            ) : null}
                         </div>
                 </div>
 
@@ -2425,11 +2433,19 @@ export default function AdminBarcodeQR() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                             </svg>
                         </div>
-                        <p className="text-xl font-black tracking-tight text-slate-950 dark:text-white">No inventory items yet</p>
-                        <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">Create your first product to start tracking labels, units, and catalog visibility.</p>
-                        <button type="button" onClick={() => navigate(`${stockBase}/new`)} className="mt-6 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_22px_50px_rgba(16,185,129,0.55)] dark:border-emerald-300 dark:ring-emerald-400/20">
-                            Add product
-                        </button>
+                        <p className="text-xl font-black tracking-tight text-slate-950 dark:text-white">
+                            {isReceivedLogPage ? "No receive batches yet" : "No inventory items yet"}
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                            {isReceivedLogPage
+                                ? "Quick Restock from Stock & Inventory will appear here as receive batches."
+                                : "Create your first product to start tracking labels, units, and catalog visibility."}
+                        </p>
+                        {!isReceivedLogPage ? (
+                            <button type="button" onClick={() => navigate(`${stockBase}/new`)} className="mt-6 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_22px_50px_rgba(16,185,129,0.55)] dark:border-emerald-300 dark:ring-emerald-400/20">
+                                Add product
+                            </button>
+                        ) : null}
                     </div>
                 ) : displayRows.length === 0 ? (
                     <div className="rounded-[30px] border border-white/80 bg-white p-12 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10">
@@ -2466,7 +2482,7 @@ export default function AdminBarcodeQR() {
                                         <th className="min-w-[11.5rem] w-52 px-4 py-2 text-center">Condition</th>
                                         <th className="w-36 px-4 py-2">Origin</th>
                                         <th className="w-36 px-4 py-2 text-center">Stock</th>
-                                        <th className={`px-4 py-2 ${isReceivedLogPage ? "w-36" : "w-32"}`}>Date in</th>
+                                        <th className={`px-4 py-2 ${isReceivedLogPage ? "w-36" : "w-44"}`}>Date in</th>
                                         <th className="w-32 px-4 py-2 text-center">Status</th>
                                         <th className="w-28 px-4 py-2 text-right">Price unit</th>
                                         <th className="w-32 px-4 py-2 text-right">Total price</th>
@@ -2581,8 +2597,11 @@ export default function AdminBarcodeQR() {
                                                     {isReceivedLogPage ? (
                                                         <DateInCell item={item} showTime />
                                                     ) : (
-                                                        <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">
-                                                            {formatDateIn(dateIn)}
+                                                        <span
+                                                            className="inline-block max-w-[11rem] text-[13px] font-semibold leading-snug text-slate-700 dark:text-slate-300"
+                                                            title={formatDateInWithTime(item)}
+                                                        >
+                                                            {formatDateInWithTime(item)}
                                                         </span>
                                                     )}
                                                 </td>
@@ -2804,17 +2823,6 @@ export default function AdminBarcodeQR() {
                                 <div className="flex shrink-0 items-center gap-2">
                                     <button
                                         type="button"
-                                        onClick={goToAddProductForBatch}
-                                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-500 to-teal-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-emerald-500/20 transition hover:from-emerald-400 hover:to-teal-500"
-                                        title="Add product to this batch"
-                                    >
-                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                        </svg>
-                                        Add Product
-                                    </button>
-                                    <button
-                                        type="button"
                                         onClick={closeChosenProducts}
                                         className="flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-slate-400 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                                         aria-label="Close"
@@ -2830,7 +2838,7 @@ export default function AdminBarcodeQR() {
                                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800/40">
                                         <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                                             {isReceiveBatch
-                                                ? `No catalog products linked to this receive batch yet.${receiptUnits > 0 ? ` (${receiptUnits} units received — use Add Product to list items for sale.)` : ""}`
+                                                ? `No catalog products linked to this receive batch yet.${receiptUnits > 0 ? ` (${receiptUnits} units received — use Add first product below to list items for sale.)` : ""}`
                                                 : "No POS products linked to this label yet."}
                                         </p>
                                         <button
@@ -2847,7 +2855,7 @@ export default function AdminBarcodeQR() {
                                 ) : (
                                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
                                         <div className="overflow-x-auto">
-                                            <table className={`w-full border-collapse text-sm ${isReceivedLogPage ? "min-w-[1020px]" : "min-w-[900px]"}`}>
+                                            <table className="w-full min-w-[980px] border-collapse text-sm">
                                                 <thead>
                                                     <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:bg-white/5 dark:text-slate-400">
                                                         <th className="px-4 py-3">Product</th>
@@ -2855,9 +2863,7 @@ export default function AdminBarcodeQR() {
                                                         <th className="px-4 py-3">Category</th>
                                                         <th className="px-4 py-3 text-right">Price</th>
                                                         <th className="px-4 py-3 text-right">Stock</th>
-                                                        {isReceivedLogPage ? (
-                                                            <th className="w-28 px-4 py-3 text-center">Date in</th>
-                                                        ) : null}
+                                                        <th className="w-28 px-4 py-3 text-center">Date in</th>
                                                         <th className="px-4 py-3 text-center">Status</th>
                                                         <th className="px-4 py-3 text-right">Actions</th>
                                                     </tr>
@@ -2892,17 +2898,15 @@ export default function AdminBarcodeQR() {
                                                                 <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-300">
                                                                     {Number.isFinite(productStock) ? productStock : 0}
                                                                 </td>
-                                                                {isReceivedLogPage ? (
-                                                                    <td className="px-4 py-3 text-center tabular-nums">
-                                                                        <DateInCell
-                                                                            item={{
-                                                                                date_in: product?.date_in ?? linkedProductsItem?.date_in,
-                                                                                created_at: product?.created_at ?? linkedProductsItem?.created_at,
-                                                                            }}
-                                                                            showTime
-                                                                        />
-                                                                    </td>
-                                                                ) : null}
+                                                                <td className="px-4 py-3 text-center tabular-nums">
+                                                                    <DateInCell
+                                                                        item={{
+                                                                            date_in: product?.date_in ?? linkedProductsItem?.date_in,
+                                                                            created_at: product?.created_at ?? linkedProductsItem?.created_at,
+                                                                        }}
+                                                                        showTime
+                                                                    />
+                                                                </td>
                                                                 <td className="px-4 py-3 text-center">
                                                                     <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${product.is_active ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20" : "bg-slate-100 text-slate-600 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10"}`}>
                                                                         {product.is_active ? "Active" : "Inactive"}

@@ -70,8 +70,8 @@ services:
       # Use Compose DNS so indexing works without host port forwarding quirks.
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
-    # Ensure ts-khqr exists (image build should have run npm ci; this fixes stale images / partial deploys).
-    command: sh -lc "cd /var/www/html/node-khqr && (test -d node_modules/ts-khqr || npm ci --omit=dev) && cd /var/www/html && rm -rf public/storage && php artisan storage:link --relative --force && php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000 --no-reload"
+    # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
+    command: ["web"]
     ports:
       - "8001:8000"
     extra_hosts:
@@ -100,7 +100,7 @@ services:
     environment:
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
-    command: sh -lc "cd /var/www/html/node-khqr && (test -d node_modules/ts-khqr || npm ci --omit=dev) && cd /var/www/html && php artisan config:clear && php artisan queue:work --sleep=3 --tries=3 --timeout=180 --max-jobs=500"
+    command: ["worker", "queue:work", "--sleep=3", "--tries=3", "--timeout=180", "--max-jobs=500"]
     volumes:
       - ./backend/app:/var/www/html/app
       - ./backend/config:/var/www/html/config
@@ -125,7 +125,7 @@ services:
     environment:
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
-    command: sh -lc "cd /var/www/html/node-khqr && (test -d node_modules/ts-khqr || npm ci --omit=dev) && cd /var/www/html && php artisan config:clear && php artisan schedule:work"
+    command: ["artisan", "schedule:work"]
     volumes:
       - ./backend/app:/var/www/html/app
       - ./backend/config:/var/www/html/config

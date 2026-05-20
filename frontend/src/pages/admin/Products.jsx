@@ -832,7 +832,7 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  const load = async () => {
  setLoading(true);
  try {
- const { data: productsData } = await api.get("/admin/products");
+ const { data: productsData } = await api.get("/admin/products", { params: { per_page: 500 } });
  const { data: categoriesData } = await api.get("/admin/categories");
  const { data: brandsData } = await api.get("/admin/brands");
  // Handle both array and object responses

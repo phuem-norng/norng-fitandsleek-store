@@ -85,7 +85,7 @@ export default function AdminOrders() {
  const load = async () => {
  setLoading(true);
  try {
- const { data } = await api.get("/admin/orders");
+ const { data } = await api.get("/admin/orders", { params: { per_page: 100, compact: 1 } });
  console.log("Orders API Response:", data);
  setRows(data?.data || []);
  } catch (error) {
@@ -421,7 +421,7 @@ export default function AdminOrders() {
  </span>
  </td>
  <td className="px-4 md:px-6 py-3 md:py-4">
- <span className="text-sm text-slate-600 dark:text-slate-300">{o.items?.length || 0} items</span>
+ <span className="text-sm text-slate-600 dark:text-slate-300">{o.items_count ?? o.items?.length ?? 0} items</span>
  </td>
  <td className="px-4 md:px-6 py-3 md:py-4">
  <span className="text-sm font-bold text-slate-900 dark:text-slate-100"><Money value={o.total} /></span>
@@ -504,7 +504,7 @@ export default function AdminOrders() {
  </div>
  </div>
  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2">
- <span>{o.items?.length || 0} items</span>
+ <span>{o.items_count ?? o.items?.length ?? 0} items</span>
  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm"><Money value={o.total} /></span>
  <span>{formatDate(o.created_at)}</span>
  </div>

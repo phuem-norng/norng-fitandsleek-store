@@ -32,7 +32,7 @@ class StockReceiveService
             ]);
         }
 
-        if (! in_array($productCondition, ['new', 'second_hand'], true)) {
+        if (!in_array($productCondition, ['new', 'second_hand'], true)) {
             throw ValidationException::withMessages([
                 'product_condition' => ['Invalid product condition.'],
             ]);
@@ -42,7 +42,7 @@ class StockReceiveService
             ? Category::query()->find($source->parent_id)
             : $source;
 
-        if (! $inventory || $inventory->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+        if (!$inventory || $inventory->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
             throw ValidationException::withMessages([
                 'category' => ['Inventory label not found for this item.'],
             ]);
@@ -52,12 +52,7 @@ class StockReceiveService
             ? ($secondHandSaleType === 'average_bundle' ? 'average_bundle' : 'single')
             : null;
 
-        return DB::transaction(function () use (
-            $inventory,
-            $quantity,
-            $productCondition,
-            $secondHandSaleType,
-        ) {
+        return DB::transaction(function () use ($inventory, $quantity, $productCondition, $secondHandSaleType) {
             $batchSlug = $this->uniqueReceiveSlug((string) $inventory->slug);
 
             $received = Category::create([
@@ -102,8 +97,14 @@ class StockReceiveService
             ]);
 
             if ($inventory->manage_stock) {
-                $current = max(0, (int) ($inventory->stock ?? 0));
-                $inventory->stock = $current + $quantity;
+                $preReceiveStock = max(0, (int) ($inventory->stock ?? 0));
+                $inventory->stock = $preReceiveStock + $quantity;
+                // Before any receive batches existed, Stock Received showed this master using `stock`
+                // as a legacy row. Once Quick Restock adds children, the UI only keeps that row if
+                // `stock_received` is set — persist the pre-receive on-hand as the opening receipt.
+                if ($inventory->stock_received === null && $preReceiveStock > 0) {
+                    $inventory->stock_received = $preReceiveStock;
+                }
                 $inventory->save();
             }
 

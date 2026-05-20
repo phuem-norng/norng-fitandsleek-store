@@ -9,6 +9,8 @@ use App\Models\Message;
 use App\Services\PaidOrderInventory;
 use App\Services\ProductGalleryImageProcessor;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -189,9 +191,13 @@ class ProductAdminController extends Controller
             'image_url' => $url,
         ], 200);
     }
-    public function index()
+    public function index(Request $request)
     {
-        return Product::with(['category', 'brand', 'activeSale'])->orderByDesc('id')->paginate(20);
+        $perPage = min(max((int) $request->input('per_page', 20), 1), 500);
+
+        return Product::with(['category', 'brand', 'activeSale'])
+            ->orderByDesc('id')
+            ->paginate($perPage);
     }
 
     public function store(Request $request)
@@ -369,7 +375,37 @@ class ProductAdminController extends Controller
 
     public function destroy(Product $product)
     {
-        $product->delete();
+        DB::transaction(function () use ($product) {
+            $this->deleteStockReceivedLedgerForProduct($product->id);
+            $product->delete();
+        });
+
         return response()->json(['message' => 'Deleted']);
+    }
+
+    /**
+     * Remove immutable ledger rows that reference this product (FK restrictOnDelete).
+     */
+    private function deleteStockReceivedLedgerForProduct(int $productId): void
+    {
+        if (! Schema::hasTable('stock_received')) {
+            return;
+        }
+
+        $ledgerIds = DB::table('stock_received')
+            ->where('product_id', $productId)
+            ->pluck('id');
+
+        if ($ledgerIds->isEmpty()) {
+            return;
+        }
+
+        DB::table('stock_received')
+            ->whereIn('corrects_stock_received_id', $ledgerIds)
+            ->update(['corrects_stock_received_id' => null]);
+
+        DB::table('stock_received')
+            ->where('product_id', $productId)
+            ->delete();
     }
 }

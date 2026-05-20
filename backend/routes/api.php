@@ -282,6 +282,8 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::get('/reports/generate', [ReportController::class, 'generate']);
     Route::get('/reports/download-pdf', [ReportController::class, 'downloadPdf']);
 
+    Route::get('/nav-badges', [\App\Http\Controllers\Api\Admin\AdminNavBadgesController::class, 'index']);
+
     // Admin Search & Notifications
     Route::get('/search', [AdminSearchController::class, 'search']);
     Route::get('/notifications', [AdminNotificationController::class, 'index']);
