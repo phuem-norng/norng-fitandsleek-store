@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Services\PaidOrderInventory;
 use App\Services\StockReceiveService;
 use App\Support\Media;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -194,7 +196,7 @@ class CategoryAdminController extends Controller
         return response()->json(['data' => $this->mapCategory($category)]);
     }
 
-    public function update(Request $request, Category $category)
+    public function update(Request $request, Category $category, StockReceiveService $stockReceive)
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -245,6 +247,12 @@ class CategoryAdminController extends Controller
 
         $slug = $validated['slug'] ?? Str::slug($validated['name']);
 
+        $isReceiveBatch = $category->parent_id
+            && $category->type === PaidOrderInventory::BARCODE_CATEGORY_TYPE;
+        $previousReceivedQty = $isReceiveBatch
+            ? $stockReceive->receivedQuantity($category)
+            : null;
+
         if ($request->hasFile('image')) {
             if ($category->image_path)
                 Storage::disk('public')->delete($category->image_path);
@@ -289,16 +297,34 @@ class CategoryAdminController extends Controller
             'variation_colors' => array_key_exists('variation_colors', $validated) ? $validated['variation_colors'] : $category->variation_colors,
             'variation_sizes' => array_key_exists('variation_sizes', $validated) ? $validated['variation_sizes'] : $category->variation_sizes,
         ]);
-        $category->save();
 
-        return response()->json(['data' => $this->mapCategory($category)]);
+        DB::transaction(function () use ($category, $stockReceive, $previousReceivedQty) {
+            $category->save();
+
+            if ($previousReceivedQty !== null) {
+                $stockReceive->syncInventoryAfterReceiveBatchUpdate(
+                    $category->fresh(),
+                    $previousReceivedQty,
+                    $stockReceive->receivedQuantity($category),
+                );
+            }
+        });
+
+        return response()->json(['data' => $this->mapCategory($category->fresh())]);
     }
 
-    public function destroy(Category $category)
+    public function destroy(Category $category, StockReceiveService $stockReceive)
     {
-        if ($category->image_path)
-            Storage::disk('public')->delete($category->image_path);
-        $category->delete();
+        DB::transaction(function () use ($category, $stockReceive) {
+            $stockReceive->syncInventoryAfterReceiveBatchDelete($category);
+
+            if ($category->image_path) {
+                Storage::disk('public')->delete($category->image_path);
+            }
+
+            $category->delete();
+        });
+
         return response()->json(['ok' => true]);
     }
 

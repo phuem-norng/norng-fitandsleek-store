@@ -9,6 +9,68 @@ use Illuminate\Validation\ValidationException;
 
 class StockReceiveService
 {
+    /** Units recorded on a receive batch (Stock Received log). */
+    public function receivedQuantity(Category $batch): int
+    {
+        if ($batch->stock_received !== null) {
+            return max(0, (int) $batch->stock_received);
+        }
+
+        if ($batch->stock !== null) {
+            return max(0, (int) $batch->stock);
+        }
+
+        return 0;
+    }
+
+    /**
+     * Apply a delta to the master inventory label sellable stock (Stock & Inventory on-hand).
+     */
+    public function adjustInventoryStock(Category $inventory, int $delta): void
+    {
+        if ($delta === 0 || ! ($inventory->manage_stock ?? false)) {
+            return;
+        }
+
+        $current = max(0, (int) ($inventory->stock ?? 0));
+        $inventory->stock = max(0, $current + $delta);
+        $inventory->save();
+    }
+
+    /**
+     * After editing a receive batch quantity, keep parent inventory stock in sync.
+     */
+    public function syncInventoryAfterReceiveBatchUpdate(Category $batch, int $previousQty, int $newQty): void
+    {
+        if (! $batch->parent_id || $batch->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+            return;
+        }
+
+        $inventory = Category::query()->find($batch->parent_id);
+        if (! $inventory || $inventory->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+            return;
+        }
+
+        $this->adjustInventoryStock($inventory, $newQty - $previousQty);
+    }
+
+    /**
+     * Before deleting a receive batch, remove its quantity from parent inventory stock.
+     */
+    public function syncInventoryAfterReceiveBatchDelete(Category $batch): void
+    {
+        if (! $batch->parent_id || $batch->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+            return;
+        }
+
+        $inventory = Category::query()->find($batch->parent_id);
+        if (! $inventory || $inventory->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+            return;
+        }
+
+        $this->adjustInventoryStock($inventory, -$this->receivedQuantity($batch));
+    }
+
     /**
      * Add stock to the canonical inventory label and append a Stock Received batch row.
      *

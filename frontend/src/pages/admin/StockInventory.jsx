@@ -230,6 +230,10 @@ const CONDITION_BADGE_NEW =
 const CONDITION_CHIP_SECOND_HAND =
     "inline-flex max-w-full items-center gap-2 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-xs font-bold ring-1 ring-amber-200 dark:border-amber-400/45 dark:bg-amber-500/20 dark:ring-amber-400/35";
 
+const isAverageBundleLabel = (item) =>
+    item?.product_condition === "second_hand" &&
+    (item?.second_hand_sale_type || "single") === "average_bundle";
+
 const getProductConditionDisplay = (item) => {
     const condition = item?.product_condition || "new";
     if (condition !== "second_hand") {
@@ -374,7 +378,8 @@ const applySecondHandBundleDefaults = (state) => {
         ...state,
         cost: unitCost || "",
         manage_stock: true,
-        stock: state.bundle_total_quantity || "",
+        // Average bundle on-hand is counted from catalog products linked to this barcode, not bundle qty.
+        stock: "",
     };
 };
 
@@ -1244,45 +1249,6 @@ export default function AdminBarcodeQR() {
         }
     };
 
-    const displayRows = useMemo(() => {
-        let list = searchFiltered;
-        if (isReceivedLogPage) {
-            list = buildStockReceivedLogRows(list, rows);
-        } else {
-            list = list.filter((r) => r.parent_id == null);
-        }
-        if (stockFilter === "low") {
-            list = list.filter((r) => {
-                if (!r.manage_stock) return false;
-                const st = effectiveRowStock(r, isReceivedLogPage, rows) ?? 0;
-                const mn = parseInt(r.min_stock, 10) || 0;
-                return st > 0 && mn > 0 && st <= mn;
-            });
-        } else if (stockFilter === "out") {
-            list = list.filter((r) => r.manage_stock && (effectiveRowStock(r, isReceivedLogPage, rows) ?? 0) === 0);
-        }
-        if (dateInFrom || dateInTo) {
-            list = list.filter((r) => matchesDateInRange(r, dateInFrom, dateInTo));
-        }
-        return list;
-    }, [searchFiltered, stockFilter, dateInFrom, dateInTo, isReceivedLogPage, rows]);
-
-    const hasDateInRangeFilter = Boolean(dateInFrom || dateInTo);
-    const clearDateInRange = () => {
-        setDateInFrom("");
-        setDateInTo("");
-    };
-
-    const trackedUnits = useMemo(() => {
-        let units = 0;
-        for (const r of displayRows) {
-            if (r.manage_stock) {
-                units += effectiveRowStock(r, isReceivedLogPage, rows) ?? 0;
-            }
-        }
-        return units;
-    }, [displayRows, isReceivedLogPage, rows]);
-
     const linkedProductsForLabel = (item) => {
         if (!item?.id) return [];
         const itemId = String(item.id);
@@ -1315,15 +1281,66 @@ export default function AdminBarcodeQR() {
         });
     };
 
-    const totalPriceForLabel = (item) => {
-        const isAverageBundle =
-            item?.product_condition === "second_hand" &&
-            (item?.second_hand_sale_type || "single") === "average_bundle";
+    const linkedProductUnitsForLabel = (item) =>
+        linkedProductsForLabel(item).reduce((sum, product) => {
+            const stock = Number(product?.stock);
+            return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
+        }, 0);
 
-        if (isAverageBundle) {
+    const displayRowStock = (item) => {
+        if (!item?.manage_stock) return null;
+        if (isAverageBundleLabel(item)) {
+            return linkedProductUnitsForLabel(item);
+        }
+        return effectiveRowStock(item, isReceivedLogPage, rows);
+    };
+
+    const displayRows = useMemo(() => {
+        let list = searchFiltered;
+        if (isReceivedLogPage) {
+            list = buildStockReceivedLogRows(list, rows);
+        } else {
+            list = list.filter((r) => r.parent_id == null);
+        }
+        if (stockFilter === "low") {
+            list = list.filter((r) => {
+                if (!r.manage_stock) return false;
+                const st = displayRowStock(r) ?? 0;
+                const mn = parseInt(r.min_stock, 10) || 0;
+                return st > 0 && mn > 0 && st <= mn;
+            });
+        } else if (stockFilter === "out") {
+            list = list.filter((r) => r.manage_stock && (displayRowStock(r) ?? 0) === 0);
+        }
+        if (dateInFrom || dateInTo) {
+            list = list.filter((r) => matchesDateInRange(r, dateInFrom, dateInTo));
+        }
+        return list;
+    }, [searchFiltered, stockFilter, dateInFrom, dateInTo, isReceivedLogPage, rows, products]);
+
+    const hasDateInRangeFilter = Boolean(dateInFrom || dateInTo);
+    const clearDateInRange = () => {
+        setDateInFrom("");
+        setDateInTo("");
+    };
+
+    const trackedUnits = useMemo(() => {
+        let units = 0;
+        for (const r of displayRows) {
+            if (r.manage_stock) {
+                units += displayRowStock(r) ?? 0;
+            }
+        }
+        return units;
+    }, [displayRows, isReceivedLogPage, rows, products]);
+
+    const totalPriceForLabel = (item) => {
+        if (isAverageBundleLabel(item)) {
+            const linked = linkedProductsForLabel(item);
+            const units = linkedProductUnitsForLabel(item);
             const price = Number(item?.price);
-            const units = effectiveRowStock(item, isReceivedLogPage, rows) ?? 0;
-            return Number.isFinite(price) ? { amount: price * units, sourceCount: 0, units } : null;
+            if (!Number.isFinite(price)) return null;
+            return { amount: price * units, sourceCount: linked.length, units };
         }
 
         const linked = linkedProductsForLabel(item);
@@ -1353,17 +1370,12 @@ export default function AdminBarcodeQR() {
     };
 
     const averageUnitPriceForLabel = (item) => {
-        const isAverageBundle =
-            item?.product_condition === "second_hand" &&
-            (item?.second_hand_sale_type || "single") === "average_bundle";
-        if (!isAverageBundle) return null;
+        if (!isAverageBundleLabel(item)) return null;
         const price = Number(item?.price);
         return Number.isFinite(price) ? price : null;
     };
 
-    const canShowPrintLabel = (item) =>
-        item?.product_condition === "second_hand" &&
-        (item?.second_hand_sale_type || "single") === "average_bundle";
+    const canShowPrintLabel = (item) => isAverageBundleLabel(item);
 
     const exportCsv = () => {
         const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -1371,7 +1383,7 @@ export default function AdminBarcodeQR() {
         const lines = [header.join(",")];
         for (const r of displayRows) {
             const catLabel = formatCategoryLabel(resolveItemCategoryId(r), categories);
-            const st = r.manage_stock ? (effectiveRowStock(r, isReceivedLogPage, rows) ?? 0) : "";
+            const st = r.manage_stock ? (displayRowStock(r) ?? 0) : "";
             const mn = r.manage_stock ? (parseInt(r.min_stock, 10) || 0) : 0;
             const stockLabel = !r.manage_stock
                 ? "Untracked"
@@ -1819,7 +1831,7 @@ export default function AdminBarcodeQR() {
                                                 </div>
                                             </div>
                                             <p className="rounded-lg bg-white/80 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-slate-900/70 dark:text-amber-200">
-                                                System will set Cost ($) to {bundleUnitCost ? `$${bundleUnitCost}` : "$0.00"} and fill On hand from Total quantity automatically.
+                                                System will set Cost ($) to {bundleUnitCost ? `$${bundleUnitCost}` : "$0.00"} from bundle cost ÷ quantity. On-hand and totals count catalog products linked to this barcode label.
                                             </p>
                                         </div>
                                     )}
@@ -2494,7 +2506,7 @@ export default function AdminBarcodeQR() {
                                         const barcodeVal = masterBarcodeForRow(item, rows) || slugify(item.name) || "ITEM";
                                         const batchRef = isReceivedLogPage ? batchReceiptRefForRow(item, rows) : null;
                                         const catLabel = formatCategoryLabel(resolveItemCategoryId(item), categories);
-                                        const st = item.manage_stock ? effectiveRowStock(item, isReceivedLogPage, rows) : null;
+                                        const st = item.manage_stock ? displayRowStock(item) : null;
                                         const mn = item.manage_stock ? (parseInt(item.min_stock, 10) || 0) : 0;
                                         const stockBadge = st === null
                                             ? { label: "Untracked", tone: "bg-slate-100 text-slate-600 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10", dot: "bg-slate-400" }
@@ -2615,7 +2627,7 @@ export default function AdminBarcodeQR() {
                                                 </td>
                                                 <td
                                                     className={`${cellClass} text-right tabular-nums`}
-                                                    title={totalPrice?.sourceCount ? `From ${totalPrice.sourceCount} linked product${totalPrice.sourceCount === 1 ? "" : "s"} / ${totalPrice.units} units` : totalPrice ? `${totalPrice.units} units` : ""}
+                                                    title={totalPrice?.sourceCount ? `From ${totalPrice.sourceCount} linked product${totalPrice.sourceCount === 1 ? "" : "s"} · ${totalPrice.units} units` : totalPrice ? `${totalPrice.units} units` : ""}
                                                 >
                                                     {totalPrice ? (
                                                         <div className="flex flex-col items-end leading-tight">
@@ -2783,16 +2795,19 @@ export default function AdminBarcodeQR() {
                 const canonicalLabel = resolveCanonicalLabel(linkedProductsItem);
                 const titleCode = labelBarcodeForItem(linkedProductsItem) || slugify(canonicalLabel?.name) || "";
                 const isReceiveBatch = linkedProductsItem.parent_id != null;
-                const receiptUnits = isReceiveBatch
+                const isAverageBundle = isAverageBundleLabel(linkedProductsItem);
+                const receiptUnits = isReceiveBatch && !isAverageBundle
                     ? (effectiveRowStock(linkedProductsItem, true, rows) ?? 0)
                     : null;
                 const catalogUnits = linked.reduce((sum, product) => {
                     const stock = Number(product?.stock);
                     return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
                 }, 0);
-                const unitsLabel = isReceiveBatch
-                    ? `${receiptUnits} units in this receipt`
-                    : `${catalogUnits} units`;
+                const unitsLabel = isAverageBundle
+                    ? `${catalogUnits} units from linked products`
+                    : isReceiveBatch
+                        ? `${receiptUnits} units in this receipt`
+                        : `${catalogUnits} units`;
                 return createPortal(
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4 sm:p-6">
                         <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={closeChosenProducts} aria-hidden />
@@ -2815,7 +2830,7 @@ export default function AdminBarcodeQR() {
                                             </>
                                         )}
                                         {" · "}{linked.length} product{linked.length === 1 ? "" : "s"} · {unitsLabel}
-                                        {isReceiveBatch && linked.length > 0 && catalogUnits !== receiptUnits ? (
+                                        {isReceiveBatch && !isAverageBundle && linked.length > 0 && catalogUnits !== receiptUnits ? (
                                             <span className="text-slate-400 dark:text-slate-500"> ({catalogUnits} in catalog)</span>
                                         ) : null}
                                     </p>

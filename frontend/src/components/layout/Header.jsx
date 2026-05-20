@@ -11,15 +11,7 @@ import { Camera, X, Bell, Menu, Search, User, Heart, ShoppingBag } from "lucide-
 import Logo from "../Logo.jsx";
 import LoginDialog from "../dialogs/LoginDialog.jsx";
 import RegisterDialog from "../dialogs/RegisterDialog.jsx";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-} from "../ui/AlertDialog.jsx";
+import SmartSearchModal from "../search/SmartSearchModal.jsx";
 
 function cn(...xs) {
   return xs.filter(Boolean).join(" ");
@@ -364,14 +356,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   const wishlist = useWishlist();
   const { t, language, toggleLanguage } = useLanguage();
   const { settings } = useHomepageSettings();
-  const [q, setQ] = useState("");
   const [showSearchDialog, setShowSearchDialog] = useState(false);
-  const searchInputRef = useRef(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const suggestionTimeoutRef = useRef(null);
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [showRegisterDialog, setShowRegisterDialog] = useState(false);
   const [showLeftMenu, setShowLeftMenu] = useState(false);
@@ -801,114 +786,16 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     [t, headerSettings.nav_labels, headerSettings.nav_visibility, headerSettings.custom_nav]
   );
 
-  // Fetch autocomplete suggestions
-  const fetchSuggestions = async (searchTerm) => {
-    if (!searchTerm || searchTerm.trim().length < 2) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    setLoadingSuggestions(true);
-    try {
-      const { data } = await api.get("/products", {
-        params: { q: searchTerm, per_page: 8 }
-      });
-      const products = data?.data || data || [];
-      setSuggestions(products.slice(0, 8));
-      setShowSuggestions(products.length > 0);
-    } catch (error) {
-      console.error("Failed to fetch suggestions:", error);
-      setSuggestions([]);
-      setShowSuggestions(false);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  };
-
-  // Debounced search input handler
-  const handleSearchInput = (value) => {
-    setQ(value);
-    setSelectedIndex(-1);
-
-    // Clear previous timeout
-    if (suggestionTimeoutRef.current) {
-      clearTimeout(suggestionTimeoutRef.current);
-    }
-
-    // Debounce API call
-    suggestionTimeoutRef.current = setTimeout(() => {
-      fetchSuggestions(value);
-    }, 300);
-  };
-
-  // Handle keyboard navigation
-  const handleKeyDown = (e) => {
-    if (!showSuggestions || suggestions.length === 0) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) =>
-        prev < suggestions.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-    } else if (e.key === "Enter" && selectedIndex >= 0) {
-      e.preventDefault();
-      const selected = suggestions[selectedIndex];
-      if (selected) {
-        setShowSearchDialog(false);
-        setSuggestions([]);
-        setShowSuggestions(false);
-        nav(`/p/${selected.slug}`);
-      }
-    } else if (e.key === "Escape") {
-      setShowSuggestions(false);
-      setSelectedIndex(-1);
-    }
-  };
-
-  // Select suggestion by click
-  const selectSuggestion = (product) => {
-    setShowSearchDialog(false);
-    setSuggestions([]);
-    setShowSuggestions(false);
-    setQ("");
-    nav(`/p/${product.slug}`);
-  };
-
-  // Highlight matching text
-  const highlightMatch = (text, query) => {
-    if (!query || !text) return text;
-
-    const parts = text.split(new RegExp(`(${query})`, 'gi'));
-    return (
-      <span>
-        {parts.map((part, i) =>
-          part.toLowerCase() === query.toLowerCase() ? (
-            <strong key={i} className="font-extrabold text-zinc-900 bg-yellow-100/50 px-0.5 rounded">{part}</strong>
-          ) : (
-            <span key={i}>{part}</span>
-          )
-        )}
-      </span>
-    );
-  };
-
-  const submitSearch = (e) => {
-    e.preventDefault();
-    const term = q.trim();
-    setSuggestions([]);
-    setShowSuggestions(false);
-    nav(term ? `/search?q=${encodeURIComponent(term)}` : "/search");
-  };
-
   useEffect(() => {
-    if (!showSearchDialog) return;
-    const tId = setTimeout(() => searchInputRef.current?.focus(), 0);
-    return () => clearTimeout(tId);
-  }, [showSearchDialog]);
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (headerSettings.search_enabled) setShowSearchDialog(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [headerSettings.search_enabled]);
 
   return (
     <div className="sticky top-0 z-30 backdrop-blur-md shadow-sm" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
@@ -1127,164 +1014,12 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
         </div>
       )}
 
-      {/* Image Search Modal */}
-      <AlertDialog open={showSearchDialog} onOpenChange={(open) => {
-        setShowSearchDialog(open);
-        if (!open) {
-          setSuggestions([]);
-          setShowSuggestions(false);
-          setSelectedIndex(-1);
-          setQ("");
-        }
-      }}>
-        <AlertDialogContent
-          overlayClassName="bg-black/45 backdrop-blur-[10px]"
-          className="w-[92vw] sm:min-w-[620px] sm:max-w-[680px] p-0 overflow-hidden border border-slate-200 rounded-[24px] sm:rounded-[28px] shadow-[0_28px_70px_rgba(15,23,42,0.22)]"
-        >
-          <AlertDialogHeader>
-            <div className="px-[22px] pt-[28px] pb-2 sm:p-10 sm:pb-3">
-              <AlertDialogTitle className="text-[32px] leading-none font-black tracking-tight text-slate-900">
-                Search items...
-              </AlertDialogTitle>
-              <AlertDialogDescription className="mt-2.5 text-base text-slate-500">
-                Smart search with instant suggestions.
-              </AlertDialogDescription>
-            </div>
-          </AlertDialogHeader>
-
-          <form
-            onSubmit={(e) => {
-              submitSearch(e);
-              setShowSearchDialog(false);
-            }}
-            className="space-y-6 px-[22px] pb-[28px] sm:space-y-6 sm:px-10 sm:pb-10"
-          >
-            <div className="relative">
-              <input
-                ref={searchInputRef}
-                value={q}
-                onChange={(e) => handleSearchInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Search everything"
-                className="w-full h-16 rounded-full border border-slate-300 bg-white pl-14 pr-14 text-[20px] text-slate-900 placeholder-slate-400 outline-none shadow-[0_10px_28px_rgba(15,23,42,0.06)] focus:ring-2 focus:ring-zinc-900"
-                autoFocus
-                autoComplete="off"
-              />
-              <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-400">
-                <Search className="w-5 h-5" />
-              </span>
-              <button
-                type="button"
-                aria-label="Search by image"
-                title="Search by image"
-                onClick={() => {
-                  setShowSearchDialog(false);
-                  nav('/image-search');
-                }}
-                className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
-              >
-                <Camera className="h-5 w-5" aria-hidden />
-              </button>
-
-              {/* Autocomplete Suggestions Dropdown */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-2xl shadow-2xl border border-slate-200/80 max-h-[320px] overflow-hidden z-50 backdrop-blur-sm">
-                  {loadingSuggestions && (
-                    <div className="px-4 py-3 text-sm text-slate-500 text-center animate-pulse">
-                      Loading...
-                    </div>
-                  )}
-
-                  <div className="overflow-y-auto max-h-[320px] py-2">
-                    {!loadingSuggestions && suggestions.map((product, index) => (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => selectSuggestion(product)}
-                        className={`w-full px-5 py-3 text-left hover:bg-gradient-to-r hover:from-zinc-50 hover:to-slate-50 transition-all duration-200 group ${selectedIndex === index ? 'bg-gradient-to-r from-zinc-100 to-slate-100' : ''
-                          }`}
-                        onMouseEnter={() => setSelectedIndex(index)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-100 flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(product.image_url)}
-                              alt={product.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-base text-slate-800 font-medium group-hover:text-zinc-900 transition-colors leading-snug truncate">
-                              {highlightMatch(product.name, q)}
-                            </div>
-                            <div className="text-xs text-slate-500 truncate">
-                              ${Number(product.price || 0).toFixed(2)}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* View All Results */}
-                  <button
-                    type="submit"
-                    className="w-full px-5 py-3.5 text-sm font-semibold text-zinc-900 bg-gradient-to-r from-slate-50 to-zinc-50 hover:from-slate-100 hover:to-zinc-100 transition-all duration-200 border-t border-slate-200/80 flex items-center justify-center gap-2"
-                  >
-                    <Search className="w-4 h-4" />
-                    <span>View all results for "{q}"</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Popular searches
-              </span>
-              <div className="flex flex-wrap items-center gap-2.5">
-                {[
-                  { label: "Belts", to: "/search?q=Belts" },
-                  { label: "Shoes", to: "/search?q=Shoes" },
-                  { label: "Hoodies", to: "/search?q=Hoodies" },
-                  { label: "New In", to: "/search?tab=new" },
-                  { label: "T-shirts", to: "/search?q=T-shirts" },
-                  { label: "Jeans", to: "/search?q=Jeans" },
-                ].map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      setShowSearchDialog(false);
-                      nav(item.to);
-                    }}
-                    className="inline-flex h-[38px] items-center rounded-full border border-slate-200 bg-slate-50/80 px-4 text-[15px] font-medium text-slate-700 hover:bg-slate-100 transition"
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="h-px bg-slate-200/90" />
-
-            <div className="flex w-full items-center justify-between gap-4">
-              <AlertDialogCancel type="button" className="h-auto border-0 bg-transparent p-0 text-sm font-medium text-slate-500 shadow-none hover:bg-transparent hover:text-slate-700">
-                Cancel
-              </AlertDialogCancel>
-              <button
-                type="submit"
-                className="inline-flex h-[52px] w-[120px] shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white text-sm font-semibold hover:bg-zinc-800 transition"
-              >
-                Search
-              </button>
-            </div>
-          </form>
-        </AlertDialogContent>
-      </AlertDialog>
+      <SmartSearchModal
+        open={showSearchDialog}
+        onClose={() => setShowSearchDialog(false)}
+        placeholder={searchPlaceholder}
+        accentColor={headerSettings.background_color || "#10a37f"}
+      />
 
       {/* Login Dialog */}
       <LoginDialog
