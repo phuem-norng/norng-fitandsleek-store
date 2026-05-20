@@ -4,6 +4,23 @@ import { useAuth } from "../../state/auth";
 import { useTheme } from "../../state/theme.jsx";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import {
+ buildAllColumnsVisibility,
+ loadTableColumnVisibility,
+ TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
+
+const SALES_TABLE_COLUMNS = [
+ { id: "product", label: "Product" },
+ { id: "discount", label: "Discount" },
+ { id: "salePrice", label: "Sale Price" },
+ { id: "startDate", label: "Start Date" },
+ { id: "endDate", label: "End Date" },
+ { id: "status", label: "Status" },
+ { id: "actions", label: "Actions" },
+];
+
+const SALES_COLUMNS_STORAGE_KEY = "fitandsleek-sales-columns";
 
 export default function AdminSales() {
  const { refresh: refreshAuth } = useAuth();
@@ -44,6 +61,9 @@ export default function AdminSales() {
  const [deleteTarget, setDeleteTarget] = useState(null);
  const [deleteBusy, setDeleteBusy] = useState(false);
  const [search, setSearch] = useState("");
+ const [columnVisibility, setColumnVisibility] = useState(() =>
+ loadTableColumnVisibility(SALES_COLUMNS_STORAGE_KEY, SALES_TABLE_COLUMNS),
+ );
 
  const triggerAuthRefresh = async () => {
  try {
@@ -79,6 +99,22 @@ export default function AdminSales() {
  useEffect(() => {
  load();
  }, []);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(SALES_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
+ } catch { /* ignore quota */ }
+ }, [columnVisibility]);
+
+ const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+
+ const toggleTableColumn = (columnId) => {
+ setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+ };
+
+ const setAllTableColumnsVisible = (visible) => {
+ setColumnVisibility(buildAllColumnsVisibility(SALES_TABLE_COLUMNS, visible, "product"));
+ };
 
  const showSuccess = (msg) => {
  setSuccess(msg);
@@ -371,40 +407,61 @@ export default function AdminSales() {
  </form>
  </AdminModal>
 
- <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
- <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+ <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+ <div className="relative z-10 p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">All Sales</h3>
+ <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
  <input
  value={search}
  onChange={(e) => setSearch(e.target.value)}
  placeholder="Search sales..."
  className="h-10 w-64 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-slate-500"
  />
+ <TableColumnVisibilityMenu
+ columns={SALES_TABLE_COLUMNS}
+ visibility={columnVisibility}
+ onToggle={toggleTableColumn}
+ onShowAll={() => setAllTableColumnsVisible(true)}
+ onHideAll={() => setAllTableColumnsVisible(false)}
+ />
  </div>
- <table className="w-full">
+ </div>
+ <div className="overflow-x-auto rounded-b-2xl">
+ <table className="w-full min-w-[900px]">
  <thead className="bg-slate-100 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200">
  <tr>
- <th className="px-4 py-2 text-left">Product</th>
- <th className="px-4 py-2 text-left">Discount</th>
- <th className="px-4 py-2 text-left">Sale Price</th>
- <th className="px-4 py-2 text-left">Start Date</th>
- <th className="px-4 py-2 text-left">End Date</th>
- <th className="px-4 py-2 text-left">Status</th>
- <th className="px-4 py-2 text-left">Actions</th>
+ {isColVisible("product") ? <th className="px-4 py-2 text-left">Product</th> : null}
+ {isColVisible("discount") ? <th className="px-4 py-2 text-left">Discount</th> : null}
+ {isColVisible("salePrice") ? <th className="px-4 py-2 text-left">Sale Price</th> : null}
+ {isColVisible("startDate") ? <th className="px-4 py-2 text-left">Start Date</th> : null}
+ {isColVisible("endDate") ? <th className="px-4 py-2 text-left">End Date</th> : null}
+ {isColVisible("status") ? <th className="px-4 py-2 text-left">Status</th> : null}
+ {isColVisible("actions") ? <th className="px-4 py-2 text-left">Actions</th> : null}
  </tr>
  </thead>
  <tbody>
  {filteredRows.map(sale => (
  <tr key={sale.id} className="border-t border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+ {isColVisible("product") ? (
  <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{sale.product?.name}</td>
+ ) : null}
+ {isColVisible("discount") ? (
  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
  {sale.discount_type === "percentage"
  ? `${sale.discount_value}%`
  : `$${parseFloat(sale.discount_value).toFixed(2)}`}
  </td>
+ ) : null}
+ {isColVisible("salePrice") ? (
  <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">${parseFloat(sale.sale_price).toFixed(2)}</td>
+ ) : null}
+ {isColVisible("startDate") ? (
  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{new Date(sale.start_date).toLocaleDateString()}</td>
+ ) : null}
+ {isColVisible("endDate") ? (
  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{new Date(sale.end_date).toLocaleDateString()}</td>
+ ) : null}
+ {isColVisible("status") ? (
  <td className="px-4 py-2">
  <button
  onClick={() => toggleActive([sale.id], !sale.is_active)}
@@ -414,6 +471,8 @@ export default function AdminSales() {
  {sale.is_active ? "Active" : "Inactive"}
  </button>
  </td>
+ ) : null}
+ {isColVisible("actions") ? (
  <td className="px-4 py-2 flex gap-2">
  <button
  onClick={() => handleEdit(sale)}
@@ -436,10 +495,12 @@ export default function AdminSales() {
  </svg>
  </button>
  </td>
+ ) : null}
  </tr>
  ))}
  </tbody>
  </table>
+ </div>
  {filteredRows.length === 0 && (
  <div className="p-4 text-center text-slate-500 dark:text-slate-400">No sales found</div>
  )}

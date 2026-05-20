@@ -2,6 +2,23 @@ import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import {
+ buildAllColumnsVisibility,
+ loadTableColumnVisibility,
+ TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
+
+const CONTACTS_TABLE_COLUMNS = [
+ { id: "select", label: "Select" },
+ { id: "name", label: "Name" },
+ { id: "email", label: "Email" },
+ { id: "subject", label: "Subject" },
+ { id: "status", label: "Status" },
+ { id: "date", label: "Date" },
+ { id: "actions", label: "Actions" },
+];
+
+const CONTACTS_COLUMNS_STORAGE_KEY = "fitandsleek-contacts-columns";
 
 export default function Contacts() {
  const [contacts, setContacts] = useState([]);
@@ -16,6 +33,9 @@ export default function Contacts() {
  const [pendingDeleteId, setPendingDeleteId] = useState(null);
  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
  const [deleteBusy, setDeleteBusy] = useState(false);
+ const [columnVisibility, setColumnVisibility] = useState(() =>
+ loadTableColumnVisibility(CONTACTS_COLUMNS_STORAGE_KEY, CONTACTS_TABLE_COLUMNS),
+ );
 
  const loadContacts = async () => {
  setLoading(true);
@@ -46,6 +66,24 @@ export default function Contacts() {
  useEffect(() => {
  loadContacts();
  }, [pagination.current_page, filters.status]);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(CONTACTS_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
+ } catch { /* ignore quota */ }
+ }, [columnVisibility]);
+
+ const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+
+ const toggleTableColumn = (columnId) => {
+ setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+ };
+
+ const setAllTableColumnsVisible = (visible) => {
+ setColumnVisibility(buildAllColumnsVisibility(CONTACTS_TABLE_COLUMNS, visible, "name"));
+ };
+
+ const visibleColumnCount = CONTACTS_TABLE_COLUMNS.filter((col) => isColVisible(col.id)).length || 1;
 
  const handleStatusChange = async (id, newStatus) => {
  try {
@@ -269,11 +307,24 @@ export default function Contacts() {
  </div>
 
  {/* Contacts Table */}
- <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
- <div className="overflow-x-auto">
+ <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+ <div className="relative z-10 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 px-4 py-3 md:px-6">
+ <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+ {pagination.total || contacts.length} contact{(pagination.total || contacts.length) !== 1 ? "s" : ""}
+ </p>
+ <TableColumnVisibilityMenu
+ columns={CONTACTS_TABLE_COLUMNS}
+ visibility={columnVisibility}
+ onToggle={toggleTableColumn}
+ onShowAll={() => setAllTableColumnsVisible(true)}
+ onHideAll={() => setAllTableColumnsVisible(false)}
+ />
+ </div>
+ <div className="overflow-x-auto rounded-b-2xl">
  <table className="w-full">
  <thead>
  <tr className="bg-slate-50 dark:bg-slate-800 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
+ {isColVisible("select") ? (
  <th className="px-6 py-4">
  <input
  type="checkbox"
@@ -282,24 +333,25 @@ export default function Contacts() {
  className="rounded"
  />
  </th>
- <th className="px-6 py-4">Name</th>
- <th className="px-6 py-4">Email</th>
- <th className="px-6 py-4">Subject</th>
- <th className="px-6 py-4">Status</th>
- <th className="px-6 py-4">Date</th>
- <th className="px-6 py-4">Actions</th>
+ ) : null}
+ {isColVisible("name") ? <th className="px-6 py-4">Name</th> : null}
+ {isColVisible("email") ? <th className="px-6 py-4">Email</th> : null}
+ {isColVisible("subject") ? <th className="px-6 py-4">Subject</th> : null}
+ {isColVisible("status") ? <th className="px-6 py-4">Status</th> : null}
+ {isColVisible("date") ? <th className="px-6 py-4">Date</th> : null}
+ {isColVisible("actions") ? <th className="px-6 py-4">Actions</th> : null}
  </tr>
  </thead>
  <tbody>
  {loading ? (
  <tr>
- <td colSpan={7} className="p-0">
+ <td colSpan={visibleColumnCount} className="p-0">
  <AdminSectionLoader rows={4} />
  </td>
  </tr>
  ) : contacts.length === 0 ? (
  <tr>
- <td colSpan={7} className="p-12 text-center">
+ <td colSpan={visibleColumnCount} className="p-12 text-center">
  <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
  <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -311,6 +363,7 @@ export default function Contacts() {
  ) : (
  contacts.map((contact) => (
  <tr key={contact.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+ {isColVisible("select") ? (
  <td className="px-6 py-4">
  <input
  type="checkbox"
@@ -319,6 +372,8 @@ export default function Contacts() {
  className="rounded"
  />
  </td>
+ ) : null}
+ {isColVisible("name") ? (
  <td className="px-6 py-4">
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold">
@@ -327,12 +382,22 @@ export default function Contacts() {
  <span className="font-medium text-slate-800 dark:text-slate-100">{contact.name}</span>
  </div>
  </td>
+ ) : null}
+ {isColVisible("email") ? (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{contact.email}</td>
+ ) : null}
+ {isColVisible("subject") ? (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 truncate max-w-[200px]">{contact.subject || "No subject"}</td>
+ ) : null}
+ {isColVisible("status") ? (
  <td className="px-6 py-4">{getStatusBadge(contact.status)}</td>
+ ) : null}
+ {isColVisible("date") ? (
  <td className="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm">
  {new Date(contact.created_at).toLocaleDateString()}
  </td>
+ ) : null}
+ {isColVisible("actions") ? (
  <td className="px-6 py-4">
  <div className="flex gap-1.5">
  <button
@@ -365,6 +430,7 @@ export default function Contacts() {
  </button>
  </div>
  </td>
+ ) : null}
  </tr>
  ))
  )}

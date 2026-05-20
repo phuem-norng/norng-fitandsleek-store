@@ -26,6 +26,24 @@ import {
   parseVariantMatrix,
   variantMatrixPayloadFromUiRows,
 } from "../../lib/variantMatrix.js";
+import {
+  buildAllColumnsVisibility,
+  loadTableColumnVisibility,
+  TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
+
+const PRODUCTS_TABLE_COLUMNS = [
+  { id: "select", label: "Select" },
+  { id: "productName", label: "Product Name" },
+  { id: "barcode", label: "Barcode" },
+  { id: "category", label: "Category" },
+  { id: "price", label: "Price" },
+  { id: "stock", label: "Stock" },
+  { id: "status", label: "Status" },
+  { id: "actions", label: "Actions" },
+];
+
+const PRODUCTS_COLUMNS_STORAGE_KEY = "fitandsleek-products-columns";
 
 function newColorRowId() {
  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -359,6 +377,9 @@ export default function AdminProducts() {
  const genderDropdownRef = useRef(null);
  const sectionDropdownRef = useRef(null);
  const [selectedIds, setSelectedIds] = useState([]);
+ const [columnVisibility, setColumnVisibility] = useState(() =>
+  loadTableColumnVisibility(PRODUCTS_COLUMNS_STORAGE_KEY, PRODUCTS_TABLE_COLUMNS),
+ );
  const [viewMode, setViewMode] = useState("list");
  const [editGalleryError, setEditGalleryError] = useState("");
  const addImageModalFileInputRef = useRef(null);
@@ -853,6 +874,22 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  useEffect(() => {
  load();
  }, []);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(PRODUCTS_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
+ } catch { /* ignore quota */ }
+ }, [columnVisibility]);
+
+ const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+
+ const toggleTableColumn = (columnId) => {
+ setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+ };
+
+ const setAllTableColumnsVisible = (visible) => {
+ setColumnVisibility(buildAllColumnsVisibility(PRODUCTS_TABLE_COLUMNS, visible, "productName"));
+ };
 
  /** After admin categories load, fill price / label pool / allocation if a barcode was already selected (avoids empty value + HTML5 required). */
  useEffect(() => {
@@ -2746,7 +2783,7 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
 
  {/* Products table card */}
  <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
- <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+ <div className="relative z-10 px-5 py-4 border-b border-slate-200 dark:border-slate-800">
  <div className="flex flex-col gap-3 xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
  <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
  <div className="shrink-0">
@@ -3052,6 +3089,14 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  </svg>
  )}
  </button>
+
+ <TableColumnVisibilityMenu
+ columns={PRODUCTS_TABLE_COLUMNS}
+ visibility={columnVisibility}
+ onToggle={toggleTableColumn}
+ onShowAll={() => setAllTableColumnsVisible(true)}
+ onHideAll={() => setAllTableColumnsVisible(false)}
+ />
  </div>
  </div>
  </div>
@@ -3069,23 +3114,40 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  <p className="text-slate-400 dark:text-slate-400 text-sm mt-1">Create your first product above</p>
  </div>
  ) : viewMode === "list" ? (
- <div className="overflow-x-auto">
+ <div className="overflow-x-auto rounded-b-xl">
  <table className="w-full">
  <thead>
  <tr className="border-b border-slate-200 dark:border-slate-800">
+ {isColVisible("select") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 w-8"></th>
+ ) : null}
+ {isColVisible("productName") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">Product Name</th>
+ ) : null}
+ {isColVisible("barcode") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">Barcode</th>
+ ) : null}
+ {isColVisible("category") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">Category</th>
+ ) : null}
+ {isColVisible("price") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">Price</th>
+ ) : null}
+ {isColVisible("stock") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">Stock</th>
+ ) : null}
+ {isColVisible("status") ? (
  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400">Status</th>
+ ) : null}
+ {isColVisible("actions") ? (
  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400"></th>
+ ) : null}
  </tr>
  </thead>
  <tbody>
  {filteredRows.map((p) => (
  <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+ {isColVisible("select") ? (
  <td className="px-4 py-3">
  <input
  type="checkbox"
@@ -3094,6 +3156,8 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600"
  />
  </td>
+ ) : null}
+ {isColVisible("productName") ? (
  <td className="px-4 py-3">
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-semibold text-xs overflow-hidden shrink-0">
@@ -3109,10 +3173,20 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  </div>
  </div>
  </td>
+ ) : null}
+ {isColVisible("barcode") ? (
  <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 font-mono">{p.barcode_code || "—"}</td>
+ ) : null}
+ {isColVisible("category") ? (
  <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{p.category?.name}</td>
+ ) : null}
+ {isColVisible("price") ? (
  <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">${p.price}</td>
+ ) : null}
+ {isColVisible("stock") ? (
  <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">{p.stock}</td>
+ ) : null}
+ {isColVisible("status") ? (
  <td className="px-4 py-3">
  <span
  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium tabular-nums ${
@@ -3124,6 +3198,8 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  {p.is_active ? "Active" : "Inactive"}
  </span>
  </td>
+ ) : null}
+ {isColVisible("actions") ? (
  <td className="px-4 py-3 text-right">
  <div className="flex items-center justify-end gap-1">
  <button
@@ -3151,6 +3227,7 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  </button>
  </div>
  </td>
+ ) : null}
  </tr>
  ))}
  </tbody>
@@ -3167,14 +3244,24 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  {columnRows.length === 0 ? (
  <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">No products</div>
  ) : (
- columnRows.map((p) => (
+ columnRows.map((p) => {
+ const splitMeta = [
+ isColVisible("barcode") ? (p.barcode_code || "—") : null,
+ isColVisible("category") ? (p.category?.name || p.brand?.name || "") : null,
+ isColVisible("price") ? `$${p.price}` : null,
+ isColVisible("stock") ? `${p.stock} in stock` : null,
+ ].filter(Boolean);
+ return (
  <div key={p.id} className="px-4 py-3 flex items-center gap-3">
+ {isColVisible("select") ? (
  <input
  type="checkbox"
  checked={selectedIds.includes(p.id)}
  onChange={() => toggleSelect(p.id)}
  className="h-4 w-4 rounded border-slate-300 text-[color:var(--admin-primary)] focus:ring-0"
  />
+ ) : null}
+ {isColVisible("productName") ? (
  <div className="w-10 h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold text-xs overflow-hidden shrink-0">
  {p.image_url ? (
  <img src={resolveImageUrl(p.image_url)} alt={p.name} className="w-full h-full object-cover" />
@@ -3182,10 +3269,16 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  p.name?.charAt(0)?.toUpperCase()
  )}
  </div>
+ ) : null}
  <div className="min-w-0 flex-1">
+ {isColVisible("productName") ? (
  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{p.name}</p>
- <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{p.barcode_code || "—"} • ${p.price}</p>
+ ) : null}
+ {splitMeta.length > 0 ? (
+ <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{splitMeta.join(" • ")}</p>
+ ) : null}
  </div>
+ {isColVisible("status") ? (
  <span
  className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
  p.is_active
@@ -3195,6 +3288,8 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  >
  {p.is_active ? "Active" : "Inactive"}
  </span>
+ ) : null}
+ {isColVisible("actions") ? (
  <div className="flex items-center gap-1">
  <button
  type="button"
@@ -3220,8 +3315,10 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  </svg>
  </button>
  </div>
+ ) : null}
  </div>
- ))
+ );
+ })
  )}
  </div>
  </div>
@@ -3235,21 +3332,28 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  className="group rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
  >
  {/* Image */}
+ {(isColVisible("select") || isColVisible("status") || isColVisible("productName")) ? (
  <div className="relative aspect-square bg-slate-50 dark:bg-slate-800">
- {p.image_url ? (
+ {isColVisible("productName") ? (
+ p.image_url ? (
  <img src={resolveImageUrl(p.image_url)} alt={p.name} className="w-full h-full object-cover" />
  ) : (
  <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-slate-300 dark:text-slate-600">
  {p.name?.charAt(0)?.toUpperCase()}
  </div>
- )}
+ )
+ ) : null}
+ {(isColVisible("select") || isColVisible("status")) ? (
  <div className="absolute top-2 right-2 flex items-center gap-1.5">
+ {isColVisible("select") ? (
  <input
  type="checkbox"
  checked={selectedIds.includes(p.id)}
  onChange={() => toggleSelect(p.id)}
  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white/90"
  />
+ ) : null}
+ {isColVisible("status") ? (
  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
  p.is_active
  ? "border border-[rgba(var(--admin-primary-rgb),0.45)] bg-[var(--admin-primary)] text-white"
@@ -3257,20 +3361,37 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  }`}>
  {p.is_active ? "Active" : "Inactive"}
  </span>
+ ) : null}
  </div>
+ ) : null}
  </div>
+ ) : null}
 
  {/* Info */}
  <div className="p-3">
+ {isColVisible("productName") ? (
  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate leading-snug">{p.name}</p>
+ ) : null}
+ {isColVisible("category") ? (
  <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate mt-0.5">{p.brand?.name || p.category?.name}</p>
+ ) : null}
+ {isColVisible("barcode") ? (
  <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-0.5">{p.barcode_code || "—"}</p>
+ ) : null}
 
+ {(isColVisible("price") || isColVisible("stock") || isColVisible("actions")) ? (
  <div className="flex items-center justify-between mt-2">
+ {(isColVisible("price") || isColVisible("stock")) ? (
  <div>
+ {isColVisible("price") ? (
  <p className="text-base font-bold text-slate-900 dark:text-slate-100">${p.price}</p>
+ ) : null}
+ {isColVisible("stock") ? (
  <p className="text-[10px] text-slate-400 dark:text-slate-500">{p.stock} in stock</p>
+ ) : null}
  </div>
+ ) : <div />}
+ {isColVisible("actions") ? (
  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
  <button
  type="button"
@@ -3295,7 +3416,9 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  </svg>
  </button>
  </div>
+ ) : null}
  </div>
+ ) : null}
  </div>
  </div>
  ))}

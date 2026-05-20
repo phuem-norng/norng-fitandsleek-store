@@ -11,6 +11,11 @@ import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { formatCountryLabel } from "../../lib/countries";
 import CountryOriginPicker from "../../components/admin/CountryOriginPicker";
 import CategoryPicker from "../../components/admin/CategoryPicker";
+import {
+    buildAllColumnsVisibility,
+    loadTableColumnVisibility,
+    TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 const BARCODE_QR_TYPE = "barcode_qr";
@@ -24,6 +29,22 @@ const resolveStockAdminBase = (pathname) => {
 };
 
 const STOCK_RECEIVED_ADMIN_BASE = "/admin/stock-received";
+
+const STOCK_TABLE_COLUMNS = [
+    { id: "select", label: "Select" },
+    { id: "products", label: "Products" },
+    { id: "category", label: "Category" },
+    { id: "condition", label: "Condition" },
+    { id: "origin", label: "Origin" },
+    { id: "stock", label: "Stock" },
+    { id: "dateIn", label: "Date in" },
+    { id: "status", label: "Status" },
+    { id: "priceUnit", label: "Price unit" },
+    { id: "totalPrice", label: "Total price" },
+    { id: "actions", label: "Actions" },
+];
+
+const stockColumnsStorageKey = (pageKey) => `fitandsleek-stock-columns-${pageKey}`;
 
 /** Sum receive-batch rows (Quick Restock) under a master inventory label. */
 const receiveBatchesForMaster = (masterRow, allRows) => {
@@ -528,6 +549,9 @@ export default function AdminBarcodeQR() {
     const [quickRestockBusy, setQuickRestockBusy] = useState(false);
     const [pendingDelete, setPendingDelete] = useState(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
+    const [columnVisibility, setColumnVisibility] = useState(() =>
+        loadTableColumnVisibility(stockColumnsStorageKey(stockBase), STOCK_TABLE_COLUMNS),
+    );
     const [appearance, setAppearance] = useState({ ...DEFAULT_APPEARANCE });
     const [activeTab, setActiveTab] = useState("Appearance");
     const printRef = useRef(null);
@@ -554,6 +578,26 @@ export default function AdminBarcodeQR() {
         setSuccess(msg);
         setAnimate(true);
         setTimeout(() => { setAnimate(false); setTimeout(() => setSuccess(""), 300); }, 3000);
+    };
+
+    useEffect(() => {
+        setColumnVisibility(loadTableColumnVisibility(stockColumnsStorageKey(stockBase), STOCK_TABLE_COLUMNS));
+    }, [stockBase]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(stockColumnsStorageKey(stockBase), JSON.stringify(columnVisibility));
+        } catch { /* ignore quota */ }
+    }, [columnVisibility, stockBase]);
+
+    const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+
+    const toggleTableColumn = (columnId) => {
+        setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+    };
+
+    const setAllTableColumnsVisible = (visible) => {
+        setColumnVisibility(buildAllColumnsVisibility(STOCK_TABLE_COLUMNS, visible, "products"));
     };
 
     const load = async () => {
@@ -2465,8 +2509,8 @@ export default function AdminBarcodeQR() {
                         <button type="button" onClick={() => setStockFilter("all")} className="mt-4 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white dark:text-slate-950">Show all</button>
                     </div>
                 ) : (
-                    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-                        <div className="flex flex-col gap-2 px-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                    <section className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
+                        <div className="relative z-10 flex flex-col gap-2 px-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9a948a]">Products</p>
                                 <p className="mt-1 text-sm font-medium text-[#6b6b64] dark:text-slate-400">
@@ -2475,30 +2519,41 @@ export default function AdminBarcodeQR() {
                                         : "Tap a row to open label preview"}
                                 </p>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">
                                 <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#6b6b64] ring-1 ring-[#ECE8DD] dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
                                     {isReceivedLogPage ? `${displayRows.length} batches` : `${displayRows.length} products`}
                                 </span>
                                 <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">{trackedUnits} units</span>
+                                <div className="ml-auto sm:ml-0">
+                                    <TableColumnVisibilityMenu
+                                        columns={STOCK_TABLE_COLUMNS}
+                                        visibility={columnVisibility}
+                                        onToggle={toggleTableColumn}
+                                        onShowAll={() => setAllTableColumnsVisible(true)}
+                                        onHideAll={() => setAllTableColumnsVisible(false)}
+                                    />
+                                </div>
                             </div>
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto rounded-b-2xl">
                             <table className="w-full min-w-[1400px] border-collapse text-sm">
                                 <thead>
                                     <tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
-                                        <th className="w-10 px-3 py-2">
-                                            <input type="checkbox" className="rounded border-slate-300 dark:border-slate-600" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
-                                        </th>
-                                        <th className="min-w-[340px] px-4 py-2">Products</th>
-                                        <th id="bqr-category-anchor" className="w-40 px-4 py-2">Category</th>
-                                        <th className="min-w-[11.5rem] w-52 px-4 py-2 text-center">Condition</th>
-                                        <th className="w-36 px-4 py-2">Origin</th>
-                                        <th className="w-36 px-4 py-2 text-center">Stock</th>
-                                        <th className={`px-4 py-2 ${isReceivedLogPage ? "w-36" : "w-44"}`}>Date in</th>
-                                        <th className="w-32 px-4 py-2 text-center">Status</th>
-                                        <th className="w-28 px-4 py-2 text-right">Price unit</th>
-                                        <th className="w-32 px-4 py-2 text-right">Total price</th>
-                                        <th className="w-28 px-4 py-2 text-right">Actions</th>
+                                        {isColVisible("select") ? (
+                                            <th className="w-10 px-3 py-2">
+                                                <input type="checkbox" className="rounded border-slate-300 dark:border-slate-600" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
+                                            </th>
+                                        ) : null}
+                                        {isColVisible("products") ? <th className="min-w-[340px] px-4 py-2">Products</th> : null}
+                                        {isColVisible("category") ? <th id="bqr-category-anchor" className="w-40 px-4 py-2">Category</th> : null}
+                                        {isColVisible("condition") ? <th className="min-w-[11.5rem] w-52 px-4 py-2 text-center">Condition</th> : null}
+                                        {isColVisible("origin") ? <th className="w-36 px-4 py-2">Origin</th> : null}
+                                        {isColVisible("stock") ? <th className="w-36 px-4 py-2 text-center">Stock</th> : null}
+                                        {isColVisible("dateIn") ? <th className={`px-4 py-2 ${isReceivedLogPage ? "w-36" : "w-44"}`}>Date in</th> : null}
+                                        {isColVisible("status") ? <th className="w-32 px-4 py-2 text-center">Status</th> : null}
+                                        {isColVisible("priceUnit") ? <th className="w-28 px-4 py-2 text-right">Price unit</th> : null}
+                                        {isColVisible("totalPrice") ? <th className="w-32 px-4 py-2 text-right">Total price</th> : null}
+                                        {isColVisible("actions") ? <th className="w-28 px-4 py-2 text-right">Actions</th> : null}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2525,9 +2580,12 @@ export default function AdminBarcodeQR() {
                                         const cellClass = "border-b border-slate-100 bg-white px-3 py-3 align-middle dark:border-white/10 dark:bg-slate-900";
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.03]">
-                                                <td className={cellClass}>
-                                                    <input type="checkbox" className="rounded border-slate-300" checked={selectedIds.has(item.id)} onChange={() => toggleRowSelect(item.id)} aria-label={`Select ${item.name}`} />
-                                                </td>
+                                                {isColVisible("select") ? (
+                                                    <td className={cellClass}>
+                                                        <input type="checkbox" className="rounded border-slate-300" checked={selectedIds.has(item.id)} onChange={() => toggleRowSelect(item.id)} aria-label={`Select ${item.name}`} />
+                                                    </td>
+                                                ) : null}
+                                                {isColVisible("products") ? (
                                                 <td className={cellClass}>
                                                     <div className="flex w-full max-w-xl min-w-0 items-start gap-3 p-1">
                                                         <div className="group relative h-12 w-14 shrink-0">
@@ -2578,11 +2636,15 @@ export default function AdminBarcodeQR() {
                                                         </button>
                                                     </div>
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("category") ? (
                                                 <td className={cellClass} title={catLabel === "—" ? "" : catLabel}>
                                                     <span className="inline-flex max-w-[10rem] items-center rounded-full bg-[#F4EFE8] px-3 py-1.5 text-xs font-semibold text-[#6b4d24] ring-1 ring-[#ECE8DD] dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
                                                         <span className="truncate">{catLabel === "—" ? "-" : catLabel}</span>
                                                     </span>
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("condition") ? (
                                                 <td className={`${cellClass} text-center`}>
                                                     {conditionDisplay.kind === "new" ? (
                                                         <span className={CONDITION_BADGE_NEW}>New</span>
@@ -2596,15 +2658,21 @@ export default function AdminBarcodeQR() {
                                                         </span>
                                                     )}
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("origin") ? (
                                                 <td className={`${cellClass} text-[13px] font-semibold text-slate-700 dark:text-slate-300`}>
                                                     {formatOriginLabel(item.origin)}
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("stock") ? (
                                                 <td className={`${cellClass} text-center`}>
                                                     <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold tabular-nums ring-1 ${stockBadge.tone}`}>
                                                         <span className={`h-2 w-2 rounded-full ${stockBadge.dot}`} aria-hidden />
                                                         {stockBadge.label}
                                                     </span>
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("dateIn") ? (
                                                 <td className={`${cellClass} text-center tabular-nums`}>
                                                     {isReceivedLogPage ? (
                                                         <DateInCell item={item} showTime />
@@ -2617,14 +2685,20 @@ export default function AdminBarcodeQR() {
                                                         </span>
                                                     )}
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("status") ? (
                                                 <td className={`${cellClass} text-center`}>
                                                     <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${ageStatus.tone}`}>
                                                         {ageStatus.label}
                                                     </span>
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("priceUnit") ? (
                                                 <td className={`${cellClass} text-right text-[15px] font-extrabold text-slate-900 tabular-nums dark:text-slate-100`}>
                                                     {averageUnitPrice != null ? `$${averageUnitPrice.toFixed(2)}` : "-"}
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("totalPrice") ? (
                                                 <td
                                                     className={`${cellClass} text-right tabular-nums`}
                                                     title={totalPrice?.sourceCount ? `From ${totalPrice.sourceCount} linked product${totalPrice.sourceCount === 1 ? "" : "s"} · ${totalPrice.units} units` : totalPrice ? `${totalPrice.units} units` : ""}
@@ -2638,6 +2712,8 @@ export default function AdminBarcodeQR() {
                                                         </div>
                                                     ) : "-"}
                                                 </td>
+                                                ) : null}
+                                                {isColVisible("actions") ? (
                                                 <td className={`${cellClass} text-right`}>
                                                     <div className="inline-flex items-center justify-end gap-1">
                                                         {showPrintLabel ? (
@@ -2659,6 +2735,7 @@ export default function AdminBarcodeQR() {
                                                         </button>
                                                     </div>
                                                 </td>
+                                                ) : null}
                                             </tr>
                                         );
                                     })}

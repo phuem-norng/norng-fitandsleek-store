@@ -3,7 +3,25 @@ import api from "../../lib/api";
 import { errorAlert, toastSuccess, warningConfirm } from "../../lib/swal";
 import AdminModal from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import {
+ buildAllColumnsVisibility,
+ loadTableColumnVisibility,
+ TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { useTheme } from "../../state/theme.jsx";
+
+const PAYMENTS_TABLE_COLUMNS = [
+ { id: "id", label: "ID" },
+ { id: "order", label: "Order" },
+ { id: "customer", label: "Customer" },
+ { id: "amount", label: "Amount" },
+ { id: "method", label: "Method" },
+ { id: "status", label: "Status" },
+ { id: "date", label: "Date" },
+ { id: "actions", label: "Actions" },
+];
+
+const PAYMENTS_COLUMNS_STORAGE_KEY = "fitandsleek-payments-columns";
 
 export default function AdminPayments() {
  const { primaryColor, mode } = useTheme();
@@ -20,6 +38,9 @@ export default function AdminPayments() {
  const [selectedPayment, setSelectedPayment] = useState(null);
  const [showDetails, setShowDetails] = useState(false);
  const [search, setSearch] = useState("");
+ const [columnVisibility, setColumnVisibility] = useState(() =>
+ loadTableColumnVisibility(PAYMENTS_COLUMNS_STORAGE_KEY, PAYMENTS_TABLE_COLUMNS),
+ );
 
  const loadPayments = async (page = 1) => {
  setLoading(true);
@@ -46,6 +67,22 @@ export default function AdminPayments() {
  useEffect(() => {
  loadPayments(1);
  }, [filters]);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(PAYMENTS_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
+ } catch { /* ignore quota */ }
+ }, [columnVisibility]);
+
+ const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+
+ const toggleTableColumn = (columnId) => {
+ setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+ };
+
+ const setAllTableColumnsVisible = (visible) => {
+ setColumnVisibility(buildAllColumnsVisibility(PAYMENTS_TABLE_COLUMNS, visible, "id"));
+ };
 
  const handleVerify = async (payment) => {
  const confirmRes = await warningConfirm({
@@ -274,7 +311,21 @@ export default function AdminPayments() {
 
  {/* Payments Table */}
  {!loading && (
- <div className="admin-surface rounded-xl border admin-border overflow-hidden ">
+ <div className="admin-surface rounded-xl border admin-border">
+ <div className="relative z-10 flex flex-col gap-3 border-b admin-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6">
+ <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+ {filteredPayments.length} payment{filteredPayments.length !== 1 ? "s" : ""}
+ </p>
+ <div className="flex justify-end sm:ml-auto">
+ <TableColumnVisibilityMenu
+ columns={PAYMENTS_TABLE_COLUMNS}
+ visibility={columnVisibility}
+ onToggle={toggleTableColumn}
+ onShowAll={() => setAllTableColumnsVisible(true)}
+ onHideAll={() => setAllTableColumnsVisible(false)}
+ />
+ </div>
+ </div>
  {filteredPayments.length === 0 ? (
  <div className="text-center py-12">
  <p className="text-slate-500 dark:text-slate-400">
@@ -283,34 +334,50 @@ export default function AdminPayments() {
  </div>
  ) : (
  <>
- <div className="overflow-x-auto">
+ <div className="overflow-x-auto rounded-b-xl">
  <table className="w-full">
  <thead className="bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800">
  <tr>
+ {isColVisible("id") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  ID
  </th>
+ ) : null}
+ {isColVisible("order") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Order
  </th>
+ ) : null}
+ {isColVisible("customer") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Customer
  </th>
+ ) : null}
+ {isColVisible("amount") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Amount
  </th>
+ ) : null}
+ {isColVisible("method") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Method
  </th>
+ ) : null}
+ {isColVisible("status") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Status
  </th>
+ ) : null}
+ {isColVisible("date") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Date
  </th>
+ ) : null}
+ {isColVisible("actions") ? (
  <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
  Actions
  </th>
+ ) : null}
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -319,18 +386,27 @@ export default function AdminPayments() {
  key={payment.id}
  className="hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition"
  >
+ {isColVisible("id") ? (
  <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-100 font-medium">
  #{payment.id}
  </td>
+ ) : null}
+ {isColVisible("order") ? (
  <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
  {payment.order?.order_number || "N/A"}
  </td>
+ ) : null}
+ {isColVisible("customer") ? (
  <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
  {payment.order?.user?.name || "N/A"}
  </td>
+ ) : null}
+ {isColVisible("amount") ? (
  <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
  ${formatAmount(payment.amount)}
  </td>
+ ) : null}
+ {isColVisible("method") ? (
  <td className="px-6 py-4 text-sm">
  <span
  className={`px-3 py-1 rounded-full text-xs font-medium ${getMethodBadge(
@@ -340,6 +416,8 @@ export default function AdminPayments() {
  {payment.method}
  </span>
  </td>
+ ) : null}
+ {isColVisible("status") ? (
  <td className="px-6 py-4 text-sm">
  <span
  className="px-3 py-1 rounded-full text-xs font-medium border"
@@ -348,9 +426,13 @@ export default function AdminPayments() {
  {payment.status}
  </span>
  </td>
+ ) : null}
+ {isColVisible("date") ? (
  <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
  {new Date(payment.created_at).toLocaleDateString()}
  </td>
+ ) : null}
+ {isColVisible("actions") ? (
  <td className="px-6 py-4">
  <div className="flex items-center gap-1.5">
  {/* View */}
@@ -397,6 +479,7 @@ export default function AdminPayments() {
  )}
  </div>
  </td>
+ ) : null}
  </tr>
  ))}
  </tbody>

@@ -2,7 +2,25 @@ import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
+import {
+ buildAllColumnsVisibility,
+ loadTableColumnVisibility,
+ TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { useTheme } from "../../state/theme.jsx";
+
+const ORDERS_TABLE_COLUMNS = [
+ { id: "select", label: "Select" },
+ { id: "orderId", label: "Order ID" },
+ { id: "customer", label: "Customer" },
+ { id: "status", label: "Status" },
+ { id: "items", label: "Items" },
+ { id: "total", label: "Total" },
+ { id: "date", label: "Date" },
+ { id: "actions", label: "Actions" },
+];
+
+const ORDERS_COLUMNS_STORAGE_KEY = "fitandsleek-orders-columns";
 
 function Money({ value }) {
  const n = Number(value || 0);
@@ -81,6 +99,9 @@ export default function AdminOrders() {
  const [pendingDeleteId, setPendingDeleteId] = useState(null);
  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
  const [deleteBusy, setDeleteBusy] = useState(false);
+ const [columnVisibility, setColumnVisibility] = useState(() =>
+ loadTableColumnVisibility(ORDERS_COLUMNS_STORAGE_KEY, ORDERS_TABLE_COLUMNS),
+ );
 
  const load = async () => {
  setLoading(true);
@@ -99,6 +120,22 @@ export default function AdminOrders() {
  useEffect(() => {
  load();
  }, []);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(ORDERS_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
+ } catch { /* ignore quota */ }
+ }, [columnVisibility]);
+
+ const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+
+ const toggleTableColumn = (columnId) => {
+ setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+ };
+
+ const setAllTableColumnsVisible = (visible) => {
+ setColumnVisibility(buildAllColumnsVisibility(ORDERS_TABLE_COLUMNS, visible, "orderId"));
+ };
 
  useEffect(() => {
  setSelectedIds((prev) => prev.filter((id) => rows.some((o) => o.id === id)));
@@ -252,8 +289,8 @@ export default function AdminOrders() {
  )}
 
  {/* Orders Table */}
- <div className="admin-surface rounded-2xl overflow-hidden border admin-border">
- <div className="admin-surface border-b admin-border px-4 md:px-6 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+ <div className="admin-surface rounded-2xl border admin-border">
+ <div className="relative z-10 admin-surface border-b admin-border px-4 md:px-6 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 border admin-border rounded-lg flex items-center justify-center admin-surface">
  <svg className="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -349,6 +386,13 @@ export default function AdminOrders() {
  )}
  Refresh
  </button>
+ <TableColumnVisibilityMenu
+ columns={ORDERS_TABLE_COLUMNS}
+ visibility={columnVisibility}
+ onToggle={toggleTableColumn}
+ onShowAll={() => setAllTableColumnsVisible(true)}
+ onHideAll={() => setAllTableColumnsVisible(false)}
+ />
  </div>
  </div>
 
@@ -366,10 +410,11 @@ export default function AdminOrders() {
  </div>
  ) : (
  viewMode === "list" ? (
- <div className="overflow-x-auto">
+ <div className="overflow-x-auto rounded-b-2xl">
  <table className="w-full">
  <thead>
  <tr className="bg-slate-50 dark:bg-slate-900/70 text-left text-xs font-semibold text-slate-600 dark:text-slate-200 uppercase tracking-wider">
+ {isColVisible("select") ? (
  <th className="px-4 md:px-6 py-3 md:py-4">
  <input
  type="checkbox"
@@ -378,18 +423,20 @@ export default function AdminOrders() {
  className="rounded"
  />
  </th>
- <th className="px-4 md:px-6 py-3 md:py-4">Order ID</th>
- <th className="px-4 md:px-6 py-3 md:py-4">Customer</th>
- <th className="px-4 md:px-6 py-3 md:py-4">Status</th>
- <th className="px-4 md:px-6 py-3 md:py-4">Items</th>
- <th className="px-4 md:px-6 py-3 md:py-4">Total</th>
- <th className="px-4 md:px-6 py-3 md:py-4">Date</th>
- <th className="px-4 md:px-6 py-3 md:py-4 text-right">Actions</th>
+ ) : null}
+ {isColVisible("orderId") ? <th className="px-4 md:px-6 py-3 md:py-4">Order ID</th> : null}
+ {isColVisible("customer") ? <th className="px-4 md:px-6 py-3 md:py-4">Customer</th> : null}
+ {isColVisible("status") ? <th className="px-4 md:px-6 py-3 md:py-4">Status</th> : null}
+ {isColVisible("items") ? <th className="px-4 md:px-6 py-3 md:py-4">Items</th> : null}
+ {isColVisible("total") ? <th className="px-4 md:px-6 py-3 md:py-4">Total</th> : null}
+ {isColVisible("date") ? <th className="px-4 md:px-6 py-3 md:py-4">Date</th> : null}
+ {isColVisible("actions") ? <th className="px-4 md:px-6 py-3 md:py-4 text-right">Actions</th> : null}
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
  {filteredRows.map((o) => (
  <tr key={o.id} className="hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition-colors">
+ {isColVisible("select") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <input
  type="checkbox"
@@ -398,9 +445,13 @@ export default function AdminOrders() {
  className="rounded"
  />
  </td>
+ ) : null}
+ {isColVisible("orderId") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">#{o.id}</span>
  </td>
+ ) : null}
+ {isColVisible("customer") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold text-sm">
@@ -412,6 +463,8 @@ export default function AdminOrders() {
  </div>
  </div>
  </td>
+ ) : null}
+ {isColVisible("status") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <span
  className="inline-flex px-3 py-1 rounded-full text-xs font-semibold border"
@@ -420,15 +473,23 @@ export default function AdminOrders() {
  {o.status || 'Pending'}
  </span>
  </td>
+ ) : null}
+ {isColVisible("items") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <span className="text-sm text-slate-600 dark:text-slate-300">{o.items_count ?? o.items?.length ?? 0} items</span>
  </td>
+ ) : null}
+ {isColVisible("total") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <span className="text-sm font-bold text-slate-900 dark:text-slate-100"><Money value={o.total} /></span>
  </td>
+ ) : null}
+ {isColVisible("date") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
  <span className="text-sm text-slate-500 dark:text-slate-400">{formatDate(o.created_at)}</span>
  </td>
+ ) : null}
+ {isColVisible("actions") ? (
  <td className="px-4 md:px-6 py-3 md:py-4 text-right">
  <div className="flex items-center justify-end gap-1.5">
  <button
@@ -468,6 +529,7 @@ export default function AdminOrders() {
  </button>
  </div>
  </td>
+ ) : null}
  </tr>
  ))}
  </tbody>

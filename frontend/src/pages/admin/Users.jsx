@@ -5,6 +5,33 @@ import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import {
+ buildAllColumnsVisibility,
+ loadTableColumnVisibility,
+ TableColumnVisibilityMenu,
+} from "../../components/admin/TableColumnVisibilityMenu.jsx";
+
+const CUSTOMER_TABLE_COLUMNS = [
+ { id: "select", label: "Select" },
+ { id: "name", label: "Name" },
+ { id: "email", label: "Email" },
+ { id: "phone", label: "Phone" },
+ { id: "orders", label: "Orders" },
+ { id: "totalSpent", label: "Total Spent" },
+ { id: "joined", label: "Joined" },
+ { id: "actions", label: "Actions" },
+];
+
+const ADMIN_TABLE_COLUMNS = [
+ { id: "name", label: "Name" },
+ { id: "email", label: "Email" },
+ { id: "phone", label: "Phone" },
+ { id: "joined", label: "Joined" },
+ { id: "actions", label: "Actions" },
+];
+
+const CUSTOMERS_COLUMNS_STORAGE_KEY = "fitandsleek-customers-columns";
+const ADMINISTRATORS_COLUMNS_STORAGE_KEY = "fitandsleek-administrators-columns";
 
 function formatDate(value) {
  if (!value) return "—";
@@ -61,6 +88,12 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const [modalContext, setModalContext] = useState("customer");
  const [deleteContext, setDeleteContext] = useState("customer");
  const [formData, setFormData] = useState({ name: "", email: "", phone: "", address: "", password: "" });
+ const [customerColumnVisibility, setCustomerColumnVisibility] = useState(() =>
+ loadTableColumnVisibility(CUSTOMERS_COLUMNS_STORAGE_KEY, CUSTOMER_TABLE_COLUMNS),
+ );
+ const [adminColumnVisibility, setAdminColumnVisibility] = useState(() =>
+ loadTableColumnVisibility(ADMINISTRATORS_COLUMNS_STORAGE_KEY, ADMIN_TABLE_COLUMNS),
+ );
 
  useEffect(() => {
  if (showCustomers) {
@@ -77,6 +110,34 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  setLoadingAdmins(false);
  }
  }, [allowAdmins]);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(CUSTOMERS_COLUMNS_STORAGE_KEY, JSON.stringify(customerColumnVisibility));
+ } catch { /* ignore quota */ }
+ }, [customerColumnVisibility]);
+
+ useEffect(() => {
+ try {
+ localStorage.setItem(ADMINISTRATORS_COLUMNS_STORAGE_KEY, JSON.stringify(adminColumnVisibility));
+ } catch { /* ignore quota */ }
+ }, [adminColumnVisibility]);
+
+ const colIsVisible = (context, columnId) => {
+ const visibility = context === "admin" ? adminColumnVisibility : customerColumnVisibility;
+ return visibility[columnId] !== false;
+ };
+
+ const toggleTableColumn = (context, columnId) => {
+ const setter = context === "admin" ? setAdminColumnVisibility : setCustomerColumnVisibility;
+ setter((prev) => ({ ...prev, [columnId]: !(prev[columnId] !== false) }));
+ };
+
+ const setAllTableColumnsVisible = (context, visible) => {
+ const columns = context === "admin" ? ADMIN_TABLE_COLUMNS : CUSTOMER_TABLE_COLUMNS;
+ const setter = context === "admin" ? setAdminColumnVisibility : setCustomerColumnVisibility;
+ setter(buildAllColumnsVisibility(columns, visible, "name"));
+ };
 
  const loadCustomers = async () => {
  setLoadingCustomers(true);
@@ -252,7 +313,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
 
  const renderUserRow = (item, context) => (
  <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
- {context === "customer" && (
+ {context === "customer" && colIsVisible(context, "select") && (
  <td className="px-6 py-4">
  <input
  type="checkbox"
@@ -262,6 +323,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  />
  </td>
  )}
+ {colIsVisible(context, "name") && (
  <td className="px-6 py-4">
  <div className="flex items-center gap-3">
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold overflow-hidden">
@@ -276,17 +338,25 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </div>
  </div>
  </td>
+ )}
+ {colIsVisible(context, "email") && (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 truncate">{item.email || "-"}</td>
+ )}
+ {colIsVisible(context, "phone") && (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 truncate">{item.phone || "-"}</td>
- {context === "customer" && (
- <>
+ )}
+ {context === "customer" && colIsVisible(context, "orders") && (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.orders_count ?? 0}</td>
+ )}
+ {context === "customer" && colIsVisible(context, "totalSpent") && (
  <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-100 font-semibold">
  ${Number(item.total_spent || 0).toFixed(2)}
  </td>
- </>
  )}
+ {colIsVisible(context, "joined") && (
  <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{formatDate(item.created_at)}</td>
+ )}
+ {colIsVisible(context, "actions") && (
  <td className="px-6 py-4">
  <div className="flex gap-2">
  <button
@@ -311,6 +381,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </button>
  </div>
  </td>
+ )}
  </tr>
  );
 
@@ -320,7 +391,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col gap-3"
  >
  <div className="flex items-center gap-3">
- {context === "customer" && (
+ {context === "customer" && colIsVisible(context, "select") && (
  <input
  type="checkbox"
  checked={selectedIds.includes(item.id)}
@@ -328,6 +399,8 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  className="rounded border-slate-300 dark:border-slate-700"
  />
  )}
+ {colIsVisible(context, "name") && (
+ <>
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold overflow-hidden flex-shrink-0">
  {item.profile_image_url ? (
 <img src={resolveImageUrl(item.profile_image_url)} alt={item.name} className="w-full h-full object-cover" />
@@ -337,31 +410,42 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </div>
  <div className="min-w-0">
  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{item.name}</p>
+ {colIsVisible(context, "email") ? (
  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{item.email}</p>
- </div>
- </div>
- <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-3">
- <div>
- <span className="text-slate-400 dark:text-slate-500">Phone</span>
- <p className="text-slate-700 dark:text-slate-200 font-medium">{item.phone || "-"}</p>
- </div>
- <div>
- <span className="text-slate-400 dark:text-slate-500">Joined</span>
- <p className="text-slate-700 dark:text-slate-200 font-medium">{formatDate(item.created_at)}</p>
- </div>
- {context === "customer" && (
- <>
- <div>
- <span className="text-slate-400 dark:text-slate-500">Orders</span>
- <p className="font-semibold text-slate-800 dark:text-slate-100">{item.orders_count ?? 0}</p>
- </div>
- <div>
- <span className="text-slate-400 dark:text-slate-500">Total Spent</span>
- <p className="font-bold text-slate-900 dark:text-slate-100">${Number(item.total_spent || 0).toFixed(2)}</p>
+ ) : null}
  </div>
  </>
  )}
  </div>
+ {(colIsVisible(context, "phone") || colIsVisible(context, "joined") || (context === "customer" && (colIsVisible(context, "orders") || colIsVisible(context, "totalSpent")))) ? (
+ <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-3">
+ {colIsVisible(context, "phone") ? (
+ <div>
+ <span className="text-slate-400 dark:text-slate-500">Phone</span>
+ <p className="text-slate-700 dark:text-slate-200 font-medium">{item.phone || "-"}</p>
+ </div>
+ ) : null}
+ {colIsVisible(context, "joined") ? (
+ <div>
+ <span className="text-slate-400 dark:text-slate-500">Joined</span>
+ <p className="text-slate-700 dark:text-slate-200 font-medium">{formatDate(item.created_at)}</p>
+ </div>
+ ) : null}
+ {context === "customer" && colIsVisible(context, "orders") ? (
+ <div>
+ <span className="text-slate-400 dark:text-slate-500">Orders</span>
+ <p className="font-semibold text-slate-800 dark:text-slate-100">{item.orders_count ?? 0}</p>
+ </div>
+ ) : null}
+ {context === "customer" && colIsVisible(context, "totalSpent") ? (
+ <div>
+ <span className="text-slate-400 dark:text-slate-500">Total Spent</span>
+ <p className="font-bold text-slate-900 dark:text-slate-100">${Number(item.total_spent || 0).toFixed(2)}</p>
+ </div>
+ ) : null}
+ </div>
+ ) : null}
+ {colIsVisible(context, "actions") ? (
  <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
  <button
  onClick={() => openEdit(item, context)}
@@ -387,6 +471,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </svg>
  </button>
  </div>
+ ) : null}
  </div>
  );
 
@@ -467,6 +552,13 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <rect x="13" y="3" width="8" height="18" rx="1" strokeWidth={2} />
  </svg>
  ))}
+ <TableColumnVisibilityMenu
+ columns={CUSTOMER_TABLE_COLUMNS}
+ visibility={customerColumnVisibility}
+ onToggle={(id) => toggleTableColumn("customer", id)}
+ onShowAll={() => setAllTableColumnsVisible("customer", true)}
+ onHideAll={() => setAllTableColumnsVisible("customer", false)}
+ />
  </div>
  </div>
  </div>
@@ -487,16 +579,18 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <table className="w-full">
  <thead>
  <tr className="bg-slate-50 dark:bg-slate-900/70 text-left text-xs font-semibold text-slate-600 dark:text-slate-200 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+ {colIsVisible("customer", "select") ? (
  <th className="px-6 py-4">
  <input type="checkbox" onChange={toggleSelectAll} checked={allSelected} className="rounded border-slate-300 dark:border-slate-700" />
  </th>
- <th className="px-6 py-4">Name</th>
- <th className="px-6 py-4">Email</th>
- <th className="px-6 py-4">Phone</th>
- <th className="px-6 py-4">Orders</th>
- <th className="px-6 py-4">Total Spent</th>
- <th className="px-6 py-4">Joined</th>
- <th className="px-6 py-4">Actions</th>
+ ) : null}
+ {colIsVisible("customer", "name") ? <th className="px-6 py-4">Name</th> : null}
+ {colIsVisible("customer", "email") ? <th className="px-6 py-4">Email</th> : null}
+ {colIsVisible("customer", "phone") ? <th className="px-6 py-4">Phone</th> : null}
+ {colIsVisible("customer", "orders") ? <th className="px-6 py-4">Orders</th> : null}
+ {colIsVisible("customer", "totalSpent") ? <th className="px-6 py-4">Total Spent</th> : null}
+ {colIsVisible("customer", "joined") ? <th className="px-6 py-4">Joined</th> : null}
+ {colIsVisible("customer", "actions") ? <th className="px-6 py-4">Actions</th> : null}
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -571,6 +665,13 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <rect x="13" y="3" width="8" height="18" rx="1" strokeWidth={2} />
  </svg>
  ))}
+ <TableColumnVisibilityMenu
+ columns={ADMIN_TABLE_COLUMNS}
+ visibility={adminColumnVisibility}
+ onToggle={(id) => toggleTableColumn("admin", id)}
+ onShowAll={() => setAllTableColumnsVisible("admin", true)}
+ onHideAll={() => setAllTableColumnsVisible("admin", false)}
+ />
  </div>
  </div>
  </div>
@@ -589,11 +690,11 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <table className="w-full">
  <thead>
  <tr className="bg-slate-50 dark:bg-slate-900/70 text-left text-xs font-semibold text-slate-600 dark:text-slate-200 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
- <th className="px-6 py-4">Name</th>
- <th className="px-6 py-4">Email</th>
- <th className="px-6 py-4">Phone</th>
- <th className="px-6 py-4">Joined</th>
- <th className="px-6 py-4">Actions</th>
+ {colIsVisible("admin", "name") ? <th className="px-6 py-4">Name</th> : null}
+ {colIsVisible("admin", "email") ? <th className="px-6 py-4">Email</th> : null}
+ {colIsVisible("admin", "phone") ? <th className="px-6 py-4">Phone</th> : null}
+ {colIsVisible("admin", "joined") ? <th className="px-6 py-4">Joined</th> : null}
+ {colIsVisible("admin", "actions") ? <th className="px-6 py-4">Actions</th> : null}
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
