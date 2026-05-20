@@ -318,6 +318,7 @@ class BarcodeScanStockService
         }
 
         DB::transaction(function () use ($bundle, $productsToDeduct, $qty, $variantProduct, $variant) {
+            // Decrement sellable stock only; stock_received (Stock Received log) is never touched here.
             if ($bundle && ($bundle->manage_stock ?? false) && $bundle->stock !== null) {
                 $bundle->refresh();
                 $bundle->update([

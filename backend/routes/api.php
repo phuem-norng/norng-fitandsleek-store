@@ -232,6 +232,7 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::post('/pos/draft-order', [PosSaleController::class, 'saveDraft']);
 
     // CRUD
+    Route::post('categories/{category}/quick-restock', [CategoryAdminController::class, 'quickRestock']);
     Route::apiResource('categories', CategoryAdminController::class);
     Route::apiResource('brands', BrandAdminController::class);
     Route::apiResource('products', ProductAdminController::class);

@@ -206,6 +206,11 @@ class ProductAdminController extends Controller
                 'max:120',
                 Rule::exists('categories', 'slug')->where(fn ($q) => $q->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)),
             ],
+            'stock_label_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('categories', 'id')->where(fn ($q) => $q->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)),
+            ],
             'name' => ['required', 'string', 'max:180'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
@@ -305,6 +310,11 @@ class ProductAdminController extends Controller
                 'string',
                 'max:120',
                 Rule::exists('categories', 'slug')->where(fn ($q) => $q->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)),
+            ],
+            'stock_label_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('categories', 'id')->where(fn ($q) => $q->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)),
             ],
             'name' => ['sometimes', 'string', 'max:180'],
             'description' => ['nullable', 'string'],

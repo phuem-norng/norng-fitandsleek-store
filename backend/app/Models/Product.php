@@ -11,6 +11,7 @@ class Product extends Model
         'brand_id',
         'sku',
         'barcode_code',
+        'stock_label_id',
         'name',
         'slug',
         'description',

@@ -117,6 +117,7 @@ class PaidOrderInventory
             return;
         }
 
+        // Sellable on-hand only; stock_received is a permanent received log (Stock Received admin).
         $current = (int) $bundle->stock;
         $bundle->update([
             'stock' => max(0, $current - $qty),

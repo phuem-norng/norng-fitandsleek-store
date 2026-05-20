@@ -1,5 +1,9 @@
-# Full stack: Postgres, pgAdmin, Laravel backend, Vite frontend, Qdrant, AI service, optional Cloudflare tunnel.
-# Reuses the same Postgres volume name as the previous fullstack compose so existing data keeps showing.
+# Compose profiles (default = light dev stack; stops heavy containers on `up`):
+#   (none)     db + backend + frontend only — use: pwsh scripts/docker-up.ps1
+#   full       everything below + workers + ai + pgAdmin — use: pwsh scripts/docker-up.ps1 -Mode full
+#   workers    queue-worker + scheduler
+#   ai         qdrant + ai-service (image search / vectorize)
+#   tools      pgAdmin
 # Optional tunnel: docker compose --profile cloudflare-token up -d
 #
 # --- Docker Desktop (Windows / Mac): published ports ---
@@ -37,6 +41,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   pgadmin:
+    profiles: [tools, full]
     image: dpage/pgadmin4:latest
     container_name: fitandsleek_pgadmin
     restart: unless-stopped
@@ -82,6 +87,7 @@ services:
 
   # Processes SyncProductToQdrant and other queued jobs (needs QUEUE_CONNECTION=redis|database in backend/.env).
   queue-worker:
+    profiles: [workers, full]
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -106,6 +112,7 @@ services:
 
   # Runs Laravel scheduler (includes qdrant:index-products --only-missing every 10 minutes).
   scheduler:
+    profiles: [workers, full]
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -155,12 +162,13 @@ services:
           "-e",
           "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
-      interval: 15s
+      interval: 60s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 20s
 
   qdrant:
+    profiles: [ai, full]
     image: qdrant/qdrant:latest
     container_name: qdrant
     restart: unless-stopped
@@ -171,6 +179,7 @@ services:
       - qdrant_storage:/qdrant/storage
 
   ai-service:
+    profiles: [ai, full]
     build:
       context: ./ai-service
       dockerfile: Dockerfile
@@ -179,12 +188,11 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ./ai-service:/app
       - ai_model_cache:/root/.cache/huggingface
     environment:
       QDRANT_URL: http://qdrant:6333
       PYTHONUNBUFFERED: "1"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     depends_on:
       - qdrant
     ports:

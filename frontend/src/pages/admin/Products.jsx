@@ -342,7 +342,7 @@ export default function AdminProducts() {
  const [categories, setCategories] = useState([]);
  const [brands, setBrands] = useState([]);
  const [form, setForm] = useState({
- name: "", sku: "", barcode_code: "", description: "", price: "", stock: "", allocated_stock: "", category_id: "", brand_id: "", image_url: "", gender: "", is_active: true, has_variants: false,
+ name: "", sku: "", barcode_code: "", stock_label_id: "", description: "", price: "", stock: "", allocated_stock: "", category_id: "", brand_id: "", image_url: "", gender: "", is_active: true, has_variants: false,
  model_info: "", sizes: [], support_phone: "", payment_methods: "", gallery: ""
  });
  const [editing, setEditing] = useState(null);
@@ -1332,6 +1332,7 @@ String(form.allocated_stock ?? "").trim() === ""
  sku: String(form.sku || "").trim() || null,
  brand_id: form.brand_id || null,
  barcode_code: (form.barcode_code || "").trim() || null,
+ stock_label_id: (form.stock_label_id || "").trim() ? parseInt(form.stock_label_id, 10) : null,
  price: parseFloat(form.price),
  stock: stockPayload,
  colors: createHasVariants ? productColorsPayloadFromRows(createColorVariants) : null,
@@ -1349,7 +1350,7 @@ String(form.allocated_stock ?? "").trim() === ""
  throw new Error("Create failed.");
  }
  closeSwal();
- setForm({ name: "", sku: "", barcode_code: "", description: "", price: "", stock: "", allocated_stock: "", category_id: "", brand_id: "", image_url: "", gender: "", is_active: true, has_variants: false, model_info: "", sizes: [], support_phone: "", payment_methods: "", gallery: "" });
+ setForm({ name: "", sku: "", barcode_code: "", stock_label_id: "", description: "", price: "", stock: "", allocated_stock: "", category_id: "", brand_id: "", image_url: "", gender: "", is_active: true, has_variants: false, model_info: "", sizes: [], support_phone: "", payment_methods: "", gallery: "" });
  setCreateColorVariants([{ id: newColorRowId(), name: "", image_url: "" }]);
  setCreateVariantMatrix([{ id: newMatrixRowId(), color: "", size: "", qty: "", sku_barcode: "" }]);
  setShowCreateForm(false);
@@ -1404,6 +1405,26 @@ String(form.allocated_stock ?? "").trim() === ""
  startEdit(product);
  navigate("/admin/products", { replace: true });
  }, [location.search, rows]);
+
+ useEffect(() => {
+ const params = new URLSearchParams(location.search || "");
+ if (params.get("new") !== "1") return;
+
+ const barcodeCode = (params.get("barcode_code") || "").trim();
+ const categoryId = (params.get("category_id") || "").trim();
+ const brandId = (params.get("brand_id") || "").trim();
+ const stockLabelId = (params.get("stock_label_id") || "").trim();
+
+ setCreateVariantMatrix([{ id: newMatrixRowId(), color: "", size: "", qty: "", sku_barcode: "" }]);
+ setCreateColorVariants([{ id: newColorRowId(), name: "", image_url: "" }]);
+ setForm({
+ name: "", sku: "", barcode_code: barcodeCode, stock_label_id: stockLabelId, description: "", price: "", stock: "", allocated_stock: "",
+ category_id: categoryId, brand_id: brandId, image_url: "", gender: "", is_active: true, has_variants: false,
+ model_info: "", sizes: [], support_phone: "", payment_methods: "", gallery: "",
+ });
+ setShowCreateForm(true);
+ navigate("/admin/products", { replace: true });
+ }, [location.search, navigate]);
 
  const saveEdit = async () => {
  setErr("");

@@ -30,6 +30,7 @@ class Category extends Model
         'label_category_ids',
         'manage_stock',
         'stock',
+        'stock_received',
         'min_stock',
         'date_in',
         'product_condition',
@@ -43,20 +44,21 @@ class Category extends Model
     ];
 
     protected $casts = [
-        'is_active'        => 'boolean',
-        'sort_order'       => 'integer',
-        'price'            => 'float',
+        'is_active' => 'boolean',
+        'sort_order' => 'integer',
+        'price' => 'float',
         'compare_at_price' => 'float',
-        'cost'             => 'float',
-        'manage_stock'     => 'boolean',
-        'has_variation'    => 'boolean',
-        'stock'            => 'integer',
-        'min_stock'        => 'integer',
-        'date_in'          => 'date',
-        'bundle_total_cost'     => 'float',
+        'cost' => 'float',
+        'manage_stock' => 'boolean',
+        'has_variation' => 'boolean',
+        'stock' => 'integer',
+        'stock_received' => 'integer',
+        'min_stock' => 'integer',
+        'date_in' => 'date',
+        'bundle_total_cost' => 'float',
         'bundle_total_quantity' => 'integer',
-        'variation_sizes'      => 'array',
-        'label_category_ids'   => 'array',
+        'variation_sizes' => 'array',
+        'label_category_ids' => 'array',
     ];
 
     // Relationships
