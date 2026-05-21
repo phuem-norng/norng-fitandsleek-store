@@ -11,18 +11,22 @@ function devSpaUsesViteProxy() {
   return String(import.meta.env.VITE_API_BASE_URL || "").trim().startsWith("/");
 }
 
-/** In Vite dev, `/storage` is served by Laravel (see vite proxy), not by the SPA origin. */
+/**
+ * In Vite dev with `/api` proxy, `/storage` is proxied on the same host:port as the SPA.
+ * Use the page origin so images work on a phone/tablet (LAN IP) — not `127.0.0.1` on the device.
+ */
 function storageServingOrigin() {
   if (typeof window !== "undefined" && import.meta.env.DEV && devSpaUsesViteProxy()) {
-    const raw = (import.meta.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000")
-      .trim()
-      .replace(/\/$/, "");
-    if (raw && !raw.startsWith("/")) {
-      try {
-        return new URL(raw).origin;
-      } catch {
-        /* fall through */
-      }
+    return window.location.origin;
+  }
+  const raw = (import.meta.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001")
+    .trim()
+    .replace(/\/$/, "");
+  if (raw && !raw.startsWith("/")) {
+    try {
+      return new URL(raw).origin;
+    } catch {
+      /* fall through */
     }
   }
   return resolveBackendOrigin();
@@ -44,7 +48,7 @@ function originForStoragePath(path) {
 }
 
 /**
- * API layer may rewrite `http://127.0.0.1:8000/storage/...` to the SPA origin so
+ * API layer may rewrite `http://127.0.0.1:8001/storage/...` to the SPA origin so
  * `<img src>` hits Vite's `/storage` proxy. If that proxy fails, point storage at Laravel.
  */
 function loopbackEquivalent(hostnameA, hostnameB) {
@@ -84,7 +88,7 @@ function rewriteViteDevStorageUrl(urlString) {
       return null;
     }
     const target = new URL(
-      (import.meta.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000").trim()
+      (import.meta.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001").trim()
     ).origin;
     return `${target}${u.pathname}${u.search || ""}`;
   } catch {
@@ -161,7 +165,9 @@ export function resolveImageUrl(imageUrl) {
       }
       const isStorage = pathRefersToPublicStorage(path);
       let origin;
-      if (isStorage && spaDevOriginMatchesUrl(parsed)) {
+      if (isStorage && import.meta.env.DEV && devSpaUsesViteProxy() && typeof window !== "undefined") {
+        origin = window.location.origin;
+      } else if (isStorage && spaDevOriginMatchesUrl(parsed)) {
         origin = storageServingOrigin();
       } else if (isStorage && useParsedOriginForStorage(parsed)) {
         origin = parsed.origin;

@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\Storefront\CustomerProfileController;
 use App\Http\Controllers\Api\Storefront\ReplacementCaseController as StorefrontReplacementCaseController;
 use App\Http\Controllers\Api\Storefront\ChatbotController;
 use App\Http\Controllers\Api\Storefront\LegalContentController;
+use App\Http\Controllers\Api\Storefront\PublicMediaController;
 use App\Http\Controllers\Api\Admin\ChatbotSettingsController;
 
 // Admin
@@ -66,6 +67,24 @@ use App\Http\Controllers\Api\Admin\DriverAdminController;
 use App\Http\Controllers\Api\Admin\AdminAiChatController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
+
+// Public files with CORS (for Flutter web / cross-origin clients; path = storage/app/public/...)
+Route::get('/media/{path}', [PublicMediaController::class, 'show'])
+    ->where('path', '.*');
+
+// Site logo at public/logo.png (same as web <img src="/logo.png">) with CORS for Flutter web.
+Route::get('/site-logo', function () {
+    $path = public_path('logo.png');
+    if (! is_file($path)) {
+        abort(404);
+    }
+    $mime = @mime_content_type($path) ?: 'image/png';
+
+    return response()->file($path, [
+        'Content-Type' => $mime,
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+});
 
 // Current user
 Route::get('/me', function (Request $request) {

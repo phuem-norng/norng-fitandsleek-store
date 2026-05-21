@@ -33,7 +33,7 @@ function currentOriginFallback() {
     if (typeof window !== "undefined" && window.location?.origin) {
         return window.location.origin;
     }
-    return "http://127.0.0.1:8000";
+    return "http://127.0.0.1:8001";
 }
 
 function isLoopbackHost(hostname) {
