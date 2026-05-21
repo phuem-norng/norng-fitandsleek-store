@@ -195,7 +195,7 @@ class ProductAdminController extends Controller
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 500);
 
-        return Product::with(['category', 'brand', 'activeSale'])
+        return Product::with(['category', 'brand', 'activeDiscount'])
             ->orderByDesc('id')
             ->paginate($perPage);
     }
@@ -302,7 +302,7 @@ class ProductAdminController extends Controller
 
     public function show(Product $product)
     {
-        return $product->load(['category', 'brand', 'activeSale']);
+        return $product->load(['category', 'brand', 'activeDiscount']);
     }
 
     public function update(Request $request, Product $product)
@@ -370,7 +370,7 @@ class ProductAdminController extends Controller
             SyncProductToQdrant::dispatch($product->id)->afterCommit();
         }
 
-        return $product->load(['category', 'brand', 'activeSale']);
+        return $product->load(['category', 'brand', 'activeDiscount']);
     }
 
     public function destroy(Product $product)

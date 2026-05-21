@@ -52,7 +52,7 @@ import Messages from "./pages/admin/Messages.jsx";
 import ChatbotSettings from "./pages/admin/ChatbotSettings.jsx";
 import Notifications from "./pages/admin/Notifications.jsx";
 import Profile from "./pages/admin/Profile.jsx";
-import AdminSales from "./pages/admin/Sales.jsx";
+import AdminDiscounts from "./pages/admin/Discounts.jsx";
 import UserManagement from "./pages/admin/UserManagement.jsx";
 import AdminManagement from "./pages/admin/AdminManagement.jsx";
 import AdminPayments from "./pages/admin/Payments.jsx";
@@ -239,7 +239,8 @@ export default function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="inventory" element={<AdminProducts />} />
-          <Route path="sales" element={<AdminSales />} />
+          <Route path="discounts" element={<AdminDiscounts />} />
+          <Route path="sales" element={<AdminDiscounts />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="brands" element={<AdminBrands />} />
           <Route path="stock-inventory/new" element={<AdminBarcodeQR />} />

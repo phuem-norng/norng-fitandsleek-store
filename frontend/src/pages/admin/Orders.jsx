@@ -27,16 +27,35 @@ function Money({ value }) {
  return <span>${n.toFixed(2)}</span>;
 }
 
+const textOnBackground = (bgHex) => {
+ const hex = String(bgHex || '').replace('#', '');
+ if (hex.length !== 6) return '#FFFFFF';
+ const r = parseInt(hex.slice(0, 2), 16) / 255;
+ const g = parseInt(hex.slice(2, 4), 16) / 255;
+ const b = parseInt(hex.slice(4, 6), 16) / 255;
+ const channel = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+ const luminance = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+ return luminance > 0.55 ? '#0b0b0f' : '#FFFFFF';
+};
+
 // Status badge colors via inline styles (theme-aware, no Tailwind colors)
 const getStatusStyle = (status, mode, primaryColor) => {
  const s = (status || '').toLowerCase();
  const isDark = mode === 'dark';
 
  if (s === 'completed' || s === 'delivered') {
+ if (isDark) {
+ const bg = primaryColor || '#16a34a';
  return {
- backgroundColor: primaryColor,
- color: '#0b0b0f',
- borderColor: primaryColor,
+ backgroundColor: bg,
+ color: textOnBackground(bg),
+ borderColor: bg,
+ };
+ }
+ return {
+ backgroundColor: '#DCFCE7',
+ color: '#166534',
+ borderColor: '#86EFAC',
  };
  }
 

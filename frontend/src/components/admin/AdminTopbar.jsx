@@ -6,12 +6,14 @@ import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import AdminAppearancePanel from "./AdminAppearancePanel.jsx";
 import AdminCommandPalette from "./AdminCommandPalette.jsx";
+import AdminAiAssistant, { AdminAiAssistantButton } from "./AdminAiAssistant.jsx";
 
 const PAGE_TITLES = {
  "/admin": "Dashboard",
  "/admin/products": "Products",
  "/admin/orders": "Orders",
- "/admin/sales": "Sales",
+ "/admin/discounts": "Discount",
+ "/admin/sales": "Discount",
   "/admin/checkout": "Checkout",
   "/admin/pos": "Checkout",
  "/admin/categories": "Categories",
@@ -58,6 +60,7 @@ export default function AdminTopbar({
  }, [pathNorm]);
 
  const [paletteOpen, setPaletteOpen] = useState(false);
+ const [aiOpen, setAiOpen] = useState(false);
  const [showNotif, setShowNotif] = useState(false);
  const [showProfile, setShowProfile] = useState(false);
  const [showAppearance, setShowAppearance] = useState(false);
@@ -184,6 +187,19 @@ export default function AdminTopbar({
  >
  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+ </svg>
+ </button>
+
+ {/* Ask AI — full label on sm+, icon on xs */}
+ <AdminAiAssistantButton onClick={() => setAiOpen(true)} className="hidden sm:flex" />
+ <button
+ type="button"
+ aria-label="Ask AI"
+ onClick={() => setAiOpen(true)}
+ className="flex sm:hidden h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-secondary text-secondary-foreground transition-colors hover:bg-slate-100 dark:border-neutral-700 dark:bg-slate-800 dark:hover:bg-neutral-800"
+ >
+ <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+ <path fillRule="evenodd" clipRule="evenodd" d="M10.7258 8.81331L13.1987 8.00002L10.7258 7.18674C9.82078 6.88908 9.11092 6.17922 8.81326 5.27416L7.99998 2.80127L7.18669 5.27416C6.88903 6.17922 6.17917 6.88908 5.27411 7.18674L2.80122 8.00002L5.27411 8.81331C6.17917 9.11097 6.88903 9.82083 7.18669 10.7259L7.99998 13.1988L8.81326 10.7259C9.11092 9.82083 9.82078 10.7259 10.7258 8.81331ZM13.6674 9.42494C15.0425 8.97267 15.0425 7.02737 13.6674 6.57511L11.1945 5.76182C10.7419 5.61299 10.387 5.25806 10.2382 4.80553L9.42489 2.33264C8.97263 0.957479 7.02732 0.957479 6.57506 2.33264L5.76177 4.80553C5.61294 5.25806 5.25801 5.61299 4.80548 5.76182L2.33259 6.57511C0.957432 7.02737 0.957434 8.97268 2.3326 9.42494L4.80548 10.2382C5.25801 10.3871 5.61294 10.742 5.76177 11.1945L6.57506 13.6674C7.02733 15.0426 8.97263 15.0426 9.42489 13.6674L10.2382 11.1945C10.387 10.742 10.7419 10.3871 11.1945 10.2382L13.6674 9.42494Z" fill="#00E599" />
  </svg>
  </button>
 
@@ -367,6 +383,7 @@ export default function AdminTopbar({
  </div>
 
  <AdminCommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+ <AdminAiAssistant open={aiOpen} onClose={() => setAiOpen(false)} />
  </header>
  );
 }

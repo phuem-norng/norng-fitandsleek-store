@@ -40,7 +40,11 @@ export default function ProductCard({ p }) {
   }, [p?.id]);
 
   const discountPrice =
-    p.discount_price ?? p.discount?.sale_price ?? p.activeSale?.sale_price ?? null;
+    p.discount_price ??
+    p.discount?.sale_price ??
+    p.active_discount?.sale_price ??
+    p.activeDiscount?.sale_price ??
+    null;
   const discountPercentage =
     p.discount_percentage ??
     p.discount?.discount_percentage ??
@@ -98,7 +102,7 @@ export default function ProductCard({ p }) {
             </div>
           )}
 
-          {hasDiscount && (p.discount?.end_date || p.activeSale?.end_date) && (
+          {hasDiscount && (p.discount?.end_date || p.active_discount?.end_date || p.activeDiscount?.end_date) && (
             <div className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold leading-tight text-white shadow-sm whitespace-nowrap">
               Limited Time
             </div>

@@ -61,8 +61,9 @@ use App\Http\Controllers\Api\Admin\AdminNotificationController;
 use App\Http\Controllers\Api\Admin\ContactController;
 use App\Http\Controllers\Api\Admin\ProfileController;
 use App\Http\Controllers\Api\Admin\FooterHeaderController;
-use App\Http\Controllers\Api\Admin\SaleAdminController;
+use App\Http\Controllers\Api\Admin\DiscountAdminController;
 use App\Http\Controllers\Api\Admin\DriverAdminController;
+use App\Http\Controllers\Api\Admin\AdminAiChatController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
 
@@ -198,6 +199,13 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
 });
 
 // -------------------------
+// ADMIN AI (proxied to self-hosted Dify — key stays server-side)
+// -------------------------
+Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->group(function () {
+    Route::post('/ai/chat', [AdminAiChatController::class, 'chat']);
+});
+
+// -------------------------
 // ADMIN
 // -------------------------
 Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->group(function () {
@@ -319,10 +327,10 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::get('/chatbot/settings', [ChatbotSettingsController::class, 'show']);
     Route::put('/chatbot/settings', [ChatbotSettingsController::class, 'update']);
 
-    // Sales Management
-    Route::apiResource('sales', SaleAdminController::class);
-    Route::post('/sales/bulk-toggle', [SaleAdminController::class, 'bulkToggle']);
-    Route::get('/sales/active/all', [SaleAdminController::class, 'getActiveSales']);
+    // Product discount management
+    Route::apiResource('discounts', DiscountAdminController::class);
+    Route::post('/discounts/bulk-toggle', [DiscountAdminController::class, 'bulkToggle']);
+    Route::get('/discounts/active/all', [DiscountAdminController::class, 'getActiveDiscounts']);
 
     // Payments Management
     Route::get('/payments', [PaymentAdminController::class, 'index']);

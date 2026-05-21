@@ -67,6 +67,9 @@ services:
       APP_URL: http://localhost:8001
       APP_PORT: 8000
       SERVER_PORT: 8000
+      # Inside the stack, Postgres is the `db` service (not host 127.0.0.1).
+      DB_HOST: db
+      DB_PORT: "5432"
       # Use Compose DNS so indexing works without host port forwarding quirks.
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
@@ -98,6 +101,8 @@ services:
       - qdrant
       - ai-service
     environment:
+      DB_HOST: db
+      DB_PORT: "5432"
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
     command: ["worker", "queue:work", "--sleep=3", "--tries=3", "--timeout=180", "--max-jobs=500"]
@@ -123,6 +128,8 @@ services:
       - qdrant
       - ai-service
     environment:
+      DB_HOST: db
+      DB_PORT: "5432"
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
     command: ["artisan", "schedule:work"]

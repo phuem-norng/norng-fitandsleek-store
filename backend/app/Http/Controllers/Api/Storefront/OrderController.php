@@ -93,14 +93,14 @@ class OrderController extends Controller
 
         $userId = (int) $request->user()->id;
 
-        $cart = Cart::with('items.product.activeSale')->where('user_id', $userId)->first();
+        $cart = Cart::with('items.product.activeDiscount')->where('user_id', $userId)->first();
 
         if (! $cart || $cart->items->isEmpty()) {
             return response()->json(['message' => 'Cart is empty.'], 422);
         }
 
         foreach ($cart->items as $ci) {
-            $product = Product::with('activeSale')->find((int) $ci->product_id);
+            $product = Product::with('activeDiscount')->find((int) $ci->product_id);
             if (! $product || ! (bool) $product->is_active) {
                 throw ValidationException::withMessages([
                     'cart' => ['One or more products are unavailable. Please refresh your cart and try again.'],
@@ -124,7 +124,7 @@ class OrderController extends Controller
             foreach ($cart->items as $i) {
                 $productId = (int) $i->product_id;
                 if (!isset($validatedProducts[$productId])) {
-                    $product = Product::with('activeSale')->find($productId);
+                    $product = Product::with('activeDiscount')->find($productId);
                     if (! $product || ! (bool) $product->is_active) {
                         throw ValidationException::withMessages([
                             'cart' => ['One or more products are unavailable. Please refresh your cart and try again.'],

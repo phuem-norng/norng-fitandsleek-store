@@ -49,7 +49,7 @@ class CartController extends Controller
         $userId = (int) $request->user()->id;
         $cartId = $this->userCartId($userId);
 
-        $cart = Cart::with(['items.product.category', 'items.product.activeSale'])->findOrFail($cartId);
+        $cart = Cart::with(['items.product.category', 'items.product.activeDiscount'])->findOrFail($cartId);
 
         $total = 0;
         foreach ($cart->items as $i) {

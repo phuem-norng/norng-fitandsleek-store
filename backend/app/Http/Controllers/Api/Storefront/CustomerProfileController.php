@@ -349,7 +349,7 @@ class CustomerProfileController extends Controller
             ['name' => 'My Wishlist', 'is_default' => true]
         );
 
-        $products = $wishlist->products()->with(['category', 'activeSale'])->get();
+        $products = $wishlist->products()->with(['category', 'activeDiscount'])->get();
 
         return response()->json([
             'data'  => $products,

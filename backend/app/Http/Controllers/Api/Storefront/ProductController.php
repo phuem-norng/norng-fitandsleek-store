@@ -11,7 +11,7 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $q = Product::query()->with(['category', 'brand', 'activeSale']);
+        $q = Product::query()->with(['category', 'brand', 'activeDiscount']);
 
         // Filter by specific product IDs (used by wishlist)
         if ($request->filled('ids')) {
@@ -115,7 +115,7 @@ class ProductController extends Controller
                 return true;
             case 'sale':
                 $query->where('products.is_active', true)
-                    ->whereHas('activeSale')
+                    ->whereHas('activeDiscount')
                     ->orderByDesc('products.id');
                 return true;
             default:
@@ -181,15 +181,15 @@ class ProductController extends Controller
 
     public function show(string $slug)
     {
-        $product = Product::with(['category', 'activeSale'])->where('slug', $slug)->firstOrFail();
-        if ($product->activeSale) {
+        $product = Product::with(['category', 'activeDiscount'])->where('slug', $slug)->firstOrFail();
+        if ($product->activeDiscount) {
             $product->discount = [
-                'type' => $product->activeSale->discount_type,
-                'value' => $product->activeSale->discount_value,
+                'type' => $product->activeDiscount->discount_type,
+                'value' => $product->activeDiscount->discount_value,
                 'original_price' => (float) $product->price,
-                'sale_price' => (float) $product->activeSale->sale_price,
+                'sale_price' => (float) $product->activeDiscount->sale_price,
                 'discount_percentage' => $this->calculateDiscountPercentage($product),
-                'end_date' => $product->activeSale->end_date,
+                'end_date' => $product->activeDiscount->end_date,
             ];
         }
         return response()->json($product);
@@ -201,8 +201,8 @@ class ProductController extends Controller
     public function discounts(Request $request)
     {
         $query = Product::query()
-            ->with(['category', 'activeSale'])
-            ->whereHas('activeSale')
+            ->with(['category', 'activeDiscount'])
+            ->whereHas('activeDiscount')
             ->where('is_active', true);
 
         // Filter by category
@@ -240,12 +240,12 @@ class ProductController extends Controller
 
         // Filter by price range
         if ($request->filled('min_price')) {
-            $query->whereHas('activeSale', function ($q) use ($request) {
+            $query->whereHas('activeDiscount', function ($q) use ($request) {
                 $q->where('sale_price', '>=', (float) $request->input('min_price'));
             });
         }
         if ($request->filled('max_price')) {
-            $query->whereHas('activeSale', function ($q) use ($request) {
+            $query->whereHas('activeDiscount', function ($q) use ($request) {
                 $q->where('sale_price', '<=', (float) $request->input('max_price'));
             });
         }
@@ -254,15 +254,15 @@ class ProductController extends Controller
         $sort = $request->get('sort', 'newest');
         switch ($sort) {
             case 'price_low':
-                $query->join('sales', 'products.id', '=', 'sales.product_id')
-                    ->where('sales.is_active', 1)
-                    ->orderBy('sales.sale_price', 'asc')
+                $query->join('discounts', 'products.id', '=', 'discounts.product_id')
+                    ->where('discounts.is_active', 1)
+                    ->orderBy('discounts.sale_price', 'asc')
                     ->select('products.*');
                 break;
             case 'price_high':
-                $query->join('sales', 'products.id', '=', 'sales.product_id')
-                    ->where('sales.is_active', 1)
-                    ->orderBy('sales.sale_price', 'desc')
+                $query->join('discounts', 'products.id', '=', 'discounts.product_id')
+                    ->where('discounts.is_active', 1)
+                    ->orderBy('discounts.sale_price', 'desc')
                     ->select('products.*');
                 break;
             case 'discount':
@@ -270,14 +270,14 @@ class ProductController extends Controller
                 $query->orderByRaw('(
                     SELECT 
                         CASE 
-                            WHEN sales.discount_type = "percentage" THEN sales.discount_value
-                            ELSE (sales.discount_value / products.price * 100)
+                            WHEN discounts.discount_type = "percentage" THEN discounts.discount_value
+                            ELSE (discounts.discount_value / products.price * 100)
                         END
-                    FROM sales
-                    WHERE sales.product_id = products.id
-                    AND sales.is_active = 1
-                    AND sales.start_date <= NOW()
-                    AND sales.end_date >= NOW()
+                    FROM discounts
+                    WHERE discounts.product_id = products.id
+                    AND discounts.is_active = 1
+                    AND discounts.start_date <= NOW()
+                    AND discounts.end_date >= NOW()
                 ) DESC');
                 break;
             case 'newest':
@@ -289,14 +289,14 @@ class ProductController extends Controller
 
         // Format response with discount info
         $products->getCollection()->transform(function ($product) {
-            if ($product->activeSale) {
+            if ($product->activeDiscount) {
                 $product->discount = [
-                    'type' => $product->activeSale->discount_type,
-                    'value' => $product->activeSale->discount_value,
+                    'type' => $product->activeDiscount->discount_type,
+                    'value' => $product->activeDiscount->discount_value,
                     'original_price' => (float) $product->price,
-                    'sale_price' => (float) $product->activeSale->sale_price,
+                    'sale_price' => (float) $product->activeDiscount->sale_price,
                     'discount_percentage' => $this->calculateDiscountPercentage($product),
-                    'end_date' => $product->activeSale->end_date,
+                    'end_date' => $product->activeDiscount->end_date,
                 ];
             }
             return $product;
@@ -310,14 +310,14 @@ class ProductController extends Controller
      */
     private function calculateDiscountPercentage($product)
     {
-        if (!$product->activeSale) {
+        if (!$product->activeDiscount) {
             return 0;
         }
 
-        if ($product->activeSale->discount_type === 'percentage') {
-            return (int) $product->activeSale->discount_value;
+        if ($product->activeDiscount->discount_type === 'percentage') {
+            return (int) $product->activeDiscount->discount_value;
         }
 
-        return round(($product->activeSale->discount_value / $product->price) * 100);
+        return round(($product->activeDiscount->discount_value / $product->price) * 100);
     }
 }

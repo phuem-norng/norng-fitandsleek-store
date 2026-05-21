@@ -216,13 +216,13 @@ class BarcodeScanStockService
 
         $price = 0.0;
         if ($variantProduct) {
-            $variantProduct->loadMissing('activeSale');
+            $variantProduct->loadMissing('activeDiscount');
             $price = (float) ($variantProduct->final_price ?? $variantProduct->price ?? 0);
         } elseif ($bundle && $bundle->price !== null && (float) $bundle->price > 0) {
             $price = (float) $bundle->price;
         } elseif ($products->isNotEmpty()) {
             $p = $products->first();
-            $p->loadMissing('activeSale');
+            $p->loadMissing('activeDiscount');
             $price = (float) ($p->final_price ?? $p->price ?? 0);
         }
 

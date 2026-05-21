@@ -46,7 +46,7 @@ class ImageSearchController extends Controller
         }
 
         $products = Product::query()
-            ->with(['category', 'brand', 'activeSale'])
+            ->with(['category', 'brand', 'activeDiscount'])
             ->where('is_active', true)
             ->whereIn('id', $productIds)
             ->get();

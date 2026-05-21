@@ -86,7 +86,11 @@ export function CartProvider({ children }) {
       if (!product?.id) throw new Error("PRODUCT_REQUIRED");
 
       const unitPrice =
-        product.discount?.sale_price ?? product.activeSale?.sale_price ?? product.price ?? 0;
+        product.discount?.sale_price ??
+          product.active_discount?.sale_price ??
+          product.activeDiscount?.sale_price ??
+          product.price ??
+          0;
 
       const current = readLocalCart().items;
       const maxStock = clientVariantMaxQty(product, color, size);

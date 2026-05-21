@@ -43,7 +43,7 @@ const PAGE_ITEMS = [
   { id: "page-dashboard", title: "Dashboard", description: "Overview & key metrics", path: "/admin", icon: LayoutDashboard, keywords: "home overview" },
   { id: "page-products", title: "Products", description: "Manage catalogue", path: "/admin/products", icon: Package, keywords: "catalogue items inventory" },
   { id: "page-orders", title: "Orders", description: "Customer orders & status", path: "/admin/orders", icon: ShoppingBag, keywords: "purchases sales transactions" },
-  { id: "page-sales", title: "Sales", description: "Revenue & performance", path: "/admin/sales", icon: BarChart3, keywords: "revenue analytics performance" },
+  { id: "page-discounts", title: "Discount", description: "Product discounts & promo pricing", path: "/admin/discounts", icon: BarChart3, keywords: "discount promo sale price" },
   { id: "page-checkout", title: "Checkout / POS", description: "Point of sale", path: "/admin/checkout", icon: CreditCard, keywords: "point of sale register cashier pos" },
   { id: "page-categories", title: "Categories", description: "Product categories", path: "/admin/categories", icon: Tag, keywords: "taxonomy groups" },
   { id: "page-brands", title: "Brands", description: "Brand directory", path: "/admin/brands", icon: Bookmark, keywords: "manufacturers labels" },

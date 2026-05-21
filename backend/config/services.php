@@ -126,4 +126,17 @@ return [
         'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 120),
     ],
 
+    /*
+    | Self-hosted Dify → local LLM (Ollama / Llama 3 / DeepSeek).
+    | API key: Dify Studio → API Access → create key for your Chat app.
+    */
+    'dify' => [
+        'base_url' => env('DIFY_BASE_URL', 'http://localhost'),
+        'api_key' => env('DIFY_API_KEY'),
+        'app_id' => env('DIFY_APP_ID', ''),
+        'timeout' => (int) env('DIFY_TIMEOUT', 120),
+        // Set true once your Dify app defines a `dashboard_context` input variable.
+        'use_inputs_only' => filter_var(env('DIFY_USE_INPUTS_ONLY', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
 ];

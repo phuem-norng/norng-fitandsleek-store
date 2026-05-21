@@ -604,7 +604,7 @@ export default function AdminBarcodeQR() {
         setLoading(true);
         try {
             const [catRes, brandRes, productRes] = await Promise.all([
-                api.get("/admin/categories"),
+                api.get("/admin/categories", { params: { include_stock_labels: true } }),
                 api.get("/admin/brands"),
                 api.get("/admin/products", { params: { per_page: 500 } }),
             ]);

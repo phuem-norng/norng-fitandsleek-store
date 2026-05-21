@@ -84,11 +84,13 @@ export default function AdminCategories() {
  return e?.response?.data?.message || "Failed to load/save data.";
  };
 
+ const isCatalogCategory = (c) => String(c?.type || "").toLowerCase() !== "barcode_qr";
+
  const load = async () => {
  setLoading(true);
  try {
  const { data } = await api.get("/admin/categories");
- setRows(data?.data || []);
+ setRows((data?.data || []).filter(isCatalogCategory));
  } catch (e2) {
  setErr(extractErr(e2));
  } finally {

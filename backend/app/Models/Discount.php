@@ -4,8 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Sale extends Model
+class Discount extends Model
 {
+    protected $table = 'discounts';
+
     protected $fillable = [
         'product_id',
         'discount_type',

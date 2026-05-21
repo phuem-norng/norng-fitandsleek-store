@@ -270,8 +270,9 @@ export default function ProductDetail() {
     if (!p) {
       return { sale: 0, compare: null, pctLabel: null };
     }
-    const sale = Number(p.discount?.sale_price ?? p.activeSale?.sale_price ?? p.price ?? 0);
-    const onSale = Boolean(p.discount || p.activeSale);
+    const activeDisc = p.active_discount ?? p.activeDiscount;
+    const sale = Number(p.discount?.sale_price ?? activeDisc?.sale_price ?? p.price ?? 0);
+    const onSale = Boolean(p.discount || activeDisc);
     const compareRaw = onSale
       ? Number(p.discount?.original_price ?? p.price ?? 0)
       : p.compare_at_price != null
@@ -281,9 +282,9 @@ export default function ProductDetail() {
 
     let pctLabel = null;
     if (onSale) {
-      const isPct = p.discount?.type === "percentage" || p.activeSale?.discount_type === "percentage";
+      const isPct = p.discount?.type === "percentage" || activeDisc?.discount_type === "percentage";
       if (isPct) {
-        const v = Math.round(Number(p.discount?.value ?? p.activeSale?.discount_value ?? 0));
+        const v = Math.round(Number(p.discount?.value ?? activeDisc?.discount_value ?? 0));
         if (v > 0) pctLabel = `-${v}%`;
       } else if (typeof p.discount?.discount_percentage === "number" && p.discount.discount_percentage > 0) {
         pctLabel = `-${Math.round(p.discount.discount_percentage)}%`;
@@ -732,7 +733,8 @@ export default function ProductDetail() {
                 ) : null}
               </div>
 
-              {(p.discount?.end_date || p.activeSale?.end_date) && (p.discount || p.activeSale) ? (
+              {(p.discount?.end_date || p.active_discount?.end_date || p.activeDiscount?.end_date) &&
+              (p.discount || p.active_discount || p.activeDiscount) ? (
                 <p className="mt-2 text-xs font-medium text-amber-800">{t("limitedTime")}</p>
               ) : null}
             </div>

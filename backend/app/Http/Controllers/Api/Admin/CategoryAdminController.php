@@ -84,13 +84,18 @@ class CategoryAdminController extends Controller
         ];
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $items = Category::query()
+        $query = Category::query()
             ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get()
-            ->map(fn($c) => $this->mapCategory($c));
+            ->orderBy('name');
+
+        // Stock & Inventory uses barcode_qr rows; keep them out of the Categories admin list unless requested.
+        if (! $request->boolean('include_stock_labels')) {
+            $query->catalogOnly();
+        }
+
+        $items = $query->get()->map(fn ($c) => $this->mapCategory($c));
 
         return response()->json(['data' => $items]);
     }
