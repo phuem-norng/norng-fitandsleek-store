@@ -18,7 +18,13 @@ import {
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
-const BARCODE_QR_TYPE = "barcode_qr";
+import {
+    BARCODE_QR_TYPE,
+    batchReceiptRefForRow,
+    buildStockReceivedLogRows,
+    masterBarcodeForRow,
+    receiveBatchesForMaster,
+} from "../../lib/stockLabelReceipts";
 
 const STOCK_ADMIN_BASES = ["/admin/stock-inventory", "/admin/stock-received"];
 
@@ -45,58 +51,6 @@ const STOCK_TABLE_COLUMNS = [
 ];
 
 const stockColumnsStorageKey = (pageKey) => `fitandsleek-stock-columns-${pageKey}`;
-
-/** Sum receive-batch rows (Quick Restock) under a master inventory label. */
-const receiveBatchesForMaster = (masterRow, allRows) => {
-    if (!masterRow?.id) return [];
-    const masterId = String(masterRow.id);
-    return (allRows || []).filter((r) => String(r.parent_id) === masterId);
-};
-
-/** Master label barcode for a row (batch rows inherit their label slug). */
-const masterBarcodeForRow = (item, allRows) => {
-    if (!item) return "";
-    if (item.parent_id != null) {
-        const master = (allRows || []).find((r) => String(r.id) === String(item.parent_id));
-        return String(master?.slug || item.slug || "").trim();
-    }
-    return String(item.slug || "").trim();
-};
-
-/** Batch receipt ref shown under the master barcode (Quick Restock slugs). */
-const batchReceiptRefForRow = (item, allRows) => {
-    if (!item?.parent_id) return null;
-    const batchSlug = String(item.slug || "").trim();
-    const masterSlug = masterBarcodeForRow(item, allRows);
-    if (!batchSlug || batchSlug === masterSlug) return null;
-    return batchSlug;
-};
-
-/**
- * Stock Received log: one table row per receive event (Quick Restock batch or legacy master receipt).
- */
-const buildStockReceivedLogRows = (filteredRows, allRows) => {
-    const batches = (filteredRows || []).filter((r) => r.parent_id != null);
-    const legacy = [];
-    for (const master of (filteredRows || []).filter((r) => r.parent_id == null)) {
-        const children = receiveBatchesForMaster(master, allRows);
-        const qty = master.stock_received != null
-            ? parseInt(master.stock_received, 10)
-            : (children.length === 0 ? parseInt(master.stock, 10) : NaN);
-        if (!master.manage_stock || !Number.isFinite(qty) || qty <= 0) continue;
-        if (children.length > 0 && master.stock_received == null) continue;
-        legacy.push(master);
-    }
-    const combined = [...batches, ...legacy];
-    return combined.sort((a, b) => {
-        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-        if (tb !== ta) return tb - ta;
-        const da = effectiveDateIn(a) || "";
-        const db = effectiveDateIn(b) || "";
-        return db.localeCompare(da);
-    });
-};
 
 /** Units shown on Stock Received; checkout only decrements `stock`, never `stock_received`. */
 const effectiveRowStock = (row, receivedPage, allRows = []) => {
@@ -387,6 +341,24 @@ const calculateBundleUnitCost = (totalCost, totalQuantity) => {
     return (cost / quantity).toFixed(2);
 };
 
+/** On-hand for average-bundle labels follows Total quantity (saved as `stock`). */
+const averageBundleOnHandQuantity = (stateOrItem) => {
+    const raw = String(stateOrItem?.bundle_total_quantity ?? "").trim();
+    if (raw !== "") {
+        const fromBundle = parseInt(raw, 10);
+        if (Number.isFinite(fromBundle) && fromBundle >= 0) return fromBundle;
+    }
+    const stock = parseInt(String(stateOrItem?.stock ?? "").trim(), 10);
+    return Number.isFinite(stock) && stock >= 0 ? stock : 0;
+};
+
+const stockFromBundleQuantity = (bundleTotalQuantity) => {
+    const raw = String(bundleTotalQuantity ?? "").trim();
+    if (raw === "") return "";
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? String(n) : "";
+};
+
 const isAverageBundleForm = (state) =>
     (state.product_condition || "new") === "second_hand" &&
     (state.second_hand_sale_type || "single") === "average_bundle";
@@ -415,8 +387,7 @@ const applySecondHandBundleDefaults = (state) => {
         ...state,
         cost: unitCost || "",
         manage_stock: true,
-        // Average bundle on-hand is counted from catalog products linked to this barcode, not bundle qty.
-        stock: "",
+        stock: stockFromBundleQuantity(state.bundle_total_quantity),
     };
 };
 
@@ -497,7 +468,7 @@ function mapItemToEditForm(item, receivedPage = false) {
     const displayQty = receivedPage
         ? (item.stock_received != null ? item.stock_received : item.stock)
         : item.stock;
-    return {
+    const mapped = {
         ...item,
         barcode_code: item.slug || "",
         compare_at_price: item.compare_at_price ?? "",
@@ -518,6 +489,7 @@ function mapItemToEditForm(item, receivedPage = false) {
         variation_sizes: Array.isArray(item.variation_sizes) ? item.variation_sizes : [],
         variation_custom_size: "",
     };
+    return isAverageBundleLabel(item) ? applySecondHandBundleDefaults(mapped) : mapped;
 }
 
 export default function AdminBarcodeQR() {
@@ -1341,16 +1313,10 @@ export default function AdminBarcodeQR() {
         });
     };
 
-    const linkedProductUnitsForLabel = (item) =>
-        linkedProductsForLabel(item).reduce((sum, product) => {
-            const stock = Number(product?.stock);
-            return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
-        }, 0);
-
     const displayRowStock = (item) => {
         if (!item?.manage_stock) return null;
         if (isAverageBundleLabel(item)) {
-            return linkedProductUnitsForLabel(item);
+            return averageBundleOnHandQuantity(item);
         }
         return effectiveRowStock(item, isReceivedLogPage, rows);
     };
@@ -1397,7 +1363,7 @@ export default function AdminBarcodeQR() {
     const totalPriceForLabel = (item) => {
         if (isAverageBundleLabel(item)) {
             const linked = linkedProductsForLabel(item);
-            const units = linkedProductUnitsForLabel(item);
+            const units = averageBundleOnHandQuantity(item);
             const price = Number(item?.price);
             if (!Number.isFinite(price)) return null;
             return { amount: price * units, sourceCount: linked.length, units };
@@ -1891,7 +1857,7 @@ export default function AdminBarcodeQR() {
                                                 </div>
                                             </div>
                                             <p className="rounded-lg bg-white/80 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-slate-900/70 dark:text-amber-200">
-                                                System will set Cost ($) to {bundleUnitCost ? `$${bundleUnitCost}` : "$0.00"} from bundle cost ÷ quantity. On-hand and totals count catalog products linked to this barcode label.
+                                                System will set Cost ($) to {bundleUnitCost ? `$${bundleUnitCost}` : "$0.00"} from bundle cost ÷ quantity. On hand matches Total quantity for this bundle label.
                                             </p>
                                         </div>
                                     )}
@@ -2899,7 +2865,7 @@ export default function AdminBarcodeQR() {
                     return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
                 }, 0);
                 const unitsLabel = isAverageBundle
-                    ? `${catalogUnits} units from linked products`
+                    ? `${averageBundleOnHandQuantity(linkedProductsItem)} units on hand`
                     : isReceiveBatch
                         ? `${receiptUnits} units in this receipt`
                         : `${catalogUnits} units`;

@@ -31,6 +31,13 @@ import {
   loadTableColumnVisibility,
   TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
+import {
+  BARCODE_QR_TYPE,
+  buildProductBarcodeLabelOptions,
+  findBarcodeLabelBySlug,
+  formatBarcodeLabelOptionText,
+  labelPoolStockForCategory,
+} from "../../lib/stockLabelReceipts";
 
 const PRODUCTS_TABLE_COLUMNS = [
   { id: "select", label: "Select" },
@@ -481,23 +488,14 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
 
  const getSizePreset = (typeKey) => SIZE_PRESETS[typeKey] || [];
 
- const BARCODE_QR_TYPE = "barcode_qr";
-
  const catalogCategories = useMemo(
  () => categories.filter((c) => normalizeType(c.type) !== BARCODE_QR_TYPE),
  [categories]
  );
 
+ /** One option per Stock Received row (and standalone masters), matching /admin/stock-received. */
  const barcodeLabelOptions = useMemo(
- () =>
- [...categories.filter((c) => {
- if (normalizeType(c.type) !== BARCODE_QR_TYPE) return false;
- // Master inventory labels only (exclude receive-batch child rows).
- if (c.parent_id != null && c.parent_id !== "") return false;
- return true;
- })].sort((a, b) =>
- String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" })
- ),
+ () => buildProductBarcodeLabelOptions(categories),
  [categories]
  );
 
@@ -528,11 +526,7 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  if (!Number.isNaN(n)) price = String(n);
  }
 
- let poolStock = "0";
- if (label.stock != null && label.stock !== "") {
- const st = parseInt(String(label.stock), 10);
- if (!Number.isNaN(st)) poolStock = String(st);
- }
+ let poolStock = labelPoolStockForCategory(label);
 
  const condition = String(label.product_condition || "new");
  const saleType = String(label.second_hand_sale_type || "single");
@@ -1434,6 +1428,7 @@ String(form.allocated_stock ?? "").trim() === ""
  ...p,
  has_variants: hasVariants,
  barcode_code: p.barcode_code ?? "",
+ stock_label_id: p.stock_label_id != null && p.stock_label_id !== "" ? String(p.stock_label_id) : "",
  allocated_stock: p.stock != null && p.stock !== "" ? String(p.stock) : "",
  sizes: apiSizes,
  colors: apiColors,
@@ -1513,6 +1508,9 @@ String(editing.allocated_stock ?? "").trim() === ""
  ...editing,
  brand_id: editing.brand_id || null,
  barcode_code: (editing.barcode_code || "").trim() || null,
+ stock_label_id: (editing.stock_label_id || "").toString().trim()
+ ? parseInt(editing.stock_label_id, 10)
+ : null,
  price: parseFloat(editing.price),
  stock: stockPayload,
  colors: editHasVariants ? productColorsPayloadFromRows(Array.isArray(editing.colors) ? editing.colors : []) : null,
@@ -1848,13 +1846,16 @@ For no-variant products, this is the single barcode to print and scan.
  onChange={(e) => {
  const v = e.target.value;
  setForm((s) => {
+ const label = findBarcodeLabelBySlug(v, barcodeLabelOptions);
+ const stockLabelId = label ? String(label.id) : "";
  const lp = labelPricePoolFromSlug(v);
  if (!lp) {
- return { ...s, barcode_code: v, allocated_stock: "" };
+ return { ...s, barcode_code: v, stock_label_id: stockLabelId, allocated_stock: "" };
  }
  return {
  ...s,
  barcode_code: v,
+ stock_label_id: stockLabelId,
  price: lp.isAverageBundle ? lp.price : s.price,
  stock: lp.poolStock,
  allocated_stock: lp.poolStock,
@@ -1871,8 +1872,7 @@ For no-variant products, this is the single barcode to print and scan.
  )}
  {barcodeLabelOptions.map((c) => (
  <option key={c.id} value={c.slug || ""}>
- {c.name || c.slug}
- {c.slug ? ` · ${c.slug}` : ""}
+ {formatBarcodeLabelOptionText(c, categories)}
  </option>
  ))}
  </select>
@@ -3542,13 +3542,16 @@ For no-variant products, this is the single barcode to print and scan.
  const v = e.target.value;
  setEditing((s) => {
  if (!s) return s;
+ const label = findBarcodeLabelBySlug(v, barcodeLabelOptions);
+ const stockLabelId = label ? String(label.id) : "";
  const lp = labelPricePoolFromSlug(v, { ignoreProductId: s.id });
  if (!lp) {
- return { ...s, barcode_code: v, allocated_stock: "" };
+ return { ...s, barcode_code: v, stock_label_id: stockLabelId, allocated_stock: "" };
  }
  return {
  ...s,
  barcode_code: v,
+ stock_label_id: stockLabelId,
  price: lp.isAverageBundle ? lp.price : s.price,
  stock: lp.poolStock,
  allocated_stock: lp.poolStock,
@@ -3565,8 +3568,7 @@ For no-variant products, this is the single barcode to print and scan.
  )}
  {barcodeLabelOptions.map((c) => (
  <option key={c.id} value={c.slug || ""}>
- {c.name || c.slug}
- {c.slug ? ` · ${c.slug}` : ""}
+ {formatBarcodeLabelOptionText(c, categories)}
  </option>
  ))}
  </select>
