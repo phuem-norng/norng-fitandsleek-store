@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../lib/api";
-import { useTheme } from "../../state/theme.jsx";
+import { ADMIN_BRAND_PRIMARY, useTheme } from "../../state/theme.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 
 export default function Settings() {
@@ -26,7 +26,7 @@ export default function Settings() {
  font_en: "Inter",
  font_km: "Noto Sans Khmer",
  admin_theme_mode: "light",
- admin_primary_color: "#6e8b7e",
+ admin_primary_color: ADMIN_BRAND_PRIMARY,
  privacy_content: "",
  terms_content: "",
  });
@@ -51,7 +51,7 @@ export default function Settings() {
  });
 
  const loadedMode = flatForm.admin_theme_mode === "dark" ? "dark" : "light";
- const loadedColor = normalizeHexColor(flatForm.admin_primary_color || "#6e8b7e");
+ const loadedColor = normalizeHexColor(flatForm.admin_primary_color || ADMIN_BRAND_PRIMARY);
  flatForm.admin_theme_mode = loadedMode;
  flatForm.admin_primary_color = loadedColor;
 
@@ -71,7 +71,7 @@ export default function Settings() {
  setError("");
  try {
  const normalizedThemeMode = formThemeMode === "dark" ? "dark" : "light";
- const normalizedThemeColor = normalizeHexColor(formPrimaryColor || "#6e8b7e");
+ const normalizedThemeColor = normalizeHexColor(formPrimaryColor || ADMIN_BRAND_PRIMARY);
  const payloadForm = {
  ...form,
  admin_theme_mode: normalizedThemeMode,
@@ -104,7 +104,7 @@ export default function Settings() {
  };
 
  const handleThemeColorChange = (nextColor) => {
- const colorValue = normalizeHexColor(nextColor || "#6e8b7e");
+ const colorValue = normalizeHexColor(nextColor || ADMIN_BRAND_PRIMARY);
  setPrimaryColor(colorValue);
  handleChange("admin_primary_color", colorValue);
  };
@@ -119,7 +119,7 @@ export default function Settings() {
  "rounded-3xl border border-slate-200/70 dark:border-slate-700/70 bg-white/78 dark:bg-slate-900/62 backdrop-blur-xl ";
 
  return (
- <div className="min-h-screen">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0 space-y-6">
  <div>
  <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">Settings</h1>
@@ -198,9 +198,9 @@ export default function Settings() {
  onChange={(e) => handleThemeColorChange(e.target.value)}
  className="h-11 w-14 p-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 cursor-pointer"
  />
- <input type="text" value={formPrimaryColor} onChange={(e) => handleThemeColorChange(e.target.value)} className={inputClass} placeholder="#6e8b7e" />
+ <input type="text" value={formPrimaryColor} onChange={(e) => handleThemeColorChange(e.target.value)} className={inputClass} placeholder={ADMIN_BRAND_PRIMARY} />
  </div>
- <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Admin accent color (default: #6e8b7e)</p>
+ <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Admin accent color (default: {ADMIN_BRAND_PRIMARY})</p>
  </div>
  </div>
  </section>

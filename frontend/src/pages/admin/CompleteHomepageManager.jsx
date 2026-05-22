@@ -72,6 +72,8 @@ const defaultLeftMenu = [
  },
 ];
 
+const DEFAULT_CHROME_BACKGROUND = '#6e8b7e';
+
 export default function CompleteHomepageManager() {
  const { mode } = useTheme();
  const [activeTab, setActiveTab] = useState('sections');
@@ -99,7 +101,7 @@ export default function CompleteHomepageManager() {
  const [headerSettings, setHeaderSettings] = useState({
  logo_text: 'FIT&SLEEK',
  logo_url: '/logo.png',
- background_color: '#6e8b7e',
+ background_color: DEFAULT_CHROME_BACKGROUND,
  search_placeholder: 'Search items...',
  search_enabled: true,
  cart_enabled: true,
@@ -134,7 +136,7 @@ export default function CompleteHomepageManager() {
  privacy_enabled: true,
  contact_enabled: true,
  copyright_text: '© 2026 FIT&SLEEK Pro. All rights reserved.',
- background_color: '#6e8b7e',
+ background_color: DEFAULT_CHROME_BACKGROUND,
  });
 
  // Footer links sections
@@ -376,6 +378,10 @@ handleHeaderChange('background_color', color);
 handleFooterChange('background_color', color);
 };
 
+const resetSharedChromeBackgroundColor = () => {
+handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
+};
+
  const uploadLeftMenuImage = async (sectionIndex, itemIndex, file) => {
  if (!file) return;
  const formData = new FormData();
@@ -448,7 +454,7 @@ handleFooterChange('background_color', color);
  setError('');
  await api.put('/admin/homepage-settings/sections', { sections });
  const chrome =
- headerSettings.background_color || footerSettings.background_color || '#6e8b7e';
+ headerSettings.background_color || footerSettings.background_color || DEFAULT_CHROME_BACKGROUND;
  await api.put('/admin/homepage-settings/header-extended', {
  ...headerSettings,
  background_color: chrome,
@@ -512,7 +518,7 @@ handleFooterChange('background_color', color);
  if (initialLoading) return <AdminContentSkeleton title="Homepage Manager" />;
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
  <AdminConfirmDialog
  open={!!pendingRemove}
@@ -588,12 +594,28 @@ handleFooterChange('background_color', color);
  <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
  Shared background color
  </label>
+ <div className="flex flex-wrap items-center gap-3">
  <input
  type="color"
- value={headerSettings.background_color || footerSettings.background_color || '#6e8b7e'}
+ value={headerSettings.background_color || footerSettings.background_color || DEFAULT_CHROME_BACKGROUND}
  onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
- className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+ className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 cursor-pointer"
+ aria-label="Shared header and footer background color"
  />
+ <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
+ {headerSettings.background_color || footerSettings.background_color || DEFAULT_CHROME_BACKGROUND}
+ </span>
+ <button
+ type="button"
+ onClick={resetSharedChromeBackgroundColor}
+ className="h-10 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-colors"
+ >
+ Reset color
+ </button>
+ </div>
+ <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+ Default: {DEFAULT_CHROME_BACKGROUND}. Click <strong>Save Section Settings</strong> below to apply on the live site.
+ </p>
  </div>
 
  <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">

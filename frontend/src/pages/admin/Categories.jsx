@@ -250,7 +250,7 @@ export default function AdminCategories() {
  };
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  {/* Success Toast */}
  <div className={`fixed top-6 right-6 z-50 transition-all duration-500 ease-out transform ${animate ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
  {success && (

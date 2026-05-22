@@ -155,7 +155,7 @@ export default function AdminReplacementCases() {
  if (loading) return <AdminContentSkeleton title="Replacement Cases" />;
 
  return (
- <div className="min-h-screen admin-soft text-slate-800 dark:text-slate-100">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
  <div className="mb-8">
  <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">Replacement Cases</h1>

@@ -3,7 +3,7 @@ import "sweetalert2/dist/sweetalert2.min.css";
 import { isAdminDarkChrome, popAdminModalChrome, pushAdminModalChrome } from "./adminDarkChrome.js";
 
 const DANGER = "#dc2626";
-const FALLBACK_PRIMARY = "#6e8b7e";
+const FALLBACK_PRIMARY = "#6E8B7E";
 
 function cssVarHex(name, fallback) {
     if (typeof document === "undefined") return fallback;

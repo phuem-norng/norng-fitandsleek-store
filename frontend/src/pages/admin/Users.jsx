@@ -476,7 +476,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  );
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
  <div className="mb-10 flex items-center justify-between">
  <div>

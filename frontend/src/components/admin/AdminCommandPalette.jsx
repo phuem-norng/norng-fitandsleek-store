@@ -105,7 +105,7 @@ function highlight(text, query) {
       part && part.toLowerCase() === needle ? (
         <mark
           key={idx}
-          className="bg-transparent font-semibold text-[var(--cmd-accent,#6e8b7e)] dark:text-[var(--cmd-accent,#6e8b7e)]"
+          className="bg-transparent font-semibold text-[var(--cmd-accent,#6E8B7E)] dark:text-[var(--cmd-accent,#6E8B7E)]"
         >
           {part}
         </mark>

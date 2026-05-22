@@ -267,7 +267,7 @@ export default function AdminMessages() {
  };
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
  <AdminConfirmDialog
  open={pendingDeleteId != null || pendingBulkDelete}

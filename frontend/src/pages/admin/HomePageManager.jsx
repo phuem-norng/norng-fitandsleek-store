@@ -331,7 +331,7 @@ export default function HomePageManager() {
 
  // -------- UI --------
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <AdminConfirmDialog
  open={!!pendingDelete}
  onClose={() => {

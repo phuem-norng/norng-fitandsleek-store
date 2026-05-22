@@ -71,7 +71,7 @@ export default function AdminManagement() {
  return (
  <div className="space-y-6 w-full min-w-0">
  {/* Header */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6">
+ <div className="admin-surface border admin-border rounded-2xl p-6">
  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
  Create New Team User
  </h2>
@@ -81,7 +81,7 @@ export default function AdminManagement() {
  </div>
 
  {/* Form Card */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+ <div className="admin-surface border admin-border rounded-2xl p-8">
  {successMessage && (
  <div className="mb-6 p-4 bg-[rgba(var(--admin-primary-rgb),0.12)] dark:bg-[rgba(var(--admin-primary-rgb),0.18)] border border-[rgba(var(--admin-primary-rgb),0.35)] rounded-lg text-[color:var(--admin-primary)] dark:text-white">
  {successMessage}

@@ -490,7 +490,12 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
 
  const barcodeLabelOptions = useMemo(
  () =>
- [...categories.filter((c) => normalizeType(c.type) === BARCODE_QR_TYPE)].sort((a, b) =>
+ [...categories.filter((c) => {
+ if (normalizeType(c.type) !== BARCODE_QR_TYPE) return false;
+ // Master inventory labels only (exclude receive-batch child rows).
+ if (c.parent_id != null && c.parent_id !== "") return false;
+ return true;
+ })].sort((a, b) =>
  String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" })
  ),
  [categories]
@@ -854,7 +859,9 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  setLoading(true);
  try {
  const { data: productsData } = await api.get("/admin/products", { params: { per_page: 500 } });
- const { data: categoriesData } = await api.get("/admin/categories");
+ const { data: categoriesData } = await api.get("/admin/categories", {
+ params: { include_stock_labels: true },
+ });
  const { data: brandsData } = await api.get("/admin/brands");
  // Handle both array and object responses
  const categories = Array.isArray(categoriesData)
@@ -1685,14 +1692,14 @@ String(editing.allocated_stock ?? "").trim() === ""
  </div>
 
  {/* Stat cards */}
- <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+ <div className="admin-stat-grid grid grid-cols-2 xl:grid-cols-4 gap-4">
  {[
- { label: "Total Sales", value: `$${Number(rows.reduce((s, p) => s + Number(p.price || 0) * (p.sold_count || 0), 0) || 0).toLocaleString()}`, sub: "+20.1%", color: primaryColor },
- { label: "Total Products", value: rows.length.toLocaleString(), sub: "+5.02%", color: primaryColor },
- { label: "Active Products", value: rows.filter((p) => p.is_active).length.toLocaleString(), sub: "+3.1%", color: "#f59e0b" },
- { label: "Out of Stock", value: rows.filter((p) => Number(p.stock) === 0).length.toLocaleString(), sub: "-3.58%", color: "#ef4444" },
- ].map((c) => (
- <div key={c.label} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+ { label: "Total Sales", value: `$${Number(rows.reduce((s, p) => s + Number(p.price || 0) * (p.sold_count || 0), 0) || 0).toLocaleString()}`, sub: "+20.1%" },
+ { label: "Total Products", value: rows.length.toLocaleString(), sub: "+5.02%" },
+ { label: "Active Products", value: rows.filter((p) => p.is_active).length.toLocaleString(), sub: "+3.1%" },
+ { label: "Out of Stock", value: rows.filter((p) => Number(p.stock) === 0).length.toLocaleString(), sub: "-3.58%" },
+ ].map((c, index) => (
+ <div key={c.label} className="admin-surface admin-spectrum-kpi rounded-xl border admin-border p-4">
  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{c.label}</p>
  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1.5 leading-none">{c.value}</p>
  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{c.sub} from last month</p>
@@ -1974,7 +1981,7 @@ Allocated Stock
 
  {barcodeLabelOptions.length === 0 ? (
  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
- Create labels under Admin → Barcode & QR.
+ Create labels under Admin → Stock &amp; Inventory.
  </p>
 ) : selectedFormBarcodeLabelMeta ? (
 <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
@@ -3668,7 +3675,7 @@ Allocated Stock
 
  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
  {barcodeLabelOptions.length === 0
- ? "Create labels under Admin → Barcode & QR."
+ ? "Create labels under Admin → Stock & Inventory."
 : selectedEditBarcodeLabelMeta
 ? barcodeLabelModeText(selectedEditBarcodeLabelMeta)
 : "Choosing a listed label sets Price and label pool Stock from that row (read-only). Allocated Stock is optional; leave it blank to use the full label pool. Remaining Label Stock is label pool minus allocation. Clear the label or pick “None” to type price and stock manually."}

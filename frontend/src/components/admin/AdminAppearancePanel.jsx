@@ -1,5 +1,5 @@
 import React from "react";
-import { ADMIN_APPEARANCE_PRESETS, useTheme } from "../../state/theme.jsx";
+import { ADMIN_APPEARANCE_PRESETS, ADMIN_SPECTRUM_SWATCH, useTheme } from "../../state/theme.jsx";
 
 const CUSTOM_VALUE = "__custom_accent__";
 
@@ -74,10 +74,14 @@ export default function AdminAppearancePanel() {
         <div className="flex items-center gap-2">
           <div
             className="h-7 w-7 shrink-0 rounded-full border border-slate-200 dark:border-slate-600 shadow-inner"
-            style={{
-              backgroundColor:
-                currentPreset?.color || primaryColor || "var(--admin-primary)",
-            }}
+            style={
+              currentPreset?.palette
+                ? { background: ADMIN_SPECTRUM_SWATCH }
+                : {
+                    backgroundColor:
+                      currentPreset?.color || primaryColor || "var(--admin-primary)",
+                  }
+            }
             aria-hidden
           />
           <select

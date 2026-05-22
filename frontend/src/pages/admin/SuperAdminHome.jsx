@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../../state/auth";
 import apiClient from "../../lib/api";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import { useAdminAccents } from "../../lib/adminAccents.js";
 
 export default function SuperAdminHome() {
  const { user } = useAuth();
@@ -14,6 +15,7 @@ export default function SuperAdminHome() {
  inactiveUsers: 0,
  });
  const [loading, setLoading] = useState(true);
+ const { iconBoxStyle } = useAdminAccents();
 
  useEffect(() => {
  const fetchStats = async () => {
@@ -45,53 +47,41 @@ export default function SuperAdminHome() {
  title: "Total Users",
  value: stats.totalUsers,
  icon: "M17 20h5v-2a3 3 0 00-5.856-1.487M15 6a3 3 0 11-6 0 3 3 0 016 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zM5 20a3 3 0 00-3-3 3 3 0 00-3 3v2h6v-2zM9 11a4 4 0 11-8 0 4 4 0 018 0z",
- color: "from-[rgb(var(--admin-primary-rgb))] to-[rgba(var(--admin-primary-rgb),0.55)]",
- bgColor: "bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)]",
  },
  {
  title: "Admin Users",
  value: stats.totalAdmins,
  icon: "M13 10V3L4 14h7v7l9-11h-7z",
- color: "from-[rgb(var(--admin-primary-rgb))] to-[rgba(var(--admin-primary-rgb),0.5)]",
- bgColor: "bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)]",
  },
  {
  title: "Customer Users",
  value: stats.totalCustomers,
  icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
- color: "from-[rgb(var(--admin-primary-rgb))] to-[rgba(var(--admin-primary-rgb),0.45)]",
- bgColor: "bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)]",
  },
  {
  title: "Active Users",
  value: stats.activeUsers,
  icon: "M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z",
- color: "from-[rgb(var(--admin-primary-rgb))] to-[rgba(var(--admin-primary-rgb),0.58)]",
- bgColor: "bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)]",
  },
  {
  title: "Inactive Users",
  value: stats.inactiveUsers,
  icon: "M12 9v2m0 4v2m0 5v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
- color: "from-yellow-500 to-yellow-600",
- bgColor: "bg-yellow-50 dark:bg-yellow-900/20",
  },
  {
  title: "Suspended Users",
  value: stats.suspendedUsers,
  icon: "M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
- color: "from-red-500 to-red-600",
- bgColor: "bg-red-50 dark:bg-red-900/20",
  },
  ];
 
  if (loading) return <AdminContentSkeleton lines={3} imageHeight={180} />;
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+ <div className="min-h-full admin-soft text-slate-900 dark:text-slate-100">
  <div className="w-full min-w-0 space-y-8">
  {/* Header */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+ <div className="admin-surface border admin-border rounded-2xl p-8">
  <div className="flex items-start justify-between">
  <div>
  <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">
@@ -101,9 +91,12 @@ export default function SuperAdminHome() {
  Manage all users, admins, customers, and system configuration.
  </p>
  </div>
- <div className="bg-gradient-to-br from-[rgb(var(--admin-primary-rgb))] to-[rgba(var(--admin-primary-rgb),0.55)] rounded-xl p-4">
+ <div
+ className="admin-spectrum-icon flex h-14 w-14 items-center justify-center rounded-xl"
+ style={{ backgroundColor: "var(--admin-primary)", color: "#fff" }}
+ >
  <svg
- className="w-8 h-8 text-white"
+ className="w-8 h-8"
  fill="none"
  stroke="currentColor"
  viewBox="0 0 24 24"
@@ -120,11 +113,11 @@ export default function SuperAdminHome() {
  </div>
 
  {/* Quick Stats */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+ <div className="admin-stat-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
  {statCards.map((card, index) => (
  <div
  key={index}
- className={`${card.bgColor} border border-slate-200 dark:border-slate-700 rounded-2xl p-6 transition-shadow duration-300`}
+ className="admin-surface admin-spectrum-kpi border admin-border rounded-2xl p-6 transition-shadow duration-300"
  >
  <div className="flex items-start justify-between">
  <div>
@@ -135,11 +128,9 @@ export default function SuperAdminHome() {
  {loading ? "..." : card.value}
  </p>
  </div>
- <div
- className={`bg-gradient-to-br ${card.color} p-3 rounded-xl`}
- >
+ <div className="admin-spectrum-icon flex h-11 w-11 items-center justify-center rounded-xl">
  <svg
- className="w-6 h-6 text-white"
+ className="w-6 h-6"
  fill="none"
  stroke="currentColor"
  viewBox="0 0 24 24"
@@ -160,9 +151,9 @@ export default function SuperAdminHome() {
  {/* Features Section */}
  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
  {/* User Management */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+ <div className="admin-surface border admin-border rounded-2xl p-8">
  <div className="flex items-center gap-4 mb-6">
- <div className="bg-[rgba(var(--admin-primary-rgb),0.14)] dark:bg-[rgba(var(--admin-primary-rgb),0.2)] p-3 rounded-xl">
+ <div className="admin-stat-icon flex h-11 w-11 items-center justify-center rounded-xl border admin-border" style={iconBoxStyle(0)}>
  <svg
  className="w-6 h-6 text-[color:var(--admin-primary)] dark:text-[color:var(--admin-primary)]"
  fill="none"
@@ -245,9 +236,9 @@ export default function SuperAdminHome() {
  </div>
 
  {/* System Control */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+ <div className="admin-surface border admin-border rounded-2xl p-8">
  <div className="flex items-center gap-4 mb-6">
- <div className="bg-[rgba(var(--admin-primary-rgb),0.14)] dark:bg-[rgba(var(--admin-primary-rgb),0.2)] p-3 rounded-xl">
+ <div className="admin-stat-icon flex h-11 w-11 items-center justify-center rounded-xl border admin-border" style={iconBoxStyle(1)}>
  <svg
  className="w-6 h-6 text-[color:var(--admin-primary)] dark:text-[color:var(--admin-primary)]"
  fill="none"
@@ -272,7 +263,7 @@ export default function SuperAdminHome() {
  <ul className="space-y-3">
  <li className="flex items-center gap-3">
  <svg
- className="w-5 h-5 text-[color:var(--admin-primary)] flex-shrink-0"
+ className="w-5 h-5 text-[color:var(--admin-primary)] shrink-0"
  fill="currentColor"
  viewBox="0 0 20 20"
  >
@@ -331,7 +322,7 @@ export default function SuperAdminHome() {
  </div>
 
  {/* Role Hierarchy */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+ <div className="admin-surface border admin-border rounded-2xl p-8">
  <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6">
  Role Hierarchy & Permissions
  </h3>

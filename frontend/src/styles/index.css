@@ -37,8 +37,8 @@ html.admin-dashboard[data-admin-theme="dark"] .fs-skeleton-block {
 
 :root {
   /* Admin dashboard accent (inherits to `.admin-theme`; overridden on html via ThemeProvider) */
-  --admin-primary: #6e8b7e;
-  --admin-primary-rgb: 107, 126, 115;
+  --admin-primary: #6E8B7E;
+  --admin-primary-rgb: 110, 139, 126;
   --fs-bg: 248 249 250;
   --fs-fg: 18 18 18;
   --fs-muted: 99 102 106;
@@ -456,20 +456,28 @@ select:focus {
 }
 
 .admin-theme {
-  /* Solid surfaces: readable contrast (WCAG) vs translucent glass cards */
+  /* Light Muted / Dasher-style: off-white canvas, white cards, soft sage accents */
   --admin-card-bg: #ffffff;
-  --admin-card-border: rgb(226 232 240);
-  --admin-soft-bg: #f4f6fb;
-  --admin-soft-alt: #eef1f8;
+  --admin-card-border: #e2e8f0;
+  --admin-soft-bg: #f8f9fa;
+  --admin-soft-alt: #f0f4f2;
   --admin-canvas: var(--admin-soft-bg);
   --admin-elevated: #ffffff;
-  --admin-glow: rgba(var(--admin-primary-rgb), 0.14);
-  --admin-muted: #475569;
+  --admin-glow: rgba(var(--admin-primary-rgb), 0.12);
+  --admin-muted: #64748b;
   --admin-heading: #0f172a;
+  --admin-status-info: #3b82f6;
+  --admin-status-info-bg: #eff6ff;
+  --admin-status-warning: #d97706;
+  --admin-status-warning-bg: #fffbeb;
+  --admin-status-danger: #dc2626;
+  --admin-status-danger-bg: #fef2f2;
+  --admin-status-success: var(--admin-primary);
+  --admin-status-success-bg: rgba(var(--admin-primary-rgb), 0.1);
   background-color: var(--admin-soft-bg);
   background-image:
-    radial-gradient(1200px 900px at -5% -10%, rgba(var(--admin-primary-rgb), 0.12), transparent 58%),
-    radial-gradient(900px 700px at 105% 5%, rgba(var(--admin-primary-rgb), 0.09), transparent 60%),
+    radial-gradient(1200px 900px at -5% -10%, rgba(var(--admin-primary-rgb), 0.1), transparent 58%),
+    radial-gradient(900px 700px at 105% 5%, rgba(var(--admin-primary-rgb), 0.07), transparent 60%),
     linear-gradient(180deg, var(--admin-soft-bg) 0%, var(--admin-soft-alt) 100%);
   color: var(--admin-heading);
 }
@@ -952,7 +960,7 @@ html.admin-dashboard[data-admin-theme="dark"] .admin-theme [class*="dark:bg-emer
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   color: inherit;
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
 }
 
 html.admin-dashboard[data-admin-theme="dark"] .admin-theme .admin-surface {
@@ -996,6 +1004,192 @@ html.admin-dashboard[data-admin-theme="dark"] .admin-theme .admin-gemini-shell::
   background:
     radial-gradient(520px 400px at 16% 10%, var(--admin-glow), transparent 72%),
     radial-gradient(480px 380px at 88% 18%, rgba(var(--admin-primary-rgb), 0.05), transparent 74%);
+}
+
+/* Light Muted Palette preset: soft sage canvas (solid hues, like analytics dashboards) */
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme {
+  --admin-soft-bg: #f0f4f2;
+  --admin-soft-alt: #e4ebe7;
+  --admin-glow: rgba(var(--admin-spectrum-1-rgb), 0.12);
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-gemini-shell::before {
+  background:
+    radial-gradient(640px 480px at 6% 4%, rgba(var(--admin-spectrum-1-rgb), 0.16), transparent 66%),
+    radial-gradient(520px 400px at 94% 10%, rgba(var(--admin-spectrum-2-rgb), 0.14), transparent 68%),
+    radial-gradient(460px 340px at 88% 92%, rgba(var(--admin-spectrum-3-rgb), 0.1), transparent 70%),
+    radial-gradient(420px 320px at 10% 88%, rgba(var(--admin-spectrum-5-rgb), 0.12), transparent 72%);
+}
+
+html.admin-dashboard[data-admin-theme="dark"][data-admin-preset="light-muted-palette"] .admin-theme {
+  --admin-soft-bg: var(--admin-canvas);
+  --admin-soft-alt: #010409;
+  --admin-glow: rgba(var(--admin-spectrum-1-rgb), 0.08);
+}
+
+html.admin-dashboard[data-admin-theme="dark"][data-admin-preset="light-muted-palette"] .admin-theme .admin-gemini-shell::before {
+  background:
+    radial-gradient(520px 400px at 8% 6%, rgba(var(--admin-spectrum-1-rgb), 0.11), transparent 70%),
+    radial-gradient(480px 360px at 92% 8%, rgba(var(--admin-spectrum-2-rgb), 0.09), transparent 72%),
+    radial-gradient(400px 300px at 85% 90%, rgba(var(--admin-spectrum-4-rgb), 0.08), transparent 74%),
+    radial-gradient(380px 280px at 12% 85%, rgba(var(--admin-spectrum-6-rgb), 0.07), transparent 72%);
+}
+
+/* Light Muted Palette: mixed accent on KPI grids (Dashboard, Reports, Products, Contacts, …) */
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(1) {
+  --admin-kpi-accent: var(--admin-spectrum-1);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-1-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(2) {
+  --admin-kpi-accent: var(--admin-spectrum-2);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-2-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(3) {
+  --admin-kpi-accent: var(--admin-spectrum-3);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-3-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(4) {
+  --admin-kpi-accent: var(--admin-spectrum-4);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-4-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(5) {
+  --admin-kpi-accent: var(--admin-spectrum-5);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-5-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(6) {
+  --admin-kpi-accent: var(--admin-spectrum-6);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-6-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(7) {
+  --admin-kpi-accent: var(--admin-spectrum-7);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-7-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(8) {
+  --admin-kpi-accent: var(--admin-spectrum-1);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-1-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(9) {
+  --admin-kpi-accent: var(--admin-spectrum-2);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-2-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(10) {
+  --admin-kpi-accent: var(--admin-spectrum-3);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-3-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(11) {
+  --admin-kpi-accent: var(--admin-spectrum-4);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-4-rgb);
+}
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid > :nth-child(12) {
+  --admin-kpi-accent: var(--admin-spectrum-5);
+  --admin-kpi-accent-rgb: var(--admin-spectrum-5-rgb);
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid .admin-stat-icon {
+  background-color: rgba(var(--admin-kpi-accent-rgb, var(--admin-primary-rgb)), 0.14) !important;
+  color: var(--admin-kpi-accent, var(--admin-primary)) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid .admin-spectrum-kpi {
+  border-top: 3px solid var(--admin-kpi-accent, var(--admin-primary));
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-stat-grid .admin-spectrum-icon {
+  background: var(--admin-kpi-accent, var(--admin-primary)) !important;
+  color: #fff !important;
+}
+
+/* Light Muted Palette — global admin UI (all pages, panels, tables, forms) */
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .admin-spectrum-kpi {
+  background-image: linear-gradient(
+    145deg,
+    #ffffff 0%,
+    rgba(var(--admin-kpi-accent-rgb, var(--admin-primary-rgb)), 0.07) 100%
+  ) !important;
+  border-top: 3px solid var(--admin-kpi-accent, var(--admin-primary));
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .admin-sidebar {
+  background-color: #ffffff !important;
+  border-color: #e8edf2 !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme aside .border-slate-200,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme header .border-slate-200 {
+  border-color: #e8edf2 !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme table thead {
+  background-color: rgba(var(--admin-primary-rgb), 0.05) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme table tbody tr:hover {
+  background-color: rgba(var(--admin-primary-rgb), 0.04) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme table tbody tr {
+  border-color: #eef2f6 !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-slate-50,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-slate-50\/90,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-slate-100 {
+  background-color: #f1f5f3 !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .text-slate-600 {
+  color: var(--admin-muted) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .text-slate-900 {
+  color: var(--admin-heading) !important;
+}
+
+/* Status badges — Dasher-style muted pills (orders, inventory, reports, …) */
+html.admin-dashboard[data-admin-preset="light-muted-palette"] .admin-theme .admin-badge {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-blue-100,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-sky-100 {
+  background-color: var(--admin-status-info-bg) !important;
+  color: var(--admin-status-info) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-amber-100,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-yellow-100,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-orange-100 {
+  background-color: var(--admin-status-warning-bg) !important;
+  color: var(--admin-status-warning) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-red-100,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-rose-100 {
+  background-color: var(--admin-status-danger-bg) !important;
+  color: var(--admin-status-danger) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-green-100,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme .bg-emerald-100 {
+  background-color: var(--admin-status-success-bg) !important;
+  color: var(--admin-status-success) !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme input:not([type="checkbox"]):not([type="radio"]),
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme textarea,
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme select {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme [role="dialog"],
+html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-theme="dark"]) .admin-theme [data-radix-popper-content-wrapper] > * {
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.1) !important;
 }
 
 /* Utility: hide scrollbar but keep scroll functionality */

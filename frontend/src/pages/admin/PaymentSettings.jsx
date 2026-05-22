@@ -77,7 +77,7 @@ export default function PaymentSettings() {
  if (loading) return <AdminContentSkeleton lines={3} imageHeight={200} />;
 
  return (
-<div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+<div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
 <div className="w-full min-w-0">
  <div className="bg-white dark:bg-gray-800 rounded-lg">
  <div className="px-4 py-5 sm:p-6">

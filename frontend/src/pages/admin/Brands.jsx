@@ -345,7 +345,7 @@ export default function AdminBrands() {
  };
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  {/* Toast */}
  <div
  className={`fixed top-6 right-6 z-50 transition-all duration-500 ease-out transform ${toastOn ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"

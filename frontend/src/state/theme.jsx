@@ -2,21 +2,53 @@
 
 const THEME_STORAGE_KEY = "fitandsleek_admin_theme";
 
+/** Brand sage — buttons, sidebar, menus, focus rings (`--admin-primary`). */
+export const ADMIN_BRAND_PRIMARY = "#6E8B7E";
+
+/** Legacy admin green — migrated to {@link ADMIN_BRAND_PRIMARY} on load. */
+const LEGACY_ADMIN_PRIMARY = "#37A169";
+const LEGACY_SPECTRUM_PRIMARY = "#3B82F6";
+const LEGACY_SPECTRUM_PRESET_ID = "spectrum";
+
+/** Multi-sage palette preset (theme picker + KPI accents). */
+export const ADMIN_LIGHT_MUTED_PALETTE_PRESET_ID = "light-muted-palette";
+
 /** Named presets (matches common dashboard “theme picker” patterns). */
 export const ADMIN_APPEARANCE_PRESETS = [
-  { id: "default", label: "Default", color: "#6e8b7e" },
+  { id: "default", label: "Default", color: ADMIN_BRAND_PRIMARY },
   { id: "emerald", label: "Emerald", color: "#10A37F" },
   { id: "ocean", label: "Ocean Breeze", color: "#6366F1" },
   { id: "coral", label: "Coral Sunset", color: "#F97316" },
   { id: "rose", label: "Rose", color: "#E11D48" },
   { id: "slate", label: "Slate Pro", color: "#475569" },
   { id: "violet", label: "Violet", color: "#8B5CF6" },
+  /** Sage accent cycle — KPI cards, charts, and soft canvas glows. */
+  {
+    id: ADMIN_LIGHT_MUTED_PALETTE_PRESET_ID,
+    label: "Light Muted Palette",
+    color: ADMIN_BRAND_PRIMARY,
+    palette: true,
+  },
 ];
 
+/** Solid accent cycle for KPI cards & charts (sage + muted blue/amber for Dasher-style variety). */
+export const ADMIN_SPECTRUM_COLORS = [
+  "#6E8B7E",
+  "#5B8DEF",
+  "#7A9A8D",
+  "#D4A574",
+  "#9BB0A5",
+  "#6B9BD1",
+  "#8FA89A",
+];
+
+export const ADMIN_SPECTRUM_SWATCH =
+  "linear-gradient(135deg, #6E8B7E 0%, #5B8DEF 28%, #7A9A8D 52%, #D4A574 72%, #9BB0A5 88%, #6B9BD1 100%)";
+
 const DEFAULT_THEME = {
-  mode: "dark",
-  primaryColor: "#6e8b7e",
-  presetId: "default",
+  mode: "light",
+  primaryColor: ADMIN_BRAND_PRIMARY,
+  presetId: ADMIN_LIGHT_MUTED_PALETTE_PRESET_ID,
   scale: "default",
   radius: "md",
   contentLayout: "full",
@@ -67,13 +99,77 @@ const SCALE_MULT = {
   lg: 1.125,
 };
 
-function applyModeAndPrimary(_mode, primaryColor) {
+function applySpectrumPalette(html) {
+  const [base, info, light, warning, mist, infoAlt, pale] = ADMIN_SPECTRUM_COLORS;
+  /* Buttons, menus, links — brand sage; KPI grid cycles muted accents */
+  html.style.setProperty("--admin-primary", ADMIN_BRAND_PRIMARY);
+  html.style.setProperty("--admin-primary-rgb", hexToRgbString(ADMIN_BRAND_PRIMARY));
+  html.style.setProperty("--admin-success", light);
+  html.style.setProperty("--admin-success-rgb", hexToRgbString(light));
+  html.style.setProperty("--admin-danger", "#DC2626");
+  html.style.setProperty("--admin-danger-rgb", hexToRgbString("#DC2626"));
+  html.style.setProperty("--admin-info", info);
+  html.style.setProperty("--admin-info-rgb", hexToRgbString(info));
+  html.style.setProperty("--admin-warning", warning);
+  html.style.setProperty("--admin-warning-rgb", hexToRgbString(warning));
+  html.style.setProperty("--admin-accent-purple", pale);
+  html.style.setProperty("--admin-accent-teal", base);
+  ADMIN_SPECTRUM_COLORS.forEach((hex, i) => {
+    html.style.setProperty(`--admin-spectrum-${i + 1}`, hex);
+    html.style.setProperty(`--admin-spectrum-${i + 1}-rgb`, hexToRgbString(hex));
+  });
+}
+
+function clearSpectrumPalette(html) {
+  [
+    "--admin-success",
+    "--admin-success-rgb",
+    "--admin-danger",
+    "--admin-danger-rgb",
+    "--admin-info",
+    "--admin-info-rgb",
+    "--admin-warning",
+    "--admin-warning-rgb",
+    "--admin-accent-purple",
+    "--admin-accent-teal",
+  ].forEach((key) => html.style.removeProperty(key));
+  for (let i = 1; i <= ADMIN_SPECTRUM_COLORS.length; i += 1) {
+    html.style.removeProperty(`--admin-spectrum-${i}`);
+    html.style.removeProperty(`--admin-spectrum-${i}-rgb`);
+  }
+}
+
+function normalizePresetId(id) {
+  if (id === LEGACY_SPECTRUM_PRESET_ID) return ADMIN_LIGHT_MUTED_PALETTE_PRESET_ID;
+  return id;
+}
+
+function resolveActivePresetId(primaryColor, presetIdHint) {
+  const hint = normalizePresetId(presetIdHint);
+  if (hint && ADMIN_APPEARANCE_PRESETS.some((p) => p.id === hint)) {
+    return hint;
+  }
+  return presetIdForPrimaryColor(primaryColor);
+}
+
+function applyModeAndPrimary(_mode, primaryColor, presetIdHint) {
   const html = document.documentElement;
   const normalizedColor = normalizeHexColor(primaryColor);
+  const activePresetId = resolveActivePresetId(normalizedColor, presetIdHint);
+  const preset = ADMIN_APPEARANCE_PRESETS.find((p) => p.id === activePresetId);
+
   /* Never toggle `dark` on <html> — storefront shares the same document; admin uses `data-admin-theme` + Tailwind selector */
   html.classList.remove("dark");
-  html.style.setProperty("--admin-primary", normalizedColor);
-  html.style.setProperty("--admin-primary-rgb", hexToRgbString(normalizedColor));
+  html.setAttribute("data-admin-preset", activePresetId);
+  html.removeAttribute("data-admin-accent-mode");
+
+  if (preset?.palette) {
+    applySpectrumPalette(html);
+  } else {
+    clearSpectrumPalette(html);
+    html.style.setProperty("--admin-primary", normalizedColor);
+    html.style.setProperty("--admin-primary-rgb", hexToRgbString(normalizedColor));
+  }
 }
 
 /** Updates CSS variables used by `html.admin-dashboard` typography + radius. */
@@ -95,9 +191,23 @@ export function applyAdminAppearanceVars(scale, radius) {
 
 function normalizeStored(raw) {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_THEME };
-  const mode = raw.mode === "light" ? "light" : "dark";
-  const primaryColor = normalizeHexColor(raw.primaryColor);
-  const presetId = presetIdForPrimaryColor(primaryColor);
+  let mode = raw.mode === "light" ? "light" : "dark";
+  let primaryColor = normalizeHexColor(raw.primaryColor);
+  const storedPreset = normalizePresetId(
+    typeof raw.presetId === "string" ? raw.presetId : "default",
+  );
+  const colorUpper = primaryColor.toUpperCase();
+  if (colorUpper === LEGACY_ADMIN_PRIMARY || colorUpper === LEGACY_SPECTRUM_PRIMARY) {
+    primaryColor = ADMIN_BRAND_PRIMARY;
+  }
+  let presetId = ADMIN_APPEARANCE_PRESETS.some((p) => p.id === storedPreset)
+    ? storedPreset
+    : presetIdForPrimaryColor(primaryColor);
+  /* Legacy “Default” preset → Light Muted Palette + light mode (Dasher-style admin UI). */
+  if (storedPreset === "default" || presetId === "default") {
+    presetId = ADMIN_LIGHT_MUTED_PALETTE_PRESET_ID;
+    mode = "light";
+  }
   const scale = ["xs", "default", "lg"].includes(raw.scale) ? raw.scale : "default";
   const radius = ["none", "sm", "md", "lg", "xl"].includes(raw.radius) ? raw.radius : "md";
   const contentLayout = raw.contentLayout === "centered" ? "centered" : "full";
@@ -140,7 +250,7 @@ export function ThemeProvider({ children }) {
     try {
       const storedRaw = localStorage.getItem(THEME_STORAGE_KEY);
       if (!storedRaw) {
-        applyModeAndPrimary(DEFAULT_THEME.mode, DEFAULT_THEME.primaryColor);
+        applyModeAndPrimary(DEFAULT_THEME.mode, DEFAULT_THEME.primaryColor, DEFAULT_THEME.presetId);
         applyAdminAppearanceVars(DEFAULT_THEME.scale, DEFAULT_THEME.radius);
         setHydrated(true);
         return;
@@ -154,10 +264,10 @@ export function ThemeProvider({ children }) {
       setContentLayout(parsed.contentLayout);
       setSidebarMode(parsed.sidebarMode);
       setCustomCursor(parsed.customCursor);
-      applyModeAndPrimary(parsed.mode, parsed.primaryColor);
+      applyModeAndPrimary(parsed.mode, parsed.primaryColor, parsed.presetId);
       applyAdminAppearanceVars(parsed.scale, parsed.radius);
     } catch {
-      applyModeAndPrimary(DEFAULT_THEME.mode, DEFAULT_THEME.primaryColor);
+      applyModeAndPrimary(DEFAULT_THEME.mode, DEFAULT_THEME.primaryColor, DEFAULT_THEME.presetId);
       applyAdminAppearanceVars(DEFAULT_THEME.scale, DEFAULT_THEME.radius);
     } finally {
       setHydrated(true);
@@ -167,13 +277,17 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     if (!hydrated) return;
     const derivedPreset = presetIdForPrimaryColor(primaryColor);
-    setPresetId(derivedPreset);
-    applyModeAndPrimary(mode, primaryColor);
+    const activePreset = ADMIN_APPEARANCE_PRESETS.find((p) => p.id === normalizePresetId(presetId))
+      ?.palette
+      ? normalizePresetId(presetId)
+      : derivedPreset;
+    setPresetId(activePreset);
+    applyModeAndPrimary(mode, primaryColor, activePreset);
     applyAdminAppearanceVars(scale, radius);
     persist({
       mode,
       primaryColor,
-      presetId: derivedPreset,
+      presetId: activePreset,
       scale,
       radius,
       contentLayout,
@@ -184,6 +298,7 @@ export function ThemeProvider({ children }) {
     hydrated,
     mode,
     primaryColor,
+    presetId,
     scale,
     radius,
     contentLayout,
@@ -202,8 +317,10 @@ export function ThemeProvider({ children }) {
   const setPreset = useCallback((id) => {
     const p = ADMIN_APPEARANCE_PRESETS.find((x) => x.id === id);
     if (!p) return;
+    setPresetId(p.id);
     setPrimaryColor(p.color);
-  }, []);
+    applyModeAndPrimary(mode, p.color, p.id);
+  }, [mode]);
 
   const resetAdminAppearance = useCallback(() => {
     setMode(DEFAULT_THEME.mode);
@@ -219,7 +336,7 @@ export function ThemeProvider({ children }) {
     } catch {
       /* ignore */
     }
-    applyModeAndPrimary(DEFAULT_THEME.mode, DEFAULT_THEME.primaryColor);
+    applyModeAndPrimary(DEFAULT_THEME.mode, DEFAULT_THEME.primaryColor, DEFAULT_THEME.presetId);
     applyAdminAppearanceVars(DEFAULT_THEME.scale, DEFAULT_THEME.radius);
   }, []);
 

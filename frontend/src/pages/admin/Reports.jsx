@@ -1,11 +1,13 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import api from "../../lib/api";
 import { errorAlert, toastSuccess } from "../../lib/swal";
+import { useAdminAccents } from "../../lib/adminAccents.js";
 import { useTheme } from "../../state/theme.jsx";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -242,9 +244,9 @@ function PeriodDropdown({ value, onChange, mode }) {
 }
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
-function StatCard({ title, value, subtext, icon, accentColor, mode }) {
+function StatCard({ title, value, subtext, icon, iconBoxStyle }) {
  return (
- <div className="admin-surface border admin-border rounded-2xl p-5">
+ <div className="admin-surface admin-spectrum-kpi border admin-border rounded-2xl p-5">
  <div className="flex items-center justify-between">
  <div>
  <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{title}</p>
@@ -252,11 +254,8 @@ function StatCard({ title, value, subtext, icon, accentColor, mode }) {
  {subtext && <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">{subtext}</p>}
  </div>
  <div
- className="w-11 h-11 rounded-2xl border admin-border flex items-center justify-center"
- style={{
- backgroundColor: mode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(var(--admin-primary-rgb),0.12)",
- color: accentColor,
- }}
+ className="admin-stat-icon w-11 h-11 rounded-2xl border admin-border flex items-center justify-center"
+ style={iconBoxStyle}
  >
  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
@@ -270,6 +269,7 @@ function StatCard({ title, value, subtext, icon, accentColor, mode }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Reports() {
  const { primaryColor, mode } = useTheme();
+ const { iconBoxStyle, barFill, isSpectrum } = useAdminAccents();
  const accentColor = primaryColor;
  const salesGradId = useId().replace(/:/g, "");
  const barTop = useMemo(() => shadeHex(accentColor, true, 0.38), [accentColor]);
@@ -471,34 +471,34 @@ export default function Reports() {
  ) : (
  <>
  {/* Stats Grid */}
- <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+ <div className="admin-stat-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
  <StatCard
  title={`Revenue · ${periodLabel(period)}`}
  value={`$${(dashboard?.revenue?.total || 0).toLocaleString()}`}
  subtext={`Today: $${(dashboard?.revenue?.today || 0).toLocaleString()}`}
  icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
- accentColor={accentColor} mode={mode}
+ iconBoxStyle={iconBoxStyle(0)}
  />
  <StatCard
  title={`Orders · ${periodLabel(period)}`}
  value={dashboard?.orders?.total || 0}
  subtext={`${dashboard?.orders?.pending || 0} pending · ${dashboard?.orders?.completed || 0} completed`}
  icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
- accentColor={accentColor} mode={mode}
+ iconBoxStyle={iconBoxStyle(1)}
  />
  <StatCard
  title="Products"
  value={dashboard?.products?.total || 0}
  subtext={`${dashboard?.products?.active || 0} active · ${dashboard?.products?.low_stock || 0} low stock`}
  icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
- accentColor={accentColor} mode={mode}
+ iconBoxStyle={iconBoxStyle(2)}
  />
  <StatCard
  title={`Customers · ${periodLabel(period)}`}
  value={dashboard?.customers?.total || 0}
  subtext={`${dashboard?.customers?.new_this_month || 0} new in period`}
  icon="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
- accentColor={accentColor} mode={mode}
+ iconBoxStyle={iconBoxStyle(3)}
  />
  </div>
 
@@ -560,11 +560,17 @@ export default function Reports() {
  <Bar
  dataKey="revenue"
  name="Revenue"
- fill={`url(#${salesGradId})`}
+ fill={isSpectrum ? barFill(0) : `url(#${salesGradId})`}
  radius={[6, 6, 0, 0]}
  maxBarSize={52}
  animationDuration={500}
- />
+ >
+ {isSpectrum
+  ? salesChartData.map((row, index) => (
+    <Cell key={row.xLabel ?? index} fill={barFill(index)} />
+  ))
+  : null}
+ </Bar>
  </BarChart>
  </ResponsiveContainer>
  </div>

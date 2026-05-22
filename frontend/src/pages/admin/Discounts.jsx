@@ -26,8 +26,7 @@ export default function AdminDiscounts() {
   const { refresh: refreshAuth } = useAuth();
   const { primaryColor, mode } = useTheme();
   const isDark = mode === "dark";
-  const accentColor = primaryColor;
-  const accentIsWhite = (accentColor || "").toUpperCase() === "#FFFFFF";
+  const accentIsWhite = (primaryColor || "").toUpperCase() === "#FFFFFF";
   const deleteButtonStyle = {
     backgroundColor: isDark ? "rgba(127, 29, 29, 0.22)" : "#fef2f2",
     color: isDark ? "#fecdd3" : "#991b1b",
@@ -241,13 +240,13 @@ export default function AdminDiscounts() {
   if (loading) return <AdminContentSkeleton lines={3} imageHeight={220} />;
 
   return (
-    <div className="w-full min-w-0 min-h-0 bg-slate-50 dark:bg-slate-950">
+    <div className="w-full min-w-0 min-h-full admin-soft text-slate-800 dark:text-slate-100">
       <div className="mb-6 flex items-start justify-between gap-4">
-        <h1 className="text-3xl md:text-4xl font-semibold text-slate-900 dark:text-white">Manage Discounts</h1>
+        <h1 className="text-3xl md:text-4xl font-semibold text-slate-900 dark:text-slate-100">Manage Discounts</h1>
         <button
+          type="button"
           onClick={() => setShowCreateForm(true)}
-          className={`px-6 py-3 font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 ${accentIsWhite ? "border border-slate-300" : "text-white"}`}
-          style={{ backgroundColor: accentColor, color: accentIsWhite ? "#0b0b0f" : "#FFFFFF" }}
+          className={`inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition hover:brightness-110 bg-[color:var(--admin-primary)] ${accentIsWhite ? "border border-slate-300 text-slate-900" : "text-white"}`}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -411,15 +410,15 @@ export default function AdminDiscounts() {
         </form>
       </AdminModal>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-        <div className="relative z-10 p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">All Discounts</h3>
+      <div className="admin-surface rounded-2xl border admin-border">
+        <div className="relative z-10 flex flex-col gap-3 border-b admin-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">All Discounts</h3>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search discounts..."
-              className="h-10 w-64 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-slate-500"
+              className="h-10 w-64 rounded-lg border admin-border admin-surface px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.2)] dark:text-slate-100 dark:placeholder:text-slate-500"
             />
             <TableColumnVisibilityMenu
               columns={DISCOUNTS_TABLE_COLUMNS}
@@ -432,7 +431,7 @@ export default function AdminDiscounts() {
         </div>
         <div className="overflow-x-auto rounded-b-2xl">
           <table className="w-full min-w-[900px]">
-            <thead className="bg-slate-100 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200">
+            <thead className="admin-bg-elevated text-slate-700 dark:text-slate-200">
               <tr>
                 {isColVisible("product") ? <th className="px-4 py-2 text-left">Product</th> : null}
                 {isColVisible("discount") ? <th className="px-4 py-2 text-left">Discount</th> : null}
@@ -445,7 +444,7 @@ export default function AdminDiscounts() {
             </thead>
             <tbody>
               {filteredRows.map((discount) => (
-                <tr key={discount.id} className="border-t border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <tr key={discount.id} className="border-t admin-border hover:bg-[rgba(var(--admin-primary-rgb),0.06)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.08)]">
                   {isColVisible("product") ? (
                     <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{discount.product?.name}</td>
                   ) : null}

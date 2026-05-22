@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../lib/api";
+import { useAdminAccents } from "../../lib/adminAccents.js";
 import { useTheme } from "../../state/theme.jsx";
 import {
   Area,
@@ -8,6 +9,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -194,9 +196,9 @@ function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }) {
   return <>{prefix}{formatted}{suffix}</>;
 }
 
-function StatCard({ title, value, sub, icon }) {
+function StatCard({ title, value, sub, icon, accentIndex = 0, iconBoxStyle }) {
   return (
-    <div className="admin-surface rounded-2xl border admin-border p-5">
+    <div className="admin-surface admin-spectrum-kpi rounded-2xl border admin-border p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{title}</p>
@@ -204,11 +206,8 @@ function StatCard({ title, value, sub, icon }) {
           {sub && <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">{sub}</p>}
         </div>
         <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border admin-border"
-          style={{
-            backgroundColor: "rgba(var(--admin-primary-rgb),0.14)",
-            color: "var(--admin-primary)",
-          }}
+          className="admin-stat-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border admin-border"
+          style={iconBoxStyle}
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
@@ -261,6 +260,7 @@ function PeriodTabs({ days, value, onChange }) {
 
 export default function AdminDashboard() {
   const { primaryColor, mode } = useTheme();
+  const { isSpectrum, iconBoxStyle, barFill } = useAdminAccents();
   const gid = useId().replace(/:/g, "");
 
   const [periodDays, setPeriodDays] = useState(30);
@@ -402,10 +402,17 @@ export default function AdminDashboard() {
   return (
     <div className="w-full min-w-0 space-y-6">
       {/* KPI */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((c) => (
+      <div className="admin-stat-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((c, index) => (
           <div key={c.id}>
-            <StatCard title={c.title} value={c.value} sub={c.sub} icon={c.icon} />
+            <StatCard
+              title={c.title}
+              value={c.value}
+              sub={c.sub}
+              icon={c.icon}
+              accentIndex={index}
+              iconBoxStyle={iconBoxStyle(index)}
+            />
           </div>
         ))}
       </div>
@@ -526,13 +533,19 @@ export default function AdminDashboard() {
                     <Tooltip content={<StatusTooltip mode={mode} />} cursor={{ fill: "rgba(var(--admin-primary-rgb),0.06)" }} animationDuration={200} />
                     <Bar
                       dataKey="count"
-                      fill={`url(#${barGradId})`}
+                      fill={isSpectrum ? barFill(0) : `url(#${barGradId})`}
                       radius={[10, 10, 4, 4]}
                       maxBarSize={44}
                       animationDuration={chartEnterAnim ? 680 : 0}
                       animationEasing="ease-out"
                       isAnimationActive={chartEnterAnim}
-                    />
+                    >
+                      {isSpectrum
+                        ? statusBars.map((row, index) => (
+                            <Cell key={row.status ?? index} fill={barFill(index)} />
+                          ))
+                        : null}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}

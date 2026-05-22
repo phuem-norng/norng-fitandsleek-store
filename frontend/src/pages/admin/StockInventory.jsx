@@ -251,6 +251,22 @@ const CONDITION_BADGE_NEW =
 const CONDITION_CHIP_SECOND_HAND =
     "inline-flex max-w-full items-center gap-2 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-xs font-bold ring-1 ring-amber-200 dark:border-amber-400/45 dark:bg-amber-500/20 dark:ring-amber-400/35";
 
+/** Quick Restock: filled circle + bold “+”; circle uses admin Theme preset (`--admin-primary`). */
+const BTN_QUICK_RESTOCK =
+    "absolute -bottom-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--admin-primary)] text-white shadow-[0_2px_6px_rgba(15,23,42,0.35)] ring-2 ring-white transition hover:brightness-110 hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--admin-primary-rgb),0.5)] focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:ring-slate-900 dark:focus-visible:ring-offset-slate-900";
+
+const QUICK_RESTOCK_MODAL_KICKER =
+    "text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--admin-primary)]";
+
+const QUICK_RESTOCK_OPTION_SELECTED =
+    "border-[color:var(--admin-primary)] bg-[rgba(var(--admin-primary-rgb),0.1)] text-slate-900 ring-2 ring-[rgba(var(--admin-primary-rgb),0.22)] dark:text-slate-50";
+
+const QUICK_RESTOCK_OPTION_IDLE =
+    "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200";
+
+const QUICK_RESTOCK_SUBMIT_BTN =
+    "rounded-xl bg-[color:var(--admin-primary)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(var(--admin-primary-rgb),0.35)] transition hover:brightness-110 disabled:opacity-50";
+
 const isAverageBundleLabel = (item) =>
     item?.product_condition === "second_hand" &&
     (item?.second_hand_sale_type || "single") === "average_bundle";
@@ -2237,7 +2253,7 @@ export default function AdminBarcodeQR() {
 
     if (isEditPage && !editing) {
         return (
-            <div className="flex min-h-screen min-h-0 flex-col bg-slate-50 dark:bg-slate-950">
+            <div className="flex min-h-0 flex-1 flex-col admin-soft">
                 {successToast}
                 <AdminContentSkeleton lines={5} imageHeight={120} className="min-h-0 flex-1 px-4" />
             </div>
@@ -2611,11 +2627,13 @@ export default function AdminBarcodeQR() {
                                                                         ev.stopPropagation();
                                                                         openQuickRestockModal(item);
                                                                     }}
-                                                                    className="absolute -bottom-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-md ring-2 ring-white transition hover:scale-110 hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:ring-slate-900"
+                                                                    className={BTN_QUICK_RESTOCK}
                                                                     title="Quick Restock"
                                                                     aria-label={`Quick restock ${item.name || "item"}`}
                                                                 >
-                                                                    +
+                                                                    <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" aria-hidden>
+                                                                        <path d="M12 5v14M5 12h14" />
+                                                                    </svg>
                                                                 </button>
                                                             ) : null}
                                                         </div>
@@ -2758,7 +2776,7 @@ export default function AdminBarcodeQR() {
                         onClick={(ev) => ev.stopPropagation()}
                     >
                         <div className="border-b border-slate-200/90 px-5 py-4 dark:border-slate-700/90 sm:px-7">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">Quick Restock</p>
+                            <p className={QUICK_RESTOCK_MODAL_KICKER}>Quick Restock</p>
                             <h3 id="quick-restock-title" className="mt-1 text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
                                 Receive stock
                             </h3>
@@ -2792,7 +2810,7 @@ export default function AdminBarcodeQR() {
                                     autoFocus
                                     value={quickRestockForm.quantity}
                                     onChange={(e) => setQuickRestockForm((s) => ({ ...s, quantity: e.target.value }))}
-                                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold tabular-nums text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                    className={`${inputCls} px-3.5 font-semibold tabular-nums`}
                                     placeholder="e.g. 500"
                                 />
                             </div>
@@ -2812,8 +2830,8 @@ export default function AdminBarcodeQR() {
                                                 second_hand_sale_type: option.value === "second_hand" ? (s.second_hand_sale_type || "single") : "single",
                                             }))}
                                             className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${quickRestockForm.product_condition === option.value
-                                                ? "border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-100"
-                                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200"
+                                                ? QUICK_RESTOCK_OPTION_SELECTED
+                                                : QUICK_RESTOCK_OPTION_IDLE
                                                 }`}
                                         >
                                             {option.label}
@@ -2834,8 +2852,8 @@ export default function AdminBarcodeQR() {
                                                 type="button"
                                                 onClick={() => setQuickRestockForm((s) => ({ ...s, second_hand_sale_type: option.value }))}
                                                 className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${quickRestockForm.second_hand_sale_type === option.value
-                                                    ? "border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20 dark:bg-amber-500/15 dark:text-amber-100"
-                                                    : "border-slate-200 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200"
+                                                    ? QUICK_RESTOCK_OPTION_SELECTED
+                                                    : QUICK_RESTOCK_OPTION_IDLE
                                                     }`}
                                             >
                                                 {option.label}
@@ -2857,7 +2875,7 @@ export default function AdminBarcodeQR() {
                             <button
                                 type="submit"
                                 disabled={quickRestockBusy}
-                                className="rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50"
+                                className={QUICK_RESTOCK_SUBMIT_BTN}
                             >
                                 {quickRestockBusy ? "Saving…" : "Save & receive"}
                             </button>
@@ -2913,6 +2931,18 @@ export default function AdminBarcodeQR() {
                                     </p>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
+                                    {isReceivedLogPage ? (
+                                        <button
+                                            type="button"
+                                            onClick={goToAddProductForBatch}
+                                            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 px-3.5 text-sm font-bold text-white transition hover:bg-emerald-600"
+                                        >
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            Add product
+                                        </button>
+                                    ) : null}
                                     <button
                                         type="button"
                                         onClick={closeChosenProducts}
@@ -2933,16 +2963,18 @@ export default function AdminBarcodeQR() {
                                                 ? `No catalog products linked to this receive batch yet.${receiptUnits > 0 ? ` (${receiptUnits} units received — use Add first product below to list items for sale.)` : ""}`
                                                 : "No POS products linked to this label yet."}
                                         </p>
-                                        <button
-                                            type="button"
-                                            onClick={goToAddProductForBatch}
-                                            className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600"
-                                        >
-                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                            </svg>
-                                            Add first product
-                                        </button>
+                                        {isReceivedLogPage ? (
+                                            <button
+                                                type="button"
+                                                onClick={goToAddProductForBatch}
+                                                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600"
+                                            >
+                                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                </svg>
+                                                Add first product
+                                            </button>
+                                        ) : null}
                                     </div>
                                 ) : (
                                     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">

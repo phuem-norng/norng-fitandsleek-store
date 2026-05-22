@@ -175,7 +175,7 @@ export default function Contacts() {
  };
 
  return (
- <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+ <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
  <AdminConfirmDialog
  open={pendingDeleteId != null || pendingBulkDelete}
@@ -227,24 +227,24 @@ export default function Contacts() {
 
  {/* Stats Cards */}
  {stats && (
- <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
- <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+ <div className="admin-stat-grid grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+ <div className="admin-surface admin-spectrum-kpi rounded-2xl p-4 border admin-border">
  <p className="text-sm text-slate-500 dark:text-slate-400">Total</p>
  <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stats.total}</p>
  </div>
- <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+ <div className="admin-surface admin-spectrum-kpi rounded-2xl p-4 border admin-border">
  <p className="text-sm text-slate-500 dark:text-slate-400">New</p>
  <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stats.new}</p>
  </div>
- <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+ <div className="admin-surface admin-spectrum-kpi rounded-2xl p-4 border admin-border">
  <p className="text-sm text-slate-500 dark:text-slate-400">Read</p>
  <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stats.read}</p>
  </div>
- <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+ <div className="admin-surface admin-spectrum-kpi rounded-2xl p-4 border admin-border">
  <p className="text-sm text-slate-500 dark:text-slate-400">Replied</p>
  <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stats.replied}</p>
  </div>
- <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+ <div className="admin-surface admin-spectrum-kpi rounded-2xl p-4 border admin-border">
  <p className="text-sm text-slate-500 dark:text-slate-400">Closed</p>
  <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stats.closed}</p>
  </div>
@@ -252,7 +252,7 @@ export default function Contacts() {
  )}
 
  {/* Filters */}
- <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 mb-6">
+ <div className="admin-surface rounded-2xl border admin-border p-6 mb-6">
  <div className="flex flex-wrap gap-4 items-center">
  <div className="flex-1 min-w-[200px]">
  <input

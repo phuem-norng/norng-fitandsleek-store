@@ -196,7 +196,7 @@ export default function UserManagement() {
  return (
  <div className="space-y-6 w-full min-w-0">
  {/* Header */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6">
+ <div className="admin-surface border admin-border rounded-2xl p-6">
  <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">
  User Management
  </h2>
@@ -238,7 +238,7 @@ export default function UserManagement() {
  </div>
 
  {/* Users Table */}
- <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+ <div className="admin-surface border admin-border rounded-2xl overflow-hidden">
  {loading ? (
  <AdminSectionLoader rows={5} />
  ) : users.length === 0 ? (
