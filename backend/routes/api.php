@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\Admin\HomepageSettingsController;
 use App\Http\Controllers\Api\Admin\BarcodeScanController;
 use App\Http\Controllers\Api\Admin\PosSaleController;
 use App\Http\Controllers\Api\Admin\CategoryAdminController;
+use App\Http\Controllers\Api\Admin\InventoryIntegrityController;
 use App\Http\Controllers\Api\Admin\ProductAdminController;
 use App\Http\Controllers\Api\Admin\OrderAdminController;
 use App\Http\Controllers\Api\Admin\InvoiceAdminController;
@@ -260,6 +261,8 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
 
     // CRUD
     Route::post('categories/{category}/quick-restock', [CategoryAdminController::class, 'quickRestock']);
+    Route::get('inventory-integrity', [InventoryIntegrityController::class, 'index']);
+    Route::post('inventory-integrity/repair', [InventoryIntegrityController::class, 'repair']);
     Route::apiResource('categories', CategoryAdminController::class);
     Route::apiResource('brands', BrandAdminController::class);
     Route::apiResource('products', ProductAdminController::class);

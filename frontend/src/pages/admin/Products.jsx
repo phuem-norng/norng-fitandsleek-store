@@ -34,9 +34,10 @@ import {
 import {
   BARCODE_QR_TYPE,
   buildProductBarcodeLabelOptions,
+  findBarcodeLabelById,
   findBarcodeLabelBySlug,
   formatBarcodeLabelOptionText,
-  labelPoolStockForCategory,
+  labelPricePoolForProduct,
 } from "../../lib/stockLabelReceipts";
 
 const PRODUCTS_TABLE_COLUMNS = [
@@ -512,34 +513,38 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  return used;
  };
 
- /** When a listed barcode label matches `slug`, return its catalog price and available label stock. */
- const labelPricePoolFromSlug = (slug, options = {}) => {
- const code = String(slug || "").trim();
+ const resolveLabelPoolForForm = (state, options = {}) => {
+ const id = String(state?.stock_label_id || "").trim();
+ if (id) {
+ const label = findBarcodeLabelById(id, barcodeLabelOptions);
+ const lp = labelPricePoolForProduct(label, categories, {
+ ignoreProductId: options.ignoreProductId ?? null,
+ usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ });
+ if (lp) return lp;
+ }
+ const code = String(state?.barcode_code || "").trim();
  if (!code) return null;
- const codeU = code.toUpperCase();
- const label = barcodeLabelOptions.find((b) => String(b.slug || "").trim().toUpperCase() === codeU);
- if (!label) return null;
+ const label = findBarcodeLabelBySlug(code, barcodeLabelOptions);
+ return labelPricePoolForProduct(label, categories, {
+ ignoreProductId: options.ignoreProductId ?? null,
+ usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ });
+ };
 
- let price = "0";
- if (label.price != null && label.price !== "") {
- const n = Number(label.price);
- if (!Number.isNaN(n)) price = String(n);
- }
-
- let poolStock = labelPoolStockForCategory(label);
-
- const condition = String(label.product_condition || "new");
- const saleType = String(label.second_hand_sale_type || "single");
- const isSecondHand = condition === "second_hand";
- const isAverageBundle = isSecondHand && saleType === "average_bundle";
- const rawPoolStock = poolStock;
- const usedStock = isAverageBundle ? 0 : usedProductStockForBarcodeLabel(code, options.ignoreProductId ?? null);
- if (!isAverageBundle) {
- const available = Math.max(0, (parseInt(rawPoolStock, 10) || 0) - usedStock);
- poolStock = String(available);
- }
-
- return { price, poolStock, rawPoolStock, usedStock, condition, saleType, isSecondHand, isAverageBundle };
+ const applyLabelPoolToFormState = (state, lp) => {
+ if (!lp) return state;
+ const nextPrice = lp.isAverageBundle ? lp.price : state.price;
+ const nextAllocated =
+ state.allocated_stock === "" || state.allocated_stock == null ? lp.poolStock : state.allocated_stock;
+ return {
+ ...state,
+ barcode_code: lp.slug || state.barcode_code,
+ stock_label_id: lp.stockLabelId != null ? String(lp.stockLabelId) : state.stock_label_id,
+ price: nextPrice,
+ stock: lp.poolStock,
+ allocated_stock: nextAllocated,
+ };
  };
 
  const barcodeLabelModeText = (meta) => {
@@ -570,14 +575,18 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
 
 /** Listed barcode label selected — stock comes from that row; average-bundle price is also locked. */
  const formBarcodeLocksPriceStock = useMemo(() => {
+ const id = String(form.stock_label_id || "").trim();
+ if (id && barcodeLabelOptions.some((b) => String(b.id) === id)) return true;
  const code = (form.barcode_code || "").trim();
  if (!code) return false;
  const codeU = code.toUpperCase();
  return barcodeLabelOptions.some((b) => String(b.slug || "").trim().toUpperCase() === codeU);
- }, [form.barcode_code, barcodeLabelOptions]);
+ }, [form.stock_label_id, form.barcode_code, barcodeLabelOptions]);
 
  const editBarcodeLocksPriceStock = useMemo(() => {
  if (!editing) return false;
+ const id = String(editing.stock_label_id || "").trim();
+ if (id && barcodeLabelOptions.some((b) => String(b.id) === id)) return true;
  const code = (editing.barcode_code || "").trim();
  if (!code) return false;
  const codeU = code.toUpperCase();
@@ -607,13 +616,13 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  }, [editBarcodeLocksPriceStock, editing?.stock, editing?.allocated_stock]);
 
  const selectedFormBarcodeLabelMeta = useMemo(
- () => labelPricePoolFromSlug(form.barcode_code),
- [form.barcode_code, barcodeLabelOptions, rows]
+ () => resolveLabelPoolForForm(form),
+ [form.stock_label_id, form.barcode_code, barcodeLabelOptions, categories, rows]
  );
 
  const selectedEditBarcodeLabelMeta = useMemo(
- () => labelPricePoolFromSlug(editing?.barcode_code, { ignoreProductId: editing?.id }),
- [editing?.barcode_code, editing?.id, barcodeLabelOptions, rows]
+ () => (editing ? resolveLabelPoolForForm(editing, { ignoreProductId: editing.id }) : null),
+ [editing, barcodeLabelOptions, categories, rows]
  );
 
  const formBarcodeLocksPrice = Boolean(selectedFormBarcodeLabelMeta?.isAverageBundle);
@@ -892,45 +901,49 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  setColumnVisibility(buildAllColumnsVisibility(PRODUCTS_TABLE_COLUMNS, visible, "productName"));
  };
 
- /** After admin categories load, fill price / label pool / allocation if a barcode was already selected (avoids empty value + HTML5 required). */
+ /** After labels load, apply average-bundle price (and stock pool) from barcode or stock_label_id. */
  useEffect(() => {
+ const id = String(form.stock_label_id || "").trim();
  const code = (form.barcode_code || "").trim();
- if (!code || barcodeLabelOptions.length === 0) return;
+ if ((!id && !code) || barcodeLabelOptions.length === 0) return;
  setForm((s) => {
- if ((s.barcode_code || "").trim().toUpperCase() !== code.toUpperCase()) return s;
- const lp = labelPricePoolFromSlug(code);
+ const lp = resolveLabelPoolForForm(s);
  if (!lp) return s;
- const { price, poolStock, isAverageBundle } = lp;
- const nextPrice = isAverageBundle ? price : s.price;
- const priceUnchanged = String(s.price) === String(nextPrice);
- const poolUnchanged = String(s.stock) === String(poolStock);
- if (priceUnchanged && poolUnchanged) return s;
- const nextAllocated =
- s.allocated_stock === "" || s.allocated_stock == null ? poolStock : s.allocated_stock;
- return { ...s, price: nextPrice, stock: poolStock, allocated_stock: nextAllocated };
+ const next = applyLabelPoolToFormState(s, lp);
+ if (
+ String(s.price) === String(next.price)
+ && String(s.stock) === String(next.stock)
+ && String(s.barcode_code || "") === String(next.barcode_code || "")
+ && String(s.stock_label_id || "") === String(next.stock_label_id || "")
+ ) {
+ return s;
+ }
+ return next;
  });
- }, [form.barcode_code, barcodeLabelOptions, rows]);
+ }, [form.stock_label_id, form.barcode_code, barcodeLabelOptions, categories, rows]);
 
- /** Same as create: when admin categories arrive, sync edit price / label pool from barcode label; keep saved allocation. */
+ /** Same as create: sync edit form from chosen label (average bundle auto-fills unit price). */
  useEffect(() => {
  if (!editing) return;
+ const id = String(editing.stock_label_id || "").trim();
  const code = (editing.barcode_code || "").trim();
- if (!code || barcodeLabelOptions.length === 0) return;
+ if ((!id && !code) || barcodeLabelOptions.length === 0) return;
  setEditing((s) => {
  if (!s) return s;
- if ((s.barcode_code || "").trim().toUpperCase() !== code.toUpperCase()) return s;
- const lp = labelPricePoolFromSlug(code, { ignoreProductId: s.id });
+ const lp = resolveLabelPoolForForm(s, { ignoreProductId: s.id });
  if (!lp) return s;
- const { price, poolStock, isAverageBundle } = lp;
- const nextPrice = isAverageBundle ? price : s.price;
- const priceUnchanged = String(s.price) === String(nextPrice);
- const poolUnchanged = String(s.stock) === String(poolStock);
- if (priceUnchanged && poolUnchanged) return s;
- const nextAllocated =
- s.allocated_stock === "" || s.allocated_stock == null ? poolStock : s.allocated_stock;
- return { ...s, price: nextPrice, stock: poolStock, allocated_stock: nextAllocated };
+ const next = applyLabelPoolToFormState(s, lp);
+ if (
+ String(s.price) === String(next.price)
+ && String(s.stock) === String(next.stock)
+ && String(s.barcode_code || "") === String(next.barcode_code || "")
+ && String(s.stock_label_id || "") === String(next.stock_label_id || "")
+ ) {
+ return s;
+ }
+ return next;
  });
- }, [editing?.id, editing?.barcode_code, barcodeLabelOptions, rows]);
+ }, [editing?.id, editing?.stock_label_id, editing?.barcode_code, barcodeLabelOptions, categories, rows]);
 
  useEffect(() => {
  setSelectedIds((prev) => prev.filter((id) => rows.some((p) => p.id === id)));
@@ -1848,18 +1861,13 @@ For no-variant products, this is the single barcode to print and scan.
  setForm((s) => {
  const label = findBarcodeLabelBySlug(v, barcodeLabelOptions);
  const stockLabelId = label ? String(label.id) : "";
- const lp = labelPricePoolFromSlug(v);
+ const lp = labelPricePoolForProduct(label, categories, {
+ usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ });
  if (!lp) {
  return { ...s, barcode_code: v, stock_label_id: stockLabelId, allocated_stock: "" };
  }
- return {
- ...s,
- barcode_code: v,
- stock_label_id: stockLabelId,
- price: lp.isAverageBundle ? lp.price : s.price,
- stock: lp.poolStock,
- allocated_stock: lp.poolStock,
- };
+ return applyLabelPoolToFormState({ ...s, barcode_code: v, stock_label_id: stockLabelId }, lp);
  });
  }}
  className="w-full min-h-[44px] rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.2)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-[rgba(var(--admin-primary-rgb),0.55)]"
@@ -3544,18 +3552,14 @@ For no-variant products, this is the single barcode to print and scan.
  if (!s) return s;
  const label = findBarcodeLabelBySlug(v, barcodeLabelOptions);
  const stockLabelId = label ? String(label.id) : "";
- const lp = labelPricePoolFromSlug(v, { ignoreProductId: s.id });
+ const lp = labelPricePoolForProduct(label, categories, {
+ ignoreProductId: s.id,
+ usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ });
  if (!lp) {
  return { ...s, barcode_code: v, stock_label_id: stockLabelId, allocated_stock: "" };
  }
- return {
- ...s,
- barcode_code: v,
- stock_label_id: stockLabelId,
- price: lp.isAverageBundle ? lp.price : s.price,
- stock: lp.poolStock,
- allocated_stock: lp.poolStock,
- };
+ return applyLabelPoolToFormState({ ...s, barcode_code: v, stock_label_id: stockLabelId }, lp);
  });
  }}
  className="w-full min-h-[44px] rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.2)] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-[rgba(var(--admin-primary-rgb),0.55)]"

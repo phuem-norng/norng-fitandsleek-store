@@ -22,6 +22,7 @@ import {
     BARCODE_QR_TYPE,
     batchReceiptRefForRow,
     buildStockReceivedLogRows,
+    inventoryOnHandForMaster,
     masterBarcodeForRow,
     receiveBatchesForMaster,
 } from "../../lib/stockLabelReceipts";
@@ -79,18 +80,27 @@ const effectiveRowStock = (row, receivedPage, allRows = []) => {
     return parseInt(row.stock, 10) || 0;
 };
 
-const buildCategoryStockPayload = (form, receivedPage) => {
+const buildCategoryStockPayload = (form, receivedPage, editItem = null, allRows = []) => {
     const manage = !!form.manage_stock;
     const qty = manage && form.stock !== "" ? parseInt(form.stock, 10) : null;
     const min = manage && form.min_stock !== "" ? parseInt(form.min_stock, 10) : null;
     if (receivedPage) {
-        return {
+        const isBatch = editItem?.parent_id != null && editItem?.parent_id !== "";
+        const isLegacyMaster =
+            !isBatch
+            && editItem?.id != null
+            && receiveBatchesForMaster(editItem, allRows).length > 0;
+        const payload = {
             manage_stock: manage,
             stock_received: qty,
             min_stock: min,
-            // Initial sellable stock matches received; checkout only decrements `stock`.
-            ...(qty != null ? { stock: qty } : {}),
         };
+        // Opening receipt on a label that already has Quick Restock batches: only change
+        // stock_received; master on-hand is recalculated server-side from all receive rows.
+        if (!isLegacyMaster && qty != null) {
+            payload.stock = qty;
+        }
+        return payload;
     }
     return { manage_stock: manage, stock: qty, min_stock: min };
 };
@@ -341,15 +351,19 @@ const calculateBundleUnitCost = (totalCost, totalQuantity) => {
     return (cost / quantity).toFixed(2);
 };
 
-/** On-hand for average-bundle labels follows Total quantity (saved as `stock`). */
+/**
+ * On-hand for average-bundle labels: live `stock` (synced from Stock Received / sales),
+ * then bundle_total_quantity (initial bundle size on create/edit forms).
+ */
 const averageBundleOnHandQuantity = (stateOrItem) => {
+    const stock = parseInt(String(stateOrItem?.stock ?? "").trim(), 10);
+    if (Number.isFinite(stock) && stock >= 0) return stock;
     const raw = String(stateOrItem?.bundle_total_quantity ?? "").trim();
     if (raw !== "") {
         const fromBundle = parseInt(raw, 10);
         if (Number.isFinite(fromBundle) && fromBundle >= 0) return fromBundle;
     }
-    const stock = parseInt(String(stateOrItem?.stock ?? "").trim(), 10);
-    return Number.isFinite(stock) && stock >= 0 ? stock : 0;
+    return 0;
 };
 
 const stockFromBundleQuantity = (bundleTotalQuantity) => {
@@ -866,7 +880,7 @@ export default function AdminBarcodeQR() {
                 bundle_total_quantity: saleForm.bundle_total_quantity || null,
                 is_active: saleForm.is_active,
                 sort_order: 0,
-                ...buildCategoryStockPayload(saleForm, isReceivedLogPage),
+                ...buildCategoryStockPayload(saleForm, isReceivedLogPage, null, rows),
                 date_in: saleForm.date_in || todayYmd(),
                 has_variation: !!saleForm.has_variation,
                 variation_product_type: saleForm.has_variation ? (saleForm.variation_product_type || null) : null,
@@ -919,7 +933,7 @@ export default function AdminBarcodeQR() {
                 bundle_total_quantity: saleEditing.bundle_total_quantity || null,
                 is_active: saleEditing.is_active,
                 type: BARCODE_QR_TYPE,
-                ...buildCategoryStockPayload(saleEditing, isReceivedLogPage),
+                ...buildCategoryStockPayload(saleEditing, isReceivedLogPage, editing, rows),
                 date_in: saleEditing.date_in || null,
                 has_variation: !!saleEditing.has_variation,
                 variation_product_type: saleEditing.has_variation ? (saleEditing.variation_product_type || null) : null,
@@ -1315,10 +1329,16 @@ export default function AdminBarcodeQR() {
 
     const displayRowStock = (item) => {
         if (!item?.manage_stock) return null;
-        if (isAverageBundleLabel(item)) {
-            return averageBundleOnHandQuantity(item);
+        // Stock Received: always sum receipt rows (opening + batches), including average bundle.
+        if (isReceivedLogPage) {
+            return effectiveRowStock(item, true, rows);
         }
-        return effectiveRowStock(item, isReceivedLogPage, rows);
+        // Stock & Inventory (master rows): on-hand from `stock`, else sum of Stock Received rows.
+        if (item.parent_id == null || item.parent_id === "") {
+            const onHand = inventoryOnHandForMaster(item, rows);
+            if (onHand != null) return onHand;
+        }
+        return effectiveRowStock(item, false, rows);
     };
 
     const displayRows = useMemo(() => {
@@ -1363,7 +1383,7 @@ export default function AdminBarcodeQR() {
     const totalPriceForLabel = (item) => {
         if (isAverageBundleLabel(item)) {
             const linked = linkedProductsForLabel(item);
-            const units = averageBundleOnHandQuantity(item);
+            const units = displayRowStock(item) ?? averageBundleOnHandQuantity(item);
             const price = Number(item?.price);
             if (!Number.isFinite(price)) return null;
             return { amount: price * units, sourceCount: linked.length, units };
@@ -2865,7 +2885,7 @@ export default function AdminBarcodeQR() {
                     return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
                 }, 0);
                 const unitsLabel = isAverageBundle
-                    ? `${averageBundleOnHandQuantity(linkedProductsItem)} units on hand`
+                    ? `${displayRowStock(linkedProductsItem) ?? averageBundleOnHandQuantity(linkedProductsItem)} units on hand`
                     : isReceiveBatch
                         ? `${receiptUnits} units in this receipt`
                         : `${catalogUnits} units`;

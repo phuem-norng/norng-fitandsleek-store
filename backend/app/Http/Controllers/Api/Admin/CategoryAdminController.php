@@ -252,11 +252,10 @@ class CategoryAdminController extends Controller
 
         $slug = $validated['slug'] ?? Str::slug($validated['name']);
 
-        $isReceiveBatch = $category->parent_id
-            && $category->type === PaidOrderInventory::BARCODE_CATEGORY_TYPE;
-        $previousReceivedQty = $isReceiveBatch
-            ? $stockReceive->receivedQuantity($category)
-            : null;
+        $isReceiveBatch = $stockReceive->isReceiveBatch($category);
+        $recalcSnapshot = $stockReceive->inventoryRecalcSnapshotForReceiveChange($category);
+        $isLegacyMasterReceiveEdit = $recalcSnapshot
+            && (int) $recalcSnapshot['inventory']->id === (int) $category->id;
 
         if ($request->hasFile('image')) {
             if ($category->image_path)
@@ -289,7 +288,9 @@ class CategoryAdminController extends Controller
                 ? ($categoryIds !== [] ? $categoryIds : null)
                 : $category->label_category_ids,
             'manage_stock' => array_key_exists('manage_stock', $validated) ? (bool) $validated['manage_stock'] : $category->manage_stock,
-            'stock' => array_key_exists('stock', $validated) ? $validated['stock'] : $category->stock,
+            'stock' => ($isLegacyMasterReceiveEdit && array_key_exists('stock', $validated))
+                ? $category->stock
+                : (array_key_exists('stock', $validated) ? $validated['stock'] : $category->stock),
             'stock_received' => array_key_exists('stock_received', $validated) ? $validated['stock_received'] : $category->stock_received,
             'min_stock' => array_key_exists('min_stock', $validated) ? $validated['min_stock'] : $category->min_stock,
             'date_in' => array_key_exists('date_in', $validated) ? $validated['date_in'] : $category->date_in,
@@ -303,16 +304,10 @@ class CategoryAdminController extends Controller
             'variation_sizes' => array_key_exists('variation_sizes', $validated) ? $validated['variation_sizes'] : $category->variation_sizes,
         ]);
 
-        DB::transaction(function () use ($category, $stockReceive, $previousReceivedQty) {
+        DB::transaction(function () use ($category, $stockReceive, $recalcSnapshot) {
             $category->save();
 
-            if ($previousReceivedQty !== null) {
-                $stockReceive->syncInventoryAfterReceiveBatchUpdate(
-                    $category->fresh(),
-                    $previousReceivedQty,
-                    $stockReceive->receivedQuantity($category),
-                );
-            }
+            $stockReceive->syncInventoryAfterReceiveChange($category->fresh(), $recalcSnapshot);
         });
 
         return response()->json(['data' => $this->mapCategory($category->fresh())]);
@@ -321,13 +316,15 @@ class CategoryAdminController extends Controller
     public function destroy(Category $category, StockReceiveService $stockReceive)
     {
         DB::transaction(function () use ($category, $stockReceive) {
-            $stockReceive->syncInventoryAfterReceiveBatchDelete($category);
+            $recalcSnapshot = $stockReceive->inventoryRecalcSnapshotForReceiveChange($category);
 
             if ($category->image_path) {
                 Storage::disk('public')->delete($category->image_path);
             }
 
             $category->delete();
+
+            $stockReceive->syncInventoryAfterReceiveChange($category, $recalcSnapshot);
         });
 
         return response()->json(['ok' => true]);

@@ -48,6 +48,7 @@ const PAGE_ITEMS = [
   { id: "page-categories", title: "Categories", description: "Product categories", path: "/admin/categories", icon: Tag, keywords: "taxonomy groups" },
   { id: "page-brands", title: "Brands", description: "Brand directory", path: "/admin/brands", icon: Bookmark, keywords: "manufacturers labels" },
   { id: "page-inventory", title: "Stock & Inventory", description: "Stock levels & barcodes", path: "/admin/stock-inventory", icon: Boxes, keywords: "barcode qr warehouse stock" },
+  { id: "page-inventory-integrity", title: "Inventory Integrity", description: "Audit stock vs Stock Received", path: "/admin/inventory-integrity", icon: ShieldCheck, keywords: "stock audit integrity monitor reconcile mismatch" },
   { id: "page-reports", title: "Reports", description: "Business reports", path: "/admin/reports", icon: FileText, keywords: "export pdf statistics" },
   { id: "page-customers", title: "Customers", description: "Customer accounts", path: "/admin/customers", icon: Users, keywords: "clients shoppers users" },
   { id: "page-admins", title: "Administrators", description: "Admin team & roles", path: "/admin/administrators", icon: ShieldCheck, keywords: "team staff roles permissions" },

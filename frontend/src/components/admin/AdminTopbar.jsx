@@ -20,6 +20,7 @@ const PAGE_TITLES = {
  "/admin/brands": "Brands",
   "/admin/stock-inventory": "Stock & Inventory",
   "/admin/stock-received": "Stock Received",
+  "/admin/inventory-integrity": "Inventory Integrity",
  "/admin/reports": "Reports",
  "/admin/contacts": "Contacts",
  "/admin/messages": "Messages",

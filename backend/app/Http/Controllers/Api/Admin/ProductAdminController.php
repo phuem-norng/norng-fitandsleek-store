@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Jobs\SyncProductToQdrant;
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\Message;
 use App\Services\PaidOrderInventory;
@@ -272,6 +273,8 @@ class ProductAdminController extends Controller
             $this->assertVariantSkuBarcodesUnique($data['variant_matrix']);
         }
 
+        $data = $this->applyStockLabelPricing($data);
+
         $product = Product::create($data);
 
         if ($product->is_active && filled($product->image_url)) {
@@ -363,6 +366,8 @@ class ProductAdminController extends Controller
             $this->assertVariantSkuBarcodesUnique($data['variant_matrix'], $product->id);
         }
 
+        $data = $this->applyStockLabelPricing($data);
+
         $product->update($data);
 
         if ($product->is_active && filled($product->image_url)
@@ -381,6 +386,68 @@ class ProductAdminController extends Controller
         });
 
         return response()->json(['message' => 'Deleted']);
+    }
+
+    /**
+     * Second-hand average bundle: set product unit price from the linked label (or cost ÷ qty).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applyStockLabelPricing(array $data): array
+    {
+        if (empty($data['stock_label_id'])) {
+            return $data;
+        }
+
+        $label = Category::query()
+            ->where('id', (int) $data['stock_label_id'])
+            ->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)
+            ->first();
+
+        if (! $label) {
+            return $data;
+        }
+
+        $master = $label->parent_id
+            ? Category::query()->find($label->parent_id)
+            : $label;
+
+        if (! $master) {
+            return $data;
+        }
+
+        if ($this->isAverageBundleCategory($master)) {
+            $data['price'] = $this->averageBundleUnitPrice($master);
+        }
+
+        $barcode = trim((string) ($data['barcode_code'] ?? ''));
+        if ($barcode === '' && filled($master->slug)) {
+            $data['barcode_code'] = $master->slug;
+        }
+
+        return $data;
+    }
+
+    private function isAverageBundleCategory(Category $category): bool
+    {
+        return ($category->product_condition ?? 'new') === 'second_hand'
+            && ($category->second_hand_sale_type ?? 'single') === 'average_bundle';
+    }
+
+    private function averageBundleUnitPrice(Category $master): float
+    {
+        if ($master->price !== null && (float) $master->price >= 0) {
+            return round((float) $master->price, 2);
+        }
+
+        $cost = (float) ($master->bundle_total_cost ?? 0);
+        $qty = (int) ($master->bundle_total_quantity ?? 0);
+        if ($qty > 0 && $cost >= 0) {
+            return round($cost / $qty, 2);
+        }
+
+        return 0.0;
     }
 
     /**

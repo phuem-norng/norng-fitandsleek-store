@@ -59,7 +59,7 @@ const getStatusStyle = (status, mode, primaryColor) => {
  };
  }
 
- if (s === 'pending' || s === 'paid') {
+ if (s === 'pending') {
  return {
  backgroundColor: isDark ? '#B45309' : '#FEF3C7',
  color: isDark ? '#FFF7ED' : '#92400E',
@@ -90,6 +90,110 @@ const getStatusStyle = (status, mode, primaryColor) => {
  borderColor: isDark ? '#475569' : '#CBD5E1',
  };
 };
+
+const isOrderPaid = (paymentStatus) => (paymentStatus || '').toLowerCase() === 'paid';
+
+const getPaymentStatusStyle = (paymentStatus, mode, primaryColor) => {
+ if (isOrderPaid(paymentStatus)) {
+ const isDark = mode === 'dark';
+ if (isDark) {
+ const bg = primaryColor || '#16a34a';
+ return {
+ backgroundColor: bg,
+ color: textOnBackground(bg),
+ borderColor: bg,
+ };
+ }
+ return {
+ backgroundColor: '#DCFCE7',
+ color: '#166534',
+ borderColor: '#86EFAC',
+ };
+ }
+ const isDark = mode === 'dark';
+ return {
+ backgroundColor: isDark ? '#B45309' : '#FEF3C7',
+ color: isDark ? '#FFF7ED' : '#92400E',
+ borderColor: isDark ? '#D97706' : '#FCD34D',
+ };
+};
+
+const formatFulfillmentStatus = (status, paymentStatus) => {
+ const s = (status || 'pending').toLowerCase();
+ if (s === 'paid') return isOrderPaid(paymentStatus) ? 'Processing' : 'Paid';
+ const labels = {
+ pending: 'Awaiting payment',
+ pending_payment: 'Awaiting payment',
+ processing: 'Processing',
+ preparing: 'Preparing',
+ shipped: 'Shipped',
+ completed: 'Completed',
+ delivered: 'Delivered',
+ cancelled: 'Cancelled',
+ };
+ return labels[s] || status || 'Pending';
+};
+
+const isAwaitingPayment = (order) => {
+ if (isOrderPaid(order.payment_status)) return false;
+ const s = (order.status || '').toLowerCase();
+ return s === 'pending' || s === 'pending_payment' || s === '';
+};
+
+function OrderStatusBadges({ order, mode, primaryColor }) {
+ const paid = isOrderPaid(order.payment_status);
+ const fulfillment = order.status || 'pending';
+ const fulfillmentLabel = formatFulfillmentStatus(fulfillment, order.payment_status);
+
+ // Checkout: payment not received yet — one badge (status + payment_status say the same thing)
+ if (isAwaitingPayment(order)) {
+ return (
+ <span
+ className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+ style={getPaymentStatusStyle(order.payment_status, mode, primaryColor)}
+ title="Waiting for customer payment"
+ >
+ Awaiting payment
+ </span>
+ );
+ }
+
+ // Paid and being prepared — one combined badge (avoids looking like two conflicting statuses)
+ if (paid && (fulfillment || '').toLowerCase() === 'processing') {
+ return (
+ <span
+ className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+ style={getPaymentStatusStyle(order.payment_status, mode, primaryColor)}
+ title="Payment received; order is being prepared"
+ >
+ Paid · Processing
+ </span>
+ );
+ }
+
+ // Paid with other fulfillment step (shipped, completed, etc.)
+ if (paid) {
+ return (
+ <span
+ className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+ style={getStatusStyle(fulfillment, mode, primaryColor)}
+ title={`Payment received · ${fulfillmentLabel}`}
+ >
+ Paid · {fulfillmentLabel}
+ </span>
+ );
+ }
+
+ // Unpaid but past checkout (unusual)
+ return (
+ <span
+ className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+ style={getStatusStyle(fulfillment, mode, primaryColor)}
+ >
+ {fulfillmentLabel}
+ </span>
+ );
+}
 
 // Format date
 const formatDate = (dateString) => {
@@ -172,7 +276,8 @@ export default function AdminOrders() {
  try {
  const { data } = await api.get(`/admin/orders/${id}`);
  setSelected(data);
- setStatus(data.status || "");
+ const fulfillment = data.status || "";
+ setStatus(fulfillment === "paid" ? "processing" : fulfillment);
  } catch (e) {
  setErr(e?.response?.data?.message || "Failed to load order.");
  setSelected(null);
@@ -225,7 +330,8 @@ export default function AdminOrders() {
  String(o.id || "").toLowerCase().includes(q) ||
  String(o.user?.name || "").toLowerCase().includes(q) ||
  String(o.user?.email || "").toLowerCase().includes(q) ||
- String(o.status || "").toLowerCase().includes(q)
+ String(o.status || "").toLowerCase().includes(q) ||
+ String(o.payment_status || "").toLowerCase().includes(q)
  );
  });
 
@@ -485,12 +591,7 @@ export default function AdminOrders() {
  ) : null}
  {isColVisible("status") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
- <span
- className="inline-flex px-3 py-1 rounded-full text-xs font-semibold border"
- style={getStatusStyle(o.status, mode, primaryColor)}
- >
- {o.status || 'Pending'}
- </span>
+ <OrderStatusBadges order={o} mode={mode} primaryColor={primaryColor} />
  </td>
  ) : null}
  {isColVisible("items") ? (
@@ -568,12 +669,7 @@ export default function AdminOrders() {
  />
  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">#{o.id}</span>
  </div>
- <span
- className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border"
- style={getStatusStyle(o.status, mode, primaryColor)}
- >
- {o.status || 'Pending'}
- </span>
+ <OrderStatusBadges order={o} mode={mode} primaryColor={primaryColor} />
  </div>
  <div className="flex items-center gap-3">
  <div className="w-9 h-9 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold text-sm flex-shrink-0">
@@ -659,12 +755,7 @@ export default function AdminOrders() {
  ) : (
  <>
  <div className="mb-6 flex flex-wrap items-center gap-3">
- <span
- className="inline-flex px-3 py-1 rounded-full text-xs font-semibold border"
- style={getStatusStyle(selected?.status, mode, primaryColor)}
- >
- {selected?.status || "Pending"}
- </span>
+ <OrderStatusBadges order={selected} mode={mode} primaryColor={primaryColor} />
  <span className="text-sm text-slate-500 dark:text-slate-400">
  {formatDate(selected?.created_at)}
  </span>
@@ -684,17 +775,19 @@ export default function AdminOrders() {
  </div>
  </div>
 
- {/* Update Status */}
+ {/* Update fulfillment status */}
  <div className="mb-6">
- <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Update Status</label>
+ <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Update fulfillment status</label>
+ <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+ Payment is recorded separately when the customer pays (e.g. Bakong KHQR).
+ </p>
  <div className="flex gap-3">
  <select
- value={status}
+ value={status === 'paid' ? 'processing' : (status === 'pending' ? 'pending_payment' : status)}
  onChange={(e) => setStatus(e.target.value)}
  className="flex-1 h-12 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-[var(--admin-primary)] dark:focus:border-[rgba(var(--admin-primary-rgb),0.7)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.2)] focus:bg-white dark:focus:bg-slate-950 transition-all"
  >
- <option value="pending">Pending</option>
- <option value="paid">Paid</option>
+ <option value="pending_payment">Awaiting payment</option>
  <option value="processing">Processing</option>
  <option value="shipped">Shipped</option>
  <option value="completed">Completed</option>

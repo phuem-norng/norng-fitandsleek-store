@@ -30,6 +30,7 @@ import AdminProducts from "./pages/admin/Products.jsx";
 import AdminCategories from "./pages/admin/Categories.jsx";
 import AdminBrands from "./pages/admin/Brands.jsx";
 import AdminBarcodeQR from "./pages/admin/StockInventory.jsx";
+import InventoryIntegrity from "./pages/admin/InventoryIntegrity.jsx";
 import AdminPosScan from "./pages/admin/Checkout.jsx";
 import AdminOrders from "./pages/admin/Orders.jsx";
 import AdminInvoicePage from "./pages/admin/Invoice.jsx";
@@ -249,6 +250,7 @@ export default function App() {
           <Route path="stock-received/new" element={<AdminBarcodeQR />} />
           <Route path="stock-received/:id/edit" element={<AdminBarcodeQR />} />
           <Route path="stock-received" element={<AdminBarcodeQR />} />
+          <Route path="inventory-integrity" element={<InventoryIntegrity />} />
           <Route path="barcode-qr/new" element={<Navigate to="/admin/stock-inventory/new" replace />} />
           <Route path="barcode-qr/:id/edit" element={<LegacyBarcodeQrToStockInventoryEdit />} />
           <Route path="barcode-qr" element={<Navigate to="/admin/stock-inventory" replace />} />

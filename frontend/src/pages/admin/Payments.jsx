@@ -156,7 +156,7 @@ export default function AdminPayments() {
  const getStatusBadge = (status) => {
  const s = (status || '').toLowerCase();
  const isDark = mode === 'dark';
- if (s === 'success') return { backgroundColor: isDark ? '#14532d' : '#dcfce7', color: isDark ? '#bbf7d0' : '#166534', borderColor: isDark ? '#16a34a' : '#86efac' };
+ if (s === 'success' || s === 'paid') return { backgroundColor: isDark ? '#14532d' : '#dcfce7', color: isDark ? '#bbf7d0' : '#166534', borderColor: isDark ? '#16a34a' : '#86efac' };
  if (s === 'pending') return { backgroundColor: isDark ? '#422006' : '#fef9c3', color: isDark ? '#fcd34d' : '#854d0e', borderColor: isDark ? '#f59e0b' : '#fde68a' };
  if (s === 'failed') return { backgroundColor: isDark ? '#7f1d1d' : '#fee2e2', color: isDark ? '#fecdd3' : '#991b1b', borderColor: isDark ? '#f87171' : '#fecaca' };
  if (s === 'refunded') return { backgroundColor: isDark ? '#0f172a' : '#dbeafe', color: isDark ? '#bfdbfe' : '#1d4ed8', borderColor: isDark ? '#38bdf8' : '#bfdbfe' };
@@ -223,6 +223,7 @@ export default function AdminPayments() {
  >
  <option value="all">All Statuses</option>
  <option value="pending">Pending</option>
+ <option value="paid">Paid</option>
  <option value="success">Success</option>
  <option value="failed">Failed</option>
  <option value="refunded">Refunded</option>

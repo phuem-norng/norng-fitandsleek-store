@@ -23,52 +23,115 @@ class StockReceiveService
         return 0;
     }
 
-    /**
-     * Apply a delta to the master inventory label sellable stock (Stock & Inventory on-hand).
-     */
-    public function adjustInventoryStock(Category $inventory, int $delta): void
+    public function isInventoryMaster(Category $category): bool
     {
-        if ($delta === 0 || ! ($inventory->manage_stock ?? false)) {
+        return ! $category->parent_id
+            && $category->type === PaidOrderInventory::BARCODE_CATEGORY_TYPE;
+    }
+
+    public function isReceiveBatch(Category $category): bool
+    {
+        return (bool) $category->parent_id
+            && $category->type === PaidOrderInventory::BARCODE_CATEGORY_TYPE;
+    }
+
+    /**
+     * Sum all Stock Received units for a master label (opening legacy receipt + batch rows).
+     */
+    public function totalReceivedQuantity(Category $inventory): int
+    {
+        if (! $this->isInventoryMaster($inventory)) {
+            return 0;
+        }
+
+        $total = 0;
+
+        if ($inventory->stock_received !== null) {
+            $total += max(0, (int) $inventory->stock_received);
+        }
+
+        $batches = Category::query()
+            ->where('parent_id', $inventory->id)
+            ->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)
+            ->get();
+
+        foreach ($batches as $batch) {
+            $total += $this->receivedQuantity($batch);
+        }
+
+        // Standalone label with no batches and no legacy stock_received column yet.
+        if ($batches->isEmpty() && $inventory->stock_received === null && $inventory->stock !== null) {
+            $total += max(0, (int) $inventory->stock);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Recompute master sellable stock from receive totals while preserving units already sold/issued.
+     *
+     * on-hand = sum(received) - sold, where sold = previous_sum(received) - previous_on_hand
+     */
+    public function recalculateInventoryStock(Category $inventory, ?int $previousTotalReceived = null, ?int $previousOnHand = null): void
+    {
+        if (! ($inventory->manage_stock ?? false) || ! $this->isInventoryMaster($inventory)) {
             return;
         }
 
-        $current = max(0, (int) ($inventory->stock ?? 0));
-        $inventory->stock = max(0, $current + $delta);
+        $inventory->refresh();
+
+        $oldTotalReceived = $previousTotalReceived ?? $this->totalReceivedQuantity($inventory);
+        $oldOnHand = $previousOnHand ?? max(0, (int) ($inventory->stock ?? 0));
+        $sold = max(0, $oldTotalReceived - $oldOnHand);
+
+        $newTotalReceived = $this->totalReceivedQuantity($inventory);
+        $inventory->stock = max(0, $newTotalReceived - $sold);
         $inventory->save();
     }
 
     /**
-     * After editing a receive batch quantity, keep parent inventory stock in sync.
+     * Snapshot master totals before a receive-row change, then refresh on-hand from all receive rows.
+     *
+     * @return array{inventory: Category, previous_total_received: int, previous_on_hand: int}|null
      */
-    public function syncInventoryAfterReceiveBatchUpdate(Category $batch, int $previousQty, int $newQty): void
+    public function inventoryRecalcSnapshotForReceiveChange(Category $receiveRow): ?array
     {
-        if (! $batch->parent_id || $batch->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
-            return;
+        $inventory = null;
+
+        if ($this->isReceiveBatch($receiveRow)) {
+            $inventory = Category::query()->find($receiveRow->parent_id);
+        } elseif (
+            $this->isInventoryMaster($receiveRow)
+            && Category::query()
+                ->where('parent_id', $receiveRow->id)
+                ->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)
+                ->exists()
+        ) {
+            $inventory = $receiveRow;
         }
 
-        $inventory = Category::query()->find($batch->parent_id);
         if (! $inventory || $inventory->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
-            return;
+            return null;
         }
 
-        $this->adjustInventoryStock($inventory, $newQty - $previousQty);
+        return [
+            'inventory' => $inventory,
+            'previous_total_received' => $this->totalReceivedQuantity($inventory),
+            'previous_on_hand' => max(0, (int) ($inventory->stock ?? 0)),
+        ];
     }
 
-    /**
-     * Before deleting a receive batch, remove its quantity from parent inventory stock.
-     */
-    public function syncInventoryAfterReceiveBatchDelete(Category $batch): void
+    public function syncInventoryAfterReceiveChange(Category $receiveRow, ?array $snapshot): void
     {
-        if (! $batch->parent_id || $batch->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+        if (! $snapshot) {
             return;
         }
 
-        $inventory = Category::query()->find($batch->parent_id);
-        if (! $inventory || $inventory->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
-            return;
-        }
-
-        $this->adjustInventoryStock($inventory, -$this->receivedQuantity($batch));
+        $this->recalculateInventoryStock(
+            $snapshot['inventory'],
+            $snapshot['previous_total_received'],
+            $snapshot['previous_on_hand'],
+        );
     }
 
     /**
