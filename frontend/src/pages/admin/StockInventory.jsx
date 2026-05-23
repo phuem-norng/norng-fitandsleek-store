@@ -25,6 +25,7 @@ import {
     inventoryOnHandForMaster,
     masterBarcodeForRow,
     receiveBatchesForMaster,
+    stockLabelRows,
 } from "../../lib/stockLabelReceipts";
 
 const STOCK_ADMIN_BASES = ["/admin/stock-inventory", "/admin/stock-received"];
@@ -334,6 +335,13 @@ const EMPTY_FORM = {
 const parseGallery = (v) =>
     String(v || "").split("\n").map((s) => s.trim()).filter(Boolean);
 
+/** Primary list thumbnail: `image_url`, or first gallery photo when primary is omitted. */
+const heroPhotoUrlForItem = (item) => {
+    const storedPrimary = String(item?.image_url || "").trim();
+    const galleryUrls = parseGallery(item?.gallery || "").filter(Boolean);
+    return storedPrimary || galleryUrls[0] || "";
+};
+
 const parsePositiveNumber = (value) => {
     const n = parseFloat(String(value ?? "").trim());
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -611,12 +619,24 @@ export default function AdminBarcodeQR() {
                 api.get("/admin/products", { params: { per_page: 500 } }),
             ]);
             const all = catRes?.data?.data || [];
-            setRows(all.filter((c) => c.type === BARCODE_QR_TYPE));
-            setCategories(all.filter((c) => c.type !== BARCODE_QR_TYPE));
+            const labels = stockLabelRows(all);
+            setRows(labels);
+            setCategories(all.filter((c) => !labels.some((l) => l.id === c.id)));
             setBrands(brandRes?.data?.data || []);
-            setProducts(productRes?.data?.data || productRes?.data || []);
+            const productPayload = productRes?.data;
+            const productList = Array.isArray(productPayload?.data)
+                ? productPayload.data
+                : Array.isArray(productPayload)
+                    ? productPayload
+                    : [];
+            setProducts(productList);
         } catch (e) {
-            setErr(extractErr(e));
+            const msg = extractErr(e);
+            setErr(
+                msg === "Request failed."
+                    ? "Could not load stock inventory. Check that the API is running and you are still logged in."
+                    : msg,
+            );
         } finally {
             setLoading(false);
         }
@@ -2497,7 +2517,7 @@ export default function AdminBarcodeQR() {
                         <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
                             {isReceivedLogPage
                                 ? "Quick Restock from Stock & Inventory will appear here as receive batches."
-                                : "Create your first product to start tracking labels, units, and catalog visibility."}
+                                : "Add a stock label here first, then link POS products from Admin → Products (choose the label barcode or Stock label)."}
                         </p>
                         {!isReceivedLogPage ? (
                             <button type="button" onClick={() => navigate(`${stockBase}/new`)} className="mt-6 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_22px_50px_rgba(16,185,129,0.55)] dark:border-emerald-300 dark:ring-emerald-400/20">
@@ -2580,6 +2600,7 @@ export default function AdminBarcodeQR() {
                                         const showPrintLabel = canShowPrintLabel(item);
                                         const linkedProductRows = linkedProductsForLabel(item);
                                         const cellClass = "border-b border-slate-100 bg-white px-3 py-3 align-middle dark:border-white/10 dark:bg-slate-900";
+                                        const listPhotoUrl = heroPhotoUrlForItem(item);
                                         return (
                                             <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.03]">
                                                 {isColVisible("select") ? (
@@ -2598,8 +2619,8 @@ export default function AdminBarcodeQR() {
                                                                 title={canOpenChosenProducts(item) ? "Open chosen products" : undefined}
                                                                 aria-label={canOpenChosenProducts(item) ? `Open chosen products for ${item.name || "item"}` : `${item.name || "item"} product image`}
                                                             >
-                                                                {item.image_url ? (
-                                                                    <img src={resolveImageUrl(item.image_url)} alt="" className="h-full w-full object-cover" />
+                                                                {listPhotoUrl ? (
+                                                                    <img src={resolveImageUrl(listPhotoUrl)} alt="" className="h-full w-full object-cover" />
                                                                 ) : (
                                                                     <div className="flex h-full w-full origin-center scale-[0.85] items-center justify-center">
                                                                         <Barcode value={barcodeVal} width={0.9} height={22} fontSize={8} margin={0} displayValue={false} format="CODE128" background="#ffffff" lineColor={isDark ? "#e2e8f0" : "#1e293b"} />

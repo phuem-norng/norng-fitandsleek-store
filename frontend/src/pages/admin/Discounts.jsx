@@ -13,6 +13,7 @@ import {
 const DISCOUNTS_TABLE_COLUMNS = [
   { id: "product", label: "Product" },
   { id: "discount", label: "Discount" },
+  { id: "originalPrice", label: "Original Price" },
   { id: "salePrice", label: "Discounted Price" },
   { id: "startDate", label: "Start Date" },
   { id: "endDate", label: "End Date" },
@@ -216,9 +217,19 @@ export default function AdminDiscounts() {
     }
   };
 
+  const selectedProduct = () => {
+    if (!form.product_id) return null;
+    return products.find((p) => p.id === parseInt(form.product_id, 10)) || null;
+  };
+
+  const formatMoney = (value) => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n.toFixed(2) : "";
+  };
+
   const calculateSalePrice = () => {
     if (!form.product_id || !form.discount_value) return "";
-    const product = products.find((p) => p.id === parseInt(form.product_id, 10));
+    const product = selectedProduct();
     if (!product) return "";
 
     if (form.discount_type === "percentage") {
@@ -226,6 +237,8 @@ export default function AdminDiscounts() {
     }
     return Math.max(0, product.price - form.discount_value).toFixed(2);
   };
+
+  const selectedOriginalPrice = selectedProduct()?.price;
 
   const filteredRows = rows.filter((discount) => {
     const q = search.trim().toLowerCase();
@@ -328,6 +341,18 @@ export default function AdminDiscounts() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Original Price ($)</label>
+              <div
+                className="flex h-11 w-full items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"
+                aria-live="polite"
+              >
+                {selectedOriginalPrice != null && selectedOriginalPrice !== ""
+                  ? `$${formatMoney(selectedOriginalPrice)}`
+                  : "Select a product"}
+              </div>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Discounted Price ($)</label>
               <input
                 type="number"
@@ -338,8 +363,10 @@ export default function AdminDiscounts() {
                 className="w-full h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:border-slate-500"
                 placeholder="Auto-calculated"
               />
-              {calculateSalePrice() && !form.sale_price && (
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Auto: ${calculateSalePrice()}</p>
+              {calculateSalePrice() && !form.sale_price && selectedOriginalPrice != null && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Auto: ${calculateSalePrice()} (from ${formatMoney(selectedOriginalPrice)})
+                </p>
               )}
             </div>
 
@@ -435,6 +462,7 @@ export default function AdminDiscounts() {
               <tr>
                 {isColVisible("product") ? <th className="px-4 py-2 text-left">Product</th> : null}
                 {isColVisible("discount") ? <th className="px-4 py-2 text-left">Discount</th> : null}
+                {isColVisible("originalPrice") ? <th className="px-4 py-2 text-left">Original Price</th> : null}
                 {isColVisible("salePrice") ? <th className="px-4 py-2 text-left">Discounted Price</th> : null}
                 {isColVisible("startDate") ? <th className="px-4 py-2 text-left">Start Date</th> : null}
                 {isColVisible("endDate") ? <th className="px-4 py-2 text-left">End Date</th> : null}
@@ -453,6 +481,13 @@ export default function AdminDiscounts() {
                       {discount.discount_type === "percentage"
                         ? `${discount.discount_value}%`
                         : `$${parseFloat(discount.discount_value).toFixed(2)}`}
+                    </td>
+                  ) : null}
+                  {isColVisible("originalPrice") ? (
+                    <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                      {discount.product?.price != null
+                        ? `$${parseFloat(discount.product.price).toFixed(2)}`
+                        : "—"}
                     </td>
                   ) : null}
                   {isColVisible("salePrice") ? (

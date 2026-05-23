@@ -189,10 +189,13 @@ export default function AdminPosScan() {
  const [pickupCode, setPickupCode] = useState("");
  const [pickupQty, setPickupQty] = useState("1");
  const [pickupBusy, setPickupBusy] = useState(false);
+ const [pickupLookupBusy, setPickupLookupBusy] = useState(false);
+ const [pickupPreview, setPickupPreview] = useState(null);
  const [pickupCameraOn, setPickupCameraOn] = useState(false);
  const [pickupErr, setPickupErr] = useState("");
  const pickupHtml5Ref = useRef(null);
  const pickupInputRef = useRef(null);
+ const pickupLookupSeqRef = useRef(0);
 
  const scanHtml5Ref = useRef(null);
  const processingRef = useRef(false);
@@ -246,26 +249,31 @@ export default function AdminPosScan() {
  setPickupCameraOn(false);
  }, []);
 
- const submitPickupScanSale = useCallback(
- async (codeArg, qtyArg) => {
- const code = (typeof codeArg === "string" ? codeArg : pickupCode).trim();
- let qty = qtyArg;
- if (qty == null || Number.isNaN(Number(qty))) {
- qty = parseInt(document.getElementById("pos-pickup-scan-qty")?.value || pickupQty || "1", 10);
- }
- qty = Math.max(1, Math.min(9999, parseInt(String(qty), 10) || 1));
+ const lookupPickupCode = useCallback(async (codeArg, { silentEmpty = false } = {}) => {
+ const code = String(codeArg ?? "").trim();
  if (!code) {
- setPickupErr("Enter or scan a label code.");
- return;
+ setPickupPreview(null);
+ setPickupErr(silentEmpty ? "" : "Enter or scan a label code.");
+ return null;
  }
- setPickupBusy(true);
+ const seq = ++pickupLookupSeqRef.current;
+ setPickupLookupBusy(true);
  setPickupErr("");
  try {
- let lookupRow;
- try {
  const { data: lookupData } = await api.get("/admin/barcode-scan/lookup", { params: { code } });
- lookupRow = lookupData?.data;
+ if (seq !== pickupLookupSeqRef.current) return null;
+ const lookupRow = lookupData?.data;
+ if (!lookupRow?.code) {
+ setPickupPreview(null);
+ setPickupErr("No product matches this code.");
+ return null;
+ }
+ setPickupPreview(lookupRow);
+ const normalized = String(lookupRow.code || code).trim();
+ setPickupCode((prev) => (prev.trim() === normalized ? prev : normalized));
+ return lookupRow;
  } catch (le) {
+ if (seq !== pickupLookupSeqRef.current) return null;
  const d = le?.response?.data;
  const first =
  d?.errors && typeof d.errors === "object"
@@ -274,8 +282,30 @@ export default function AdminPosScan() {
  .find(Boolean)
  : null;
  setPickupErr(first || d?.message || extractErr(le));
+ setPickupPreview(null);
+ return null;
+ } finally {
+ if (seq === pickupLookupSeqRef.current) setPickupLookupBusy(false);
+ }
+ }, []);
+
+ const submitPickupScanSale = useCallback(
+ async () => {
+ if (!pickupPreview?.code) {
+ setPickupErr("Enter a valid code and wait for the product to appear.");
  return;
  }
+ const code = String(pickupPreview.code).trim();
+ const qtyRaw = parseInt(document.getElementById("pos-pickup-scan-qty")?.value || pickupQty || "1", 10);
+ const qty = Math.max(1, Math.min(9999, Number.isFinite(qtyRaw) ? qtyRaw : 1));
+ if (!code) {
+ setPickupErr("Enter or scan a label code.");
+ return;
+ }
+ setPickupBusy(true);
+ setPickupErr("");
+ try {
+ const lookupRow = pickupPreview;
  const maxSell = lookupRow?.max_sellable_qty;
  if (maxSell != null && qty > maxSell) {
  const msg =
@@ -331,6 +361,7 @@ export default function AdminPosScan() {
  setScanErr("");
  setStep("postSale");
  setPickupCode("");
+ setPickupPreview(null);
  toastSuccess(`Stock reduced (${slug}) × ${qty}. Order ${d?.order?.order_number ?? "saved"}.`);
  setTimeout(() => pickupInputRef.current?.focus(), 0);
  } catch (e2) {
@@ -346,8 +377,27 @@ export default function AdminPosScan() {
  setPickupBusy(false);
  }
  },
- [pickupCode, pickupQty]
+ [pickupPreview, pickupQty]
  );
+
+ useEffect(() => {
+ const code = pickupCode.trim();
+ if (!code) {
+ pickupLookupSeqRef.current += 1;
+ setPickupPreview(null);
+ setPickupErr("");
+ setPickupLookupBusy(false);
+ return undefined;
+ }
+ setPickupPreview((prev) => {
+ if (!prev) return null;
+ return String(prev.code).trim().toLowerCase() === code.toLowerCase() ? prev : null;
+ });
+ const timer = window.setTimeout(() => {
+ void lookupPickupCode(code, { silentEmpty: true });
+ }, 320);
+ return () => window.clearTimeout(timer);
+ }, [pickupCode, lookupPickupCode]);
 
  const startPickupCamera = useCallback(async () => {
  setPickupErr("");
@@ -389,8 +439,6 @@ export default function AdminPosScan() {
  pickupHtml5Ref.current = null;
  setPickupCameraOn(false);
  setPickupCode(t);
- const qty = parseInt(document.getElementById("pos-pickup-scan-qty")?.value || pickupQty || "1", 10) || 1;
- await submitPickupScanSale(t, qty);
  },
  () => {}
  );
@@ -399,7 +447,7 @@ export default function AdminPosScan() {
  setPickupCameraOn(false);
  setPickupErr(extractErr(camErr) || "Camera failed. Allow permission or type the code.");
  }
- }, [pickupQty, stopPickupCamera, stopScanCamera, submitPickupScanSale]);
+ }, [stopPickupCamera, stopScanCamera]);
 
  const appendLookupToCart = useCallback(async (rawText) => {
  const t = String(rawText || "").trim();
@@ -1443,7 +1491,7 @@ export default function AdminPosScan() {
  <h2 className={`text-sm font-bold tracking-tight sm:text-base ${isDark ? "text-white" : "text-slate-900"}`}>
  Scan sale / payment pickup
  </h2>
- <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Reduce stock without adding to the cart (same as a paid cash sale).</p>
+ <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Type or scan a code — product info appears automatically. Confirm, then reduce stock.</p>
  </div>
  <div className="space-y-4 px-4 py-4 sm:px-5">
  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
@@ -1458,7 +1506,7 @@ export default function AdminPosScan() {
  value={pickupCode}
  onChange={(e) => setPickupCode(e.target.value)}
  onKeyDown={(e) => {
- if (e.key === "Enter") {
+ if (e.key === "Enter" && pickupPreview) {
  e.preventDefault();
  void submitPickupScanSale();
  }
@@ -1489,7 +1537,7 @@ export default function AdminPosScan() {
  <div className="flex shrink-0 flex-wrap gap-2">
  <button
  type="button"
- disabled={pickupBusy || pickupCameraOn}
+ disabled={pickupBusy || pickupLookupBusy || !pickupPreview}
  onClick={() => void submitPickupScanSale()}
  className="h-12 rounded-xl bg-slate-800 px-5 text-sm font-bold text-white transition hover:bg-slate-900 disabled:opacity-50 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
  >
@@ -1510,6 +1558,51 @@ export default function AdminPosScan() {
             ) : null}
  </div>
  </div>
+ {pickupLookupBusy && pickupCode.trim() && !pickupPreview ? (
+ <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+ Looking up product…
+ </p>
+ ) : null}
+ {pickupPreview ? (
+ <div className={POS_LINE_CARD}>
+ <div className="shrink-0">
+ {pickupPreview.image_url ? (
+ <img
+ src={resolveImageUrl(pickupPreview.image_url)}
+ alt=""
+ className="h-16 w-16 rounded-xl object-cover ring-1 ring-slate-900/10 dark:ring-white/10"
+ />
+ ) : (
+ <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-[rgb(var(--admin-primary-rgb))] to-slate-800 text-xs font-semibold uppercase tracking-wider text-white/90 ring-1 ring-black/10 dark:to-slate-900">
+ FS
+ </div>
+ )}
+ </div>
+ <div className="min-w-0 flex-1">
+ <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Matched product</p>
+ <p className="mt-1 font-semibold leading-snug text-slate-900 dark:text-white">{pickupPreview.name}</p>
+ <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">Code: {pickupPreview.code}</p>
+ {pickupPreview.has_label && pickupPreview.manage_label_stock && pickupPreview.label_stock != null ? (
+ <p className="mt-1.5 text-xs font-semibold text-[color:var(--admin-primary)]">
+ Label stock (now): {pickupPreview.label_stock}
+ </p>
+ ) : null}
+ {pickupPreview.max_sellable_qty != null ? (
+ <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+ Max you can reduce: {pickupPreview.max_sellable_qty} unit{pickupPreview.max_sellable_qty === 1 ? "" : "s"}
+ </p>
+ ) : null}
+ <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-slate-200/80 pt-3 dark:border-slate-600/70">
+ <span className="text-sm text-slate-600 dark:text-slate-400">
+ Unit price <span className="font-semibold text-slate-900 dark:text-white">{formatMoney(pickupPreview.price)}</span>
+ </span>
+ <span className="text-base font-bold tabular-nums text-slate-900 dark:text-white">
+ Qty {pickupQty} → {formatMoney(Number(pickupPreview.price) * (parseInt(pickupQty, 10) || 1))}
+ </span>
+ </div>
+ </div>
+ </div>
+ ) : null}
  {pickupErr ? (
  <p className="rounded-lg bg-red-950/90 px-3 py-2 text-center text-xs text-red-100 dark:bg-red-950/80">{pickupErr}</p>
  ) : null}

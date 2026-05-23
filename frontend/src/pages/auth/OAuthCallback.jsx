@@ -22,6 +22,8 @@ export default function OAuthCallback() {
   const nav = useNavigate();
   const { ticket } = useParams();
   const [message, setMessage] = useState("Signing you in...");
+  const [showRetry, setShowRetry] = useState(false);
+  const [showDirectHome, setShowDirectHome] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +36,11 @@ export default function OAuthCallback() {
 
     const fail = (text) => {
       setMessage(text || "Social login failed. Please try again.");
+      setShowRetry(true);
+      // Show option to go to home after a delay (in case user wants to debug)
+      setTimeout(() => {
+        if (!cancelled) setShowDirectHome(true);
+      }, 3000);
       setTimeout(() => {
         if (!cancelled) nav("/login");
       }, 1500);
@@ -149,9 +156,27 @@ export default function OAuthCallback() {
   }, [nav, ticket]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-      <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-soft text-sm text-zinc-700">
-        {message}
+    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 gap-5 p-6">
+      <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-soft text-sm text-zinc-700 text-center max-w-md">
+        <p className="text-base font-medium text-zinc-900 mb-2">{message}</p>
+        {showRetry && (
+          <button
+            type="button"
+            onClick={() => nav("/login")}
+            className="mt-4 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm"
+          >
+            Back to Login
+          </button>
+        )}
+        {showDirectHome && (
+          <button
+            type="button"
+            onClick={() => window.location.replace("/")}
+            className="mt-3 px-4 py-2 rounded-lg border border-zinc-300 text-sm"
+          >
+            Go to Home
+          </button>
+        )}
       </div>
     </div>
   );

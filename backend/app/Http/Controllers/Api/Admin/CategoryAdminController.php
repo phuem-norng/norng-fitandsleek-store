@@ -38,11 +38,120 @@ class CategoryAdminController extends Controller
         return [];
     }
 
-    private function mapCategory(Category $c): array
+    private function isInlineDataUrl(?string $value): bool
+    {
+        return str_starts_with(strtolower(trim((string) $value)), 'data:');
+    }
+
+    /** Save a camera/base64 upload to the public disk so list views can use a small URL. */
+    private function persistInlineImageUrl(Category $category, string $dataUrl): ?string
+    {
+        if (! preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
+            return null;
+        }
+
+        $ext = match (strtolower($matches[1])) {
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            default => 'jpg',
+        };
+
+        $content = base64_decode($matches[2], true);
+        if ($content === false || $content === '') {
+            return null;
+        }
+
+        $filename = 'categories/' . $category->id . '-' . Str::random(8) . '.' . $ext;
+        Storage::disk('public')->put($filename, $content);
+
+        return $filename;
+    }
+
+    /** Convert inline `image_url` to `image_path` when labels were saved as base64. */
+    private function materializeInlineImage(Category $category): ?string
+    {
+        if ($category->image_path) {
+            return Media::url($category->image_path);
+        }
+
+        $url = trim((string) ($category->image_url ?? ''));
+        if ($url === '' || ! $this->isInlineDataUrl($url)) {
+            return null;
+        }
+
+        $path = $this->persistInlineImageUrl($category, $url);
+        if (! $path) {
+            return null;
+        }
+
+        $category->image_path = $path;
+        $category->image_url = Media::url($path);
+        $category->saveQuietly();
+
+        return Media::url($path);
+    }
+
+    private function normalizeCategoryImages(Category $category): void
+    {
+        if ($this->isInlineDataUrl($category->image_url)) {
+            $this->materializeInlineImage($category);
+        }
+    }
+
+    /** Avoid multi-megabyte list payloads when labels store camera uploads as base64. */
+    private function publicImageUrlForList(Category $c): ?string
+    {
+        if ($c->image_path) {
+            return Media::url($c->image_path);
+        }
+
+        $url = trim((string) ($c->image_url ?? ''));
+
+        if ($url !== '' && ! $this->isInlineDataUrl($url)) {
+            return $url;
+        }
+
+        $gallery = $this->galleryForList($c->gallery);
+        if ($gallery !== null) {
+            $first = trim(explode("\n", $gallery, 2)[0]);
+            if ($first !== '') {
+                return $first;
+            }
+        }
+
+        return $this->materializeInlineImage($c);
+    }
+
+    private function galleryForList(?string $gallery): ?string
+    {
+        if ($gallery === null || trim($gallery) === '') {
+            return null;
+        }
+
+        $kept = [];
+        foreach (preg_split('/\r\n|\r|\n/', $gallery) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || $this->isInlineDataUrl($line)) {
+                continue;
+            }
+            $kept[] = $line;
+        }
+
+        return $kept === [] ? null : implode("\n", $kept);
+    }
+
+    private function mapCategory(Category $c, bool $forList = false): array
     {
         $categoryIds = is_array($c->label_category_ids) && $c->label_category_ids !== []
             ? array_values(array_map('intval', $c->label_category_ids))
             : ($c->label_category_id ? [(int) $c->label_category_id] : []);
+
+        $imageUrl = $forList
+            ? $this->publicImageUrlForList($c)
+            : ($c->image_url ?: Media::url($c->image_path));
+        $gallery = $forList ? $this->galleryForList($c->gallery) : $c->gallery;
 
         return [
             'id' => $c->id,
@@ -52,14 +161,18 @@ class CategoryAdminController extends Controller
             'type' => $c->type,
             'sort_order' => (int) ($c->sort_order ?? 0),
             'is_active' => (bool) $c->is_active,
-            'image_url' => $c->image_url ?: Media::url($c->image_path),
+            'image_url' => $imageUrl,
             'image_path' => $c->image_path,
+            'has_inline_image' => $forList && $imageUrl === null && (
+                $this->isInlineDataUrl($c->image_url)
+                || ($c->gallery !== null && $this->galleryForList($c->gallery) !== $c->gallery)
+            ),
             'description' => $c->description,
             'details' => $c->details,
             'price' => $c->price,
             'compare_at_price' => $c->compare_at_price,
             'label_color' => $c->label_color,
-            'gallery' => $c->gallery,
+            'gallery' => $gallery,
             'sku' => $c->sku,
             'cost' => $c->cost,
             'unit' => $c->unit,
@@ -95,7 +208,7 @@ class CategoryAdminController extends Controller
             $query->catalogOnly();
         }
 
-        $items = $query->get()->map(fn ($c) => $this->mapCategory($c));
+        $items = $query->get()->map(fn ($c) => $this->mapCategory($c, forList: true));
 
         return response()->json(['data' => $items]);
     }
@@ -192,6 +305,9 @@ class CategoryAdminController extends Controller
             'variation_colors' => $validated['variation_colors'] ?? null,
             'variation_sizes' => $validated['variation_sizes'] ?? null,
         ]);
+
+        $this->normalizeCategoryImages($c);
+        $c->refresh();
 
         return response()->json(['data' => $this->mapCategory($c)], 201);
     }
@@ -306,6 +422,8 @@ class CategoryAdminController extends Controller
 
         DB::transaction(function () use ($category, $stockReceive, $recalcSnapshot) {
             $category->save();
+
+            $this->normalizeCategoryImages($category);
 
             $stockReceive->syncInventoryAfterReceiveChange($category->fresh(), $recalcSnapshot);
         });

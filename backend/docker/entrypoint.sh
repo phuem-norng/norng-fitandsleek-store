@@ -18,6 +18,7 @@ case "$1" in
     php artisan storage:link --relative --force
     php artisan config:clear
     php artisan migrate --force
+    chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
     chmod -R ug+rwx storage bootstrap/cache 2>/dev/null || true
     php-fpm -D
     exec nginx -g 'daemon off;'

@@ -183,7 +183,7 @@ class SocialAuthController extends Controller
                 ->user();
         } catch (\Exception $e) {
             // Capture the root cause so we can debug provider errors (redirect_uri, client_id, etc.)
-            Log::error('[SocialAuth] Callback failed', [
+            $this->logSocialAuth('error', '[SocialAuth] Callback failed', [
                 'provider' => $provider,
                 'message' => $e->getMessage(),
                 'query' => request()->query(),
@@ -193,9 +193,8 @@ class SocialAuthController extends Controller
                 'error' => 'Social login failed. Please try again.',
             ]);
 
-            return redirect($this->callbackPathWithTicket($frontendCallbackUrl, $ticket))
-                ->withCookie($forgetCallbackCookie)
-                ->withCookie($forgetProviderRedirectCookie);
+            $redirectUrl = $this->callbackPathWithTicket($frontendCallbackUrl, $ticket);
+            return $this->redirectWithFallback($redirectUrl, $forgetCallbackCookie, $forgetProviderRedirectCookie);
         }
 
         $email = $socialUser->getEmail();
@@ -204,9 +203,8 @@ class SocialAuthController extends Controller
                 'error' => 'Your social account does not provide an email.',
             ]);
 
-            return redirect($this->callbackPathWithTicket($frontendCallbackUrl, $ticket))
-                ->withCookie($forgetCallbackCookie)
-                ->withCookie($forgetProviderRedirectCookie);
+            $redirectUrl = $this->callbackPathWithTicket($frontendCallbackUrl, $ticket);
+            return $this->redirectWithFallback($redirectUrl, $forgetCallbackCookie, $forgetProviderRedirectCookie);
         }
 
         $user = User::where('email', $email)->first();
@@ -221,7 +219,7 @@ class SocialAuthController extends Controller
 
         $token = $user->createToken('fitandsleekpro')->plainTextToken;
 
-        Log::info('[SocialAuth] Callback success', [
+        $this->logSocialAuth('info', '[SocialAuth] Callback success', [
             'provider' => $provider,
             'user_id' => $user->id,
             'email' => $user->email,
@@ -233,9 +231,24 @@ class SocialAuthController extends Controller
             'provider' => $provider,
         ]);
 
-        return redirect($this->callbackPathWithTicket($frontendCallbackUrl, $ticket))
+        $redirectUrl = $this->callbackPathWithTicket($frontendCallbackUrl, $ticket);
+        return $this->redirectWithFallback($redirectUrl, $forgetCallbackCookie, $forgetProviderRedirectCookie);
+    }
+
+    protected function redirectWithFallback(string $redirectUrl, $forgetCallbackCookie, $forgetProviderRedirectCookie)
+    {
+        return redirect()->away($redirectUrl)
             ->withCookie($forgetCallbackCookie)
             ->withCookie($forgetProviderRedirectCookie);
+    }
+
+    protected function logSocialAuth(string $level, string $message, array $context = []): void
+    {
+        try {
+            Log::log($level, $message, $context);
+        } catch (\Throwable) {
+            // Never block OAuth redirects when storage/logging is misconfigured.
+        }
     }
 
     public function exchange(string $ticket)
