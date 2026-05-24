@@ -1,16 +1,24 @@
+# Postgres only for local dev. Prefer the repo root stack:
+#   cd .. && docker compose up -d db
+#
+# Host tools (php artisan, pgAdmin): localhost:5433
+# In-stack backend container: DB_HOST=db, DB_PORT=5432
+
 services:
   db:
     image: postgres:15-alpine
     container_name: fitandsleek_db
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_v2}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Norng@123}
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
+    name: fitandsleek_fullstack_postgres_data
+    external: true

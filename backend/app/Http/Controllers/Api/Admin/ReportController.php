@@ -622,6 +622,734 @@ class ReportController extends Controller
         return response()->json($categories);
     }
 
+    /**
+     * Product catalogue breakdown: count by storefront category and by stock-label origin (country).
+     */
+    public function productAnalytics()
+    {
+        $totalProducts = Product::count();
+
+        $stockType = Category::STOCK_INVENTORY_TYPE;
+        $categoryRows = Product::query()
+            ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+            ->select(
+                DB::raw("CASE
+                    WHEN products.category_id IS NULL THEN 0
+                    WHEN categories.type = '{$stockType}' THEN 0
+                    ELSE categories.id
+                END as category_id"),
+                DB::raw("CASE
+                    WHEN products.category_id IS NULL THEN 'Uncategorized'
+                    WHEN categories.type = '{$stockType}' OR categories.id IS NULL THEN 'Uncategorized'
+                    WHEN TRIM(COALESCE(categories.name, '')) = '' THEN 'Uncategorized'
+                    ELSE categories.name
+                END as name"),
+                DB::raw('COUNT(products.id) as count')
+            )
+            ->groupBy(DB::raw('1'), DB::raw('2'))
+            ->orderByDesc('count')
+            ->get();
+
+        $byCategory = $this->bucketChartSlices(
+            $categoryRows->map(fn ($row) => [
+                'id' => (int) $row->category_id,
+                'name' => (string) $row->name,
+                'count' => (int) $row->count,
+            ])->values()->all(),
+            $totalProducts,
+            11,
+            'Other categories'
+        );
+
+        $countryRows = Product::query()
+            ->leftJoin('categories as stock_labels', 'products.stock_label_id', '=', 'stock_labels.id')
+            ->select(
+                DB::raw("COALESCE(NULLIF(TRIM(stock_labels.origin), ''), 'unknown') as country_key"),
+                DB::raw('COUNT(products.id) as count')
+            )
+            ->groupBy('country_key')
+            ->orderByDesc('count')
+            ->get();
+
+        $byCountry = $this->bucketChartSlices(
+            $countryRows->map(fn ($row) => [
+                'code' => (string) $row->country_key,
+                'name' => $this->formatCountryKey((string) $row->country_key),
+                'count' => (int) $row->count,
+            ])->values()->all(),
+            $totalProducts,
+            9,
+            'Other countries'
+        );
+
+        return response()->json([
+            'total_products' => $totalProducts,
+            'by_category' => $byCategory,
+            'by_country' => $byCountry,
+        ]);
+    }
+
+    /**
+     * Order breakdown: counts by lifecycle status and by storefront category (distinct orders).
+     */
+    public function orderAnalytics(Request $request)
+    {
+        $ordersQuery = Order::query();
+        $this->applyOrderPeriodFilter($ordersQuery, $request, 'created_at');
+
+        $statusRows = (clone $ordersQuery)
+            ->select('status', DB::raw('COUNT(*) as count'))
+            ->groupBy('status')
+            ->orderByDesc(DB::raw('COUNT(*)'))
+            ->get();
+
+        $totalOrders = (int) $statusRows->sum('count');
+
+        $byStatus = $this->bucketChartSlices(
+            $statusRows->map(fn ($row) => [
+                'name' => $this->formatOrderStatus((string) $row->status),
+                'count' => (int) $row->count,
+            ])->values()->all(),
+            (float) max($totalOrders, 0),
+            11,
+            'Other statuses'
+        );
+
+        $stockType = Category::STOCK_INVENTORY_TYPE;
+        $categoryNameSql = "CASE
+            WHEN products.category_id IS NULL THEN 'Uncategorized'
+            WHEN categories.type = '{$stockType}' OR categories.id IS NULL THEN 'Uncategorized'
+            WHEN TRIM(COALESCE(categories.name, '')) = '' THEN 'Uncategorized'
+            ELSE categories.name
+        END";
+
+        $categoryQuery = OrderItem::query()
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('products', 'order_items.product_id', '=', 'products.id')
+            ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+            ->where('orders.status', '!=', 'cancelled');
+
+        $this->applyOrderPeriodFilter($categoryQuery, $request);
+
+        $categoryRows = (clone $categoryQuery)
+            ->select(
+                DB::raw("{$categoryNameSql} as category_name"),
+                DB::raw('COUNT(DISTINCT orders.id) as count')
+            )
+            ->groupBy(DB::raw($categoryNameSql))
+            ->orderByDesc('count')
+            ->get();
+
+        $categoryOrderTotal = (int) $categoryRows->sum('count');
+
+        $byCategory = $this->bucketChartSlices(
+            $categoryRows->map(fn ($row) => [
+                'name' => (string) $row->category_name,
+                'count' => (int) $row->count,
+            ])->values()->all(),
+            (float) max($categoryOrderTotal, 0),
+            11,
+            'Other categories'
+        );
+
+        return response()->json([
+            'total_orders' => $totalOrders,
+            'by_status' => $byStatus,
+            'by_category' => $byCategory,
+        ]);
+    }
+
+    private function applyOrderPeriodFilter($query, Request $request, string $dateColumn = 'orders.created_at'): void
+    {
+        if ($request->filled('from') && $request->filled('to')) {
+            $from = Carbon::parse($request->input('from'))->startOfDay();
+            $to = Carbon::parse($request->input('to'))->endOfDay();
+            $query->whereBetween($dateColumn, [$from, $to]);
+
+            return;
+        }
+
+        if ($request->filled('period')) {
+            $start = now()->subDays((int) $request->input('period'))->startOfDay();
+            $query->where($dateColumn, '>=', $start);
+        }
+    }
+
+    private function formatOrderStatus(string $status): string
+    {
+        $normalized = trim(str_replace(['_', '-'], ' ', $status));
+
+        return $normalized !== '' ? ucwords($normalized) : 'Unknown';
+    }
+
+    /**
+     * Sales performance grouped by storefront product category (order line items).
+     */
+    public function categorySalesAnalytics(Request $request)
+    {
+        $limit = min(max((int) $request->input('limit', 10), 1), 20);
+        $stockType = Category::STOCK_INVENTORY_TYPE;
+
+        $query = OrderItem::query()
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('products', 'order_items.product_id', '=', 'products.id')
+            ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+            ->where('orders.status', '!=', 'cancelled');
+
+        if ($request->filled('from') && $request->filled('to')) {
+            $from = Carbon::parse($request->input('from'))->startOfDay();
+            $to = Carbon::parse($request->input('to'))->endOfDay();
+            $query->whereBetween('orders.created_at', [$from, $to]);
+        } elseif ($request->filled('period')) {
+            $start = now()->subDays((int) $request->input('period'))->startOfDay();
+            $query->where('orders.created_at', '>=', $start);
+        }
+
+        $categoryNameSql = "CASE
+            WHEN products.category_id IS NULL THEN 'Uncategorized'
+            WHEN categories.type = '{$stockType}' OR categories.id IS NULL THEN 'Uncategorized'
+            WHEN TRIM(COALESCE(categories.name, '')) = '' THEN 'Uncategorized'
+            ELSE categories.name
+        END";
+
+        $rows = (clone $query)
+            ->select(
+                DB::raw("{$categoryNameSql} as category_name"),
+                DB::raw('SUM(order_items.qty) as units_sold'),
+                DB::raw('SUM(order_items.line_total) as revenue')
+            )
+            ->groupBy(DB::raw($categoryNameSql))
+            ->orderByDesc('revenue')
+            ->get();
+
+        $totalRevenue = (float) $rows->sum('revenue');
+        $totalUnits = (int) $rows->sum('units_sold');
+
+        $revenueByCategory = $this->bucketChartSlices(
+            $rows->map(fn ($row) => [
+                'name' => (string) $row->category_name,
+                'revenue' => (float) $row->revenue,
+            ])->values()->all(),
+            $totalRevenue,
+            11,
+            'Other categories',
+            'revenue'
+        );
+
+        $topCategories = $rows
+            ->take($limit)
+            ->map(fn ($row) => [
+                'name' => (string) $row->category_name,
+                'units_sold' => (int) $row->units_sold,
+                'revenue' => round((float) $row->revenue, 2),
+            ])
+            ->values();
+
+        return response()->json([
+            'total_revenue' => round($totalRevenue, 2),
+            'total_units' => $totalUnits,
+            'revenue_by_category' => $revenueByCategory,
+            'top_categories' => $topCategories,
+        ]);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function bucketChartSlices(array $rows, float $total, int $maxSlices, string $otherLabel, string $valueKey = 'count'): array
+    {
+        if ($total <= 0 || $rows === []) {
+            return [];
+        }
+
+        $top = array_slice($rows, 0, $maxSlices);
+        $rest = array_slice($rows, $maxSlices);
+        if ($rest !== []) {
+            $otherValue = array_sum(array_map(fn ($row) => (float) ($row[$valueKey] ?? 0), $rest));
+            if ($otherValue > 0) {
+                $top[] = [
+                    'name' => $otherLabel,
+                    'code' => 'other',
+                    $valueKey => $otherValue,
+                ];
+            }
+        }
+
+        return array_values(array_map(function ($row) use ($total, $valueKey) {
+            $value = (float) ($row[$valueKey] ?? 0);
+            $slice = [
+                'name' => (string) ($row['name'] ?? '—'),
+                'percentage' => round(($value / $total) * 100, 1),
+            ];
+            if (isset($row['code'])) {
+                $slice['code'] = (string) $row['code'];
+            }
+            $slice[$valueKey] = $valueKey === 'count' ? (int) $value : round($value, 2);
+
+            return $slice;
+        }, $top));
+    }
+
+    private function formatCountryKey(string $key): string
+    {
+        if ($key === '' || strtolower($key) === 'unknown') {
+            return 'Not set';
+        }
+
+        if (strlen($key) === 2 && ctype_alpha($key)) {
+            $code = strtoupper($key);
+            $names = [
+                'US' => 'United States',
+                'GB' => 'United Kingdom',
+                'KH' => 'Cambodia',
+                'CN' => 'China',
+                'JP' => 'Japan',
+                'KR' => 'South Korea',
+                'TH' => 'Thailand',
+                'VN' => 'Vietnam',
+                'FR' => 'France',
+                'DE' => 'Germany',
+                'IT' => 'Italy',
+            ];
+
+            return $names[$code] ?? $code;
+        }
+
+        return $key;
+    }
+
+    /**
+     * Revenue dashboard: monthly trend, product breakdown, and geography for a calendar year.
+     */
+    public function revenueAnalytics(Request $request)
+    {
+        $validated = $request->validate([
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'product_id' => ['nullable', 'integer', 'exists:products,id'],
+        ]);
+
+        $year = (int) ($validated['year'] ?? now()->year);
+        $categoryId = isset($validated['category_id']) ? (int) $validated['category_id'] : null;
+        $productId = isset($validated['product_id']) ? (int) $validated['product_id'] : null;
+
+        $start = Carbon::create($year, 1, 1)->startOfDay();
+        $end = Carbon::create($year, 12, 31)->endOfDay();
+        $stockType = Category::STOCK_INVENTORY_TYPE;
+
+        $itemsQuery = OrderItem::query()
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('products', 'order_items.product_id', '=', 'products.id')
+            ->where('orders.status', '!=', 'cancelled')
+            ->whereBetween('orders.created_at', [$start, $end]);
+
+        if ($categoryId) {
+            $itemsQuery->where('products.category_id', $categoryId);
+        }
+
+        if ($productId) {
+            $itemsQuery->where('order_items.product_id', $productId);
+        }
+
+        $monthlyRows = (clone $itemsQuery)
+            ->select(
+                DB::raw('EXTRACT(MONTH FROM orders.created_at)::int as month'),
+                DB::raw('SUM(order_items.line_total) as revenue')
+            )
+            ->groupBy(DB::raw('EXTRACT(MONTH FROM orders.created_at)'))
+            ->orderBy('month')
+            ->get()
+            ->keyBy('month');
+
+        $monthLabels = [
+            1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+            5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+            9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December',
+        ];
+
+        $monthly = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $revenue = (float) ($monthlyRows->get($m)?->revenue ?? 0);
+            $label = $monthLabels[$m];
+            $monthly[] = [
+                'month' => $m,
+                'month_label' => $label,
+                'month_short' => substr($label, 0, 3),
+                'revenue' => round($revenue, 2),
+                'year' => $year,
+            ];
+        }
+
+        $byProduct = (clone $itemsQuery)
+            ->select(
+                'order_items.product_id',
+                'products.name as product_name',
+                DB::raw('SUM(order_items.line_total) as revenue')
+            )
+            ->whereNotNull('order_items.product_id')
+            ->groupBy('order_items.product_id', 'products.name')
+            ->orderByDesc(DB::raw('SUM(order_items.line_total)'))
+            ->limit(20)
+            ->get()
+            ->map(fn ($row) => [
+                'product_id' => (int) $row->product_id,
+                'name' => (string) ($row->product_name ?: 'Unknown product'),
+                'revenue' => round((float) $row->revenue, 2),
+            ])
+            ->values();
+
+        $countryRows = (clone $itemsQuery)
+            ->select(
+                DB::raw("COALESCE(NULLIF(TRIM(orders.shipping_address->>'country'), ''), 'unknown') as country_key"),
+                DB::raw('SUM(order_items.line_total) as revenue')
+            )
+            ->groupBy(DB::raw("COALESCE(NULLIF(TRIM(orders.shipping_address->>'country'), ''), 'unknown')"))
+            ->orderByDesc(DB::raw('SUM(order_items.line_total)'))
+            ->limit(12)
+            ->get();
+
+        $byCountry = $countryRows->map(fn ($row) => [
+            'code' => (string) $row->country_key,
+            'name' => $this->formatCountryKey((string) $row->country_key),
+            'revenue' => round((float) $row->revenue, 2),
+        ])->values();
+
+        $categories = Category::query()
+            ->catalogOnly()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])
+            ->values();
+
+        $productsForFilter = OrderItem::query()
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('products', 'order_items.product_id', '=', 'products.id')
+            ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+            ->where('orders.status', '!=', 'cancelled')
+            ->whereBetween('orders.created_at', [$start, $end])
+            ->where(function ($q) use ($stockType) {
+                $q->whereNull('categories.id')
+                    ->orWhere('categories.type', '!=', $stockType);
+            })
+            ->when($categoryId, fn ($q) => $q->where('products.category_id', $categoryId))
+            ->select('products.id', 'products.name')
+            ->distinct()
+            ->orderBy('products.name')
+            ->limit(200)
+            ->get()
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name])
+            ->values();
+
+        $totalRevenue = round(array_sum(array_column($monthly, 'revenue')), 2);
+
+        return response()->json([
+            'year' => $year,
+            'total_revenue' => $totalRevenue,
+            'monthly' => $monthly,
+            'by_product' => $byProduct,
+            'by_country' => $byCountry,
+            'filters' => [
+                'categories' => $categories,
+                'products' => $productsForFilter,
+            ],
+        ]);
+    }
+
+    /**
+     * Stock & Inventory: on-hand units by master label, and stock-in (received) by month across a year range.
+     */
+    public function stockAnalytics(Request $request)
+    {
+        $validated = $request->validate([
+            'from_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'to_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            /** @deprecated use from_year / to_year */
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+        ]);
+
+        $toYear = (int) ($validated['to_year'] ?? $validated['year'] ?? now()->year);
+        $fromYear = (int) ($validated['from_year'] ?? $toYear - 1);
+
+        if ($fromYear > $toYear) {
+            [$fromYear, $toYear] = [$toYear, $fromYear];
+        }
+
+        $yearSpan = $toYear - $fromYear + 1;
+        if ($yearSpan > 8) {
+            return response()->json([
+                'message' => 'Year range cannot exceed 8 years.',
+            ], 422);
+        }
+
+        $compareYears = range($fromYear, $toYear);
+        $stockType = Category::STOCK_INVENTORY_TYPE;
+
+        $receivedUnitsSql = 'GREATEST(COALESCE(stock_received, stock, 0), 0)';
+
+        $labelRows = Category::query()
+            ->where('type', $stockType)
+            ->whereNull('parent_id')
+            ->select(
+                'id',
+                DB::raw("COALESCE(NULLIF(TRIM(name), ''), NULLIF(TRIM(slug), ''), 'Unnamed label') as label_name"),
+                DB::raw("GREATEST(COALESCE(stock, 0), 0) as stock")
+            )
+            ->orderByDesc(DB::raw('GREATEST(COALESCE(stock, 0), 0)'))
+            ->get();
+
+        $totalStock = (int) $labelRows->sum('stock');
+
+        $byLabel = $this->bucketChartSlices(
+            $labelRows->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'name' => (string) $row->label_name,
+                'count' => (int) $row->stock,
+            ])->values()->all(),
+            (float) max($totalStock, 0),
+            11,
+            'Other labels',
+            'count'
+        );
+
+        $receiveRows = Category::query()
+            ->where('type', $stockType)
+            ->whereNotNull('parent_id')
+            ->whereNotNull('date_in')
+            ->whereBetween(DB::raw('EXTRACT(YEAR FROM date_in)::int'), [$fromYear, $toYear])
+            ->select(
+                DB::raw('EXTRACT(YEAR FROM date_in)::int as yr'),
+                DB::raw('EXTRACT(MONTH FROM date_in)::int as month'),
+                DB::raw("SUM({$receivedUnitsSql}) as units")
+            )
+            ->groupBy(DB::raw('EXTRACT(YEAR FROM date_in)'), DB::raw('EXTRACT(MONTH FROM date_in)'))
+            ->get();
+
+        $receiveByYearMonth = [];
+        foreach ($receiveRows as $row) {
+            $receiveByYearMonth[(int) $row->yr][(int) $row->month] = (int) $row->units;
+        }
+
+        $monthLabels = [
+            1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
+            5 => 'May', 6 => 'June', 7 => 'July', 8 => 'August',
+            9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December',
+        ];
+
+        $monthlyCompare = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $label = $monthLabels[$m];
+            $byYear = [];
+            foreach ($compareYears as $yr) {
+                $byYear[(string) $yr] = (int) ($receiveByYearMonth[$yr][$m] ?? 0);
+            }
+            $monthlyCompare[] = [
+                'month' => $m,
+                'month_label' => $label,
+                'month_short' => substr($label, 0, 3),
+                'by_year' => $byYear,
+            ];
+        }
+
+        return response()->json([
+            'total_stock' => $totalStock,
+            'by_label' => $byLabel,
+            'monthly_compare' => $monthlyCompare,
+            'compare_years' => $compareYears,
+            'year_range' => [
+                'from' => $fromYear,
+                'to' => $toYear,
+            ],
+        ]);
+    }
+
+    private const PLAN_CONFIG_KEY = 'plan_config';
+
+    /**
+     * Revenue plan: target for a month range; current = cumulative revenue from plan start through plan end (or today).
+     */
+    public function plan(Request $request)
+    {
+        $validated = $request->validate([
+            'plan_start_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'plan_start_month' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'plan_end_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'plan_end_month' => ['nullable', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $config = $this->mergePlanConfigInput($this->resolvePlanConfig(), $validated);
+
+        $planStart = $this->monthStart($config['plan_start']['year'], $config['plan_start']['month']);
+        $planEnd = $this->monthEnd($config['plan_end']['year'], $config['plan_end']['month']);
+
+        $now = now();
+        $countEnd = $planEnd->lt($now) ? $planEnd : $now->copy()->endOfDay();
+        if ($planStart->gt($countEnd)) {
+            $countEnd = $planStart->copy();
+        }
+
+        $currentRevenue = $this->sumPlanRevenue($planStart, $countEnd);
+
+        $target = (float) $config['target'];
+
+        return response()->json([
+            'target' => round($target, 2),
+            'plan_start' => $config['plan_start'],
+            'plan_end' => $config['plan_end'],
+            'current_revenue' => round($currentRevenue, 2),
+            'progress_percent' => $target > 0
+                ? round(min(100, ($currentRevenue / $target) * 100), 1)
+                : 0,
+            'plan_period' => [
+                'from' => $planStart->toDateString(),
+                'to' => $planEnd->toDateString(),
+                'label' => $planStart->format('M Y').' – '.$planEnd->format('M Y'),
+            ],
+            'count_period' => [
+                'from' => $planStart->toDateString(),
+                'to' => $countEnd->toDateString(),
+                'label' => $planStart->format('M Y').' – '.$countEnd->format('M Y'),
+            ],
+            'months_in_plan' => $this->monthsBetweenInclusive($planStart, $planEnd),
+            'months_counted' => $this->monthsBetweenInclusive($planStart, $countEnd->copy()->startOfMonth()),
+        ]);
+    }
+
+    public function updatePlanTarget(Request $request)
+    {
+        $validated = $request->validate([
+            'target' => ['required', 'numeric', 'min:0'],
+            'plan_start_year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'plan_start_month' => ['required', 'integer', 'min:1', 'max:12'],
+            'plan_end_year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'plan_end_month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $planStart = $this->monthStart((int) $validated['plan_start_year'], (int) $validated['plan_start_month']);
+        $planEnd = $this->monthEnd((int) $validated['plan_end_year'], (int) $validated['plan_end_month']);
+
+        if ($planStart->gt($planEnd)) {
+            return response()->json(['message' => 'Plan start must be before or equal to plan end.'], 422);
+        }
+
+        $config = [
+            'target' => round((float) $validated['target'], 2),
+            'plan_start' => [
+                'year' => (int) $validated['plan_start_year'],
+                'month' => (int) $validated['plan_start_month'],
+            ],
+            'plan_end' => [
+                'year' => (int) $validated['plan_end_year'],
+                'month' => (int) $validated['plan_end_month'],
+            ],
+        ];
+
+        Setting::updateOrCreate(
+            ['key' => self::PLAN_CONFIG_KEY, 'group' => 'reports'],
+            ['value' => $config]
+        );
+
+        return response()->json([
+            'message' => 'Plan saved.',
+            'config' => $config,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $saved
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function mergePlanConfigInput(array $saved, array $input): array
+    {
+        $now = now();
+        $config = array_merge([
+            'target' => 0.0,
+            'plan_start' => ['year' => (int) $now->year, 'month' => (int) $now->month],
+            'plan_end' => ['year' => (int) $now->year, 'month' => (int) $now->month],
+        ], $saved);
+
+        foreach (['plan_start', 'plan_end'] as $key) {
+            if (isset($input[$key.'_year'], $input[$key.'_month'])) {
+                $config[$key] = [
+                    'year' => (int) $input[$key.'_year'],
+                    'month' => (int) $input[$key.'_month'],
+                ];
+            }
+        }
+
+        $planStart = $this->monthStart($config['plan_start']['year'], $config['plan_start']['month']);
+        $planEnd = $this->monthEnd($config['plan_end']['year'], $config['plan_end']['month']);
+        if ($planStart->gt($planEnd)) {
+            $config['plan_end'] = $config['plan_start'];
+        }
+
+        return $config;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolvePlanConfig(): array
+    {
+        $legacyTarget = Setting::query()
+            ->where('key', 'plan_revenue_target')
+            ->where('group', 'reports')
+            ->first();
+
+        $setting = Setting::query()
+            ->where('key', self::PLAN_CONFIG_KEY)
+            ->where('group', 'reports')
+            ->first();
+
+        $now = now();
+        $planEndDefault = $now->copy()->addMonths(5);
+
+        $defaults = [
+            'target' => (float) ($legacyTarget?->value ?? 0),
+            'plan_start' => ['year' => (int) $now->year, 'month' => (int) $now->month],
+            'plan_end' => ['year' => (int) $planEndDefault->year, 'month' => (int) $planEndDefault->month],
+        ];
+
+        if (! $setting?->value || ! is_array($setting->value)) {
+            return $defaults;
+        }
+
+        return array_merge($defaults, $setting->value);
+    }
+
+    private function monthStart(int $year, int $month): Carbon
+    {
+        return Carbon::create($year, $month, 1)->startOfDay();
+    }
+
+    private function monthEnd(int $year, int $month): Carbon
+    {
+        return Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+    }
+
+    private function sumPlanRevenue(Carbon $countFrom, Carbon $countEnd): float
+    {
+        if ($countFrom->gt($countEnd)) {
+            return 0.0;
+        }
+
+        return (float) Order::query()
+            ->whereBetween('created_at', [$countFrom, $countEnd])
+            ->where('status', '!=', 'cancelled')
+            ->sum('total');
+    }
+
+    private function monthsBetweenInclusive(Carbon $start, Carbon $end): int
+    {
+        if ($end->lt($start)) {
+            return 0;
+        }
+
+        return ($end->year - $start->year) * 12 + ($end->month - $start->month) + 1;
+    }
+
     // Recent orders
     public function recentOrders(Request $request)
     {

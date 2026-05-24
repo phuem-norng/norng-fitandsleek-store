@@ -27,6 +27,7 @@ const PAGE_TITLES = {
  "/admin/chatbot": "Chatbot",
  "/admin/notifications": "Notifications",
  "/admin/payments": "Payments",
+ "/admin/payments/sale-history": "Sale History",
  "/admin/replacement-cases": "Replacements",
  "/admin/settings": "Settings",
  "/admin/profile": "My Profile",

@@ -975,6 +975,35 @@ html.admin-dashboard[data-admin-theme="dark"] .admin-theme .admin-surface {
   background-color: var(--admin-soft-bg) !important;
 }
 
+/* Reports dashboard — inherit admin canvas; chart panels keep their own surfaces */
+.admin-theme .reports-dashboard {
+  background: transparent !important;
+}
+
+.admin-theme .reports-dashboard .report-chart-panel {
+  transition: box-shadow 0.2s ease;
+}
+
+.admin-theme .reports-dashboard .report-chart-panel:hover {
+  box-shadow: 0 8px 28px rgba(148, 163, 184, 0.22);
+}
+
+html.admin-dashboard[data-admin-theme="dark"] .admin-theme .reports-dashboard .report-chart-panel:hover {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.admin-theme .reports-dashboard .admin-stat-grid > .admin-surface {
+  background: #ffffff !important;
+  border-color: rgba(226, 232, 240, 0.95) !important;
+  box-shadow: 0 4px 24px rgba(148, 163, 184, 0.16);
+}
+
+html.admin-dashboard[data-admin-theme="dark"] .admin-theme .reports-dashboard .admin-stat-grid > .admin-surface {
+  background: rgba(30, 41, 59, 0.55) !important;
+  border-color: rgba(148, 163, 184, 0.12) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
 /* Shell rail / topbar (dark: canvas color). Light: rely on bg-white on the same node. */
 html.admin-dashboard[data-admin-theme="dark"] .admin-theme .admin-bg-canvas {
   background-color: var(--admin-canvas) !important;
