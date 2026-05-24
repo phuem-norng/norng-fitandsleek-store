@@ -9,6 +9,8 @@ import {
  TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { useTheme } from "../../state/theme.jsx";
+import AdminYearMonthFilter from "../../components/admin/AdminYearMonthFilter.jsx";
+import { EMPTY_YEAR_MONTH, yearMonthToDateRange } from "../../lib/adminYearMonthFilter.js";
 
 const PAYMENTS_TABLE_COLUMNS = [
  { id: "id", label: "ID" },
@@ -30,8 +32,8 @@ export default function AdminPayments() {
  const [filters, setFilters] = useState({
  status: "all",
  method: "all",
- from_date: "",
- to_date: "",
+ year: EMPTY_YEAR_MONTH.year,
+ month: EMPTY_YEAR_MONTH.month,
  });
  const [currentPage, setCurrentPage] = useState(1);
  const [totalPages, setTotalPages] = useState(1);
@@ -48,8 +50,9 @@ export default function AdminPayments() {
  const params = new URLSearchParams();
  if (filters.status !== "all") params.append("status", filters.status);
  if (filters.method !== "all") params.append("method", filters.method);
- if (filters.from_date) params.append("from_date", filters.from_date);
- if (filters.to_date) params.append("to_date", filters.to_date);
+ const { from, to } = yearMonthToDateRange(filters.year, filters.month);
+ if (from) params.append("from_date", from);
+ if (to) params.append("to_date", to);
  params.append("page", page);
  params.append("per_page", 15);
 
@@ -249,31 +252,13 @@ export default function AdminPayments() {
  </select>
  </div>
 
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
- From Date
- </label>
- <input
- type="date"
- value={filters.from_date}
- onChange={(e) =>
- setFilters({ ...filters, from_date: e.target.value })
- }
- className="w-full px-4 py-2 border admin-border admin-surface text-slate-800 dark:text-slate-100 rounded-lg focus:border-[var(--admin-primary)] focus:outline-none"
- />
- </div>
-
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
- To Date
- </label>
- <input
- type="date"
- value={filters.to_date}
- onChange={(e) =>
- setFilters({ ...filters, to_date: e.target.value })
- }
- className="w-full px-4 py-2 border admin-border admin-surface text-slate-800 dark:text-slate-100 rounded-lg focus:border-[var(--admin-primary)] focus:outline-none"
+ <div className="md:col-span-2">
+ <AdminYearMonthFilter
+ value={{ year: filters.year, month: filters.month }}
+ onChange={(next) => setFilters((f) => ({ ...f, year: next.year, month: next.month }))}
+ startYear={2020}
+ title="Payment date"
+ hint="All years shows every payment. Pick a year for the full year, or add a month."
  />
  </div>
 
@@ -283,8 +268,8 @@ export default function AdminPayments() {
  setFilters({
  status: "all",
  method: "all",
- from_date: "",
- to_date: "",
+ year: EMPTY_YEAR_MONTH.year,
+ month: EMPTY_YEAR_MONTH.month,
  })
  }
  className="w-full px-4 py-2 border admin-border text-slate-700 dark:text-slate-200 rounded-lg admin-surface hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition"

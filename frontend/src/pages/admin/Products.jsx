@@ -23,7 +23,9 @@ import { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../../lib/swa
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
 import { matchesSection } from "../../lib/adminListFilters.js";
+import { recordMatchesYearMonth } from "../../lib/adminYearMonthFilter.js";
 import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
+import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
 import { AdminContentSkeleton, AdminDashboardLoader, AdminSectionLoader } from "@/components/admin/AdminLoading";
 import {
   parseVariantMatrix,
@@ -382,6 +384,7 @@ export default function AdminProducts() {
  const [showCreateForm, setShowCreateForm] = useState(false);
  const [search, setSearch] = useState("");
  const listFilters = useAdminFilterDrawer(["stock", "gender", "section", "category"]);
+ const yearMonthFilter = useAdminYearMonthFilter(2020);
  const [selectedIds, setSelectedIds] = useState([]);
  const [columnVisibility, setColumnVisibility] = useState(() =>
   loadTableColumnVisibility(PRODUCTS_COLUMNS_STORAGE_KEY, PRODUCTS_TABLE_COLUMNS),
@@ -1640,7 +1643,20 @@ String(editing.allocated_stock ?? "").trim() === ""
  (id) => String(p.category_id || "") === String(id),
  );
 
- return matchesSearch && matchesGenderFilter && matchesSectionFilter && matchesStockFilter && matchesCategoryFilter;
+ const matchesYearMonth = recordMatchesYearMonth(
+ p.created_at,
+ yearMonthFilter.applied.year,
+ yearMonthFilter.applied.month,
+ );
+
+ return (
+ matchesSearch &&
+ matchesGenderFilter &&
+ matchesSectionFilter &&
+ matchesStockFilter &&
+ matchesCategoryFilter &&
+ matchesYearMonth
+ );
  });
 
  const splitColumns = [
@@ -2859,8 +2875,11 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  />
 
  <AdminFilterToolbarButton
- activeCount={listFilters.activeCount}
- onClick={listFilters.openDrawer}
+ activeCount={listFilters.activeCount + yearMonthFilter.activeCount}
+ onClick={() => {
+ yearMonthFilter.syncDraftFromApplied();
+ listFilters.openDrawer();
+ }}
  className="h-8 rounded-[5px]"
  />
 
@@ -2870,8 +2889,21 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  sections={productFilterSections}
  selected={listFilters.draft}
  onToggle={listFilters.toggleDraft}
- onApply={listFilters.apply}
- onClearAll={listFilters.clearAll}
+ onApply={() => {
+ yearMonthFilter.apply();
+ listFilters.apply();
+ }}
+ onClearAll={() => {
+ yearMonthFilter.clear();
+ listFilters.clearAll();
+ }}
+ yearMonth={{
+ value: yearMonthFilter.draft,
+ onChange: yearMonthFilter.setDraft,
+ startYear: 2020,
+ title: "Added date",
+ hint: "Filter by when the product was added to the catalog.",
+ }}
  />
 
  <div

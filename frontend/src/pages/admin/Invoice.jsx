@@ -4,6 +4,10 @@ import api from "../../lib/api";
 import { useHomepageSettings } from "../../state/homepageSettings";
 import { resolveImageUrl } from "../../lib/images";
 import { AdminPageLoader } from "@/components/admin/AdminLoading";
+import AdminReportExportMenu from "../../components/admin/AdminReportExportMenu.jsx";
+import { downloadBlobResponse } from "../../lib/adminReportDownload.js";
+import { exportAdminTable } from "../../lib/adminTableExport.js";
+import { toastSuccess } from "../../lib/swal";
 
 function money(value) {
  return `$${Number(value || 0).toFixed(2)}`;
@@ -16,21 +20,53 @@ export default function AdminInvoicePage() {
  const [loading, setLoading] = useState(true);
  const [error, setError] = useState("");
  const [paperSize, setPaperSize] = useState("a4");
+ const [exportBusy, setExportBusy] = useState(false);
 
  const downloadPdf = async () => {
+ setExportBusy(true);
  try {
  const res = await api.get(`/admin/orders/${orderId}/invoice/pdf`, { responseType: "blob" });
- const blob = new Blob([res.data], { type: "application/pdf" });
- const url = window.URL.createObjectURL(blob);
- const a = document.createElement("a");
- a.href = url;
- a.download = `invoice-${orderId}.pdf`;
- document.body.appendChild(a);
- a.click();
- a.remove();
- window.URL.revokeObjectURL(url);
+ await downloadBlobResponse(res, `invoice-${orderId}.pdf`);
+ await toastSuccess({ enText: "PDF downloaded successfully" });
  } catch {
  setError("Failed to download invoice PDF.");
+ } finally {
+ setExportBusy(false);
+ }
+ };
+
+ const downloadExcel = async () => {
+ if (!invoice) return;
+ setExportBusy(true);
+ try {
+ const itemRows = (invoice.items || []).map((item) => [
+ item.product_name || "",
+ item.sku || "",
+ String(item.quantity ?? ""),
+ money(item.price),
+ money(item.discount),
+ money(item.shipping_fee),
+ money(item.grand_total),
+ ]);
+ itemRows.push(
+ ["", "", "", "", "", "Subtotal", money(invoice.subtotal)],
+ ["", "", "", "", "", "Discount", money(invoice.discount)],
+ ["", "", "", "", "", "Shipping", money(invoice.shipping_fee)],
+ ["", "", "", "", "", "Grand Total", money(invoice.grand_total)],
+ );
+ await exportAdminTable({
+ format: "excel",
+ filename: `invoice-${invoice.invoice_number || orderId}`,
+ title: `Invoice ${invoice.invoice_number}`,
+ subtitle: `${invoice.customer?.name || "Customer"} · ${invoice.invoice_date || ""}`,
+ headers: ["Product", "SKU", "Qty", "Price", "Discount", "Shipping", "Total"],
+ rows: itemRows,
+ });
+ await toastSuccess({ enText: "Excel downloaded successfully" });
+ } catch {
+ setError("Failed to download invoice Excel.");
+ } finally {
+ setExportBusy(false);
  }
  };
 
@@ -78,13 +114,12 @@ export default function AdminInvoicePage() {
  <option value="thermal">4x6 Thermal</option>
  </select>
  <button onClick={() => window.print()} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Print</button>
- <button
- onClick={downloadPdf}
- className="rounded-lg px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
- style={{ backgroundColor: "var(--admin-primary)" }}
- >
- Download PDF
- </button>
+ <AdminReportExportMenu
+ label="Download"
+ onExportPdf={downloadPdf}
+ onExportExcel={downloadExcel}
+ busy={exportBusy}
+ />
  </div>
  </div>
 

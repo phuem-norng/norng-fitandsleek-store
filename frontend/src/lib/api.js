@@ -100,9 +100,19 @@ const looksLikeHtmlApiResponse = (data) => {
   return head.includes("<!doctype html") || head.includes("<html");
 };
 
+const isBinaryApiResponse = (response) => {
+  const type = response.config?.responseType;
+  if (type === "blob" || type === "arraybuffer") return true;
+  const data = response.data;
+  return typeof Blob !== "undefined" && data instanceof Blob;
+};
+
 // Response interceptor to handle 401 errors
 api.interceptors.response.use(
   (response) => {
+    if (isBinaryApiResponse(response)) {
+      return response;
+    }
     if (looksLikeHtmlApiResponse(response.data)) {
       notifyApiInfrastructureDegraded();
       return Promise.reject(

@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Support\OrderAdminFilters;
+use App\Support\OrderMetrics;
 use Illuminate\Http\Request;
 
 class OrderAdminController extends Controller
 {
     public function index(Request $request)
     {
-        $perPage = min(max((int) $request->input('per_page', 20), 1), 200);
+        $perPage = min(max((int) $request->input('per_page', 20), 1), 1000);
         $compact = $request->boolean('compact');
+        $statuses = OrderAdminFilters::parseArrayParam($request, 'statuses');
 
         $query = Order::query()->with(['user']);
 
@@ -21,7 +24,22 @@ class OrderAdminController extends Controller
             $query->with(['items.product']);
         }
 
-        return $query->orderByDesc('id')->paginate($perPage);
+        OrderAdminFilters::applyListFilters($query, $request);
+
+        $summaryQuery = clone $query;
+        $revenueQuery = OrderAdminFilters::applyRevenueScope($summaryQuery, $statuses);
+
+        $summary = [
+            'order_count' => (int) (clone $summaryQuery)->count('orders.id'),
+            'total_items' => OrderMetrics::sumItemQtyForOrders(clone $summaryQuery),
+            'total_revenue' => round((float) (clone $revenueQuery)->sum('orders.total'), 2),
+        ];
+
+        $paginator = (clone $query)->orderByDesc('orders.id')->paginate($perPage);
+
+        return response()->json(array_merge($paginator->toArray(), [
+            'summary' => $summary,
+        ]));
     }
 
     public function show(Order $order)

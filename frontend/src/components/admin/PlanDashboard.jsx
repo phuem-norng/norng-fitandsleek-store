@@ -247,30 +247,30 @@ export default function PlanDashboard({ theme }) {
           theme={theme}
         >
           {loading ? (
-            <div className="grid min-h-[260px] place-items-center text-sm" style={{ color: theme.subtitle }}>
+            <div className="grid min-h-[320px] place-items-center text-sm" style={{ color: theme.subtitle }}>
               Loading…
             </div>
           ) : target <= 0 ? (
             <ReportEmptyChart message="Set a target and save your plan" theme={theme} />
           ) : (
-            <div className="relative mx-auto w-full max-w-md select-none">
+            <div className="relative mx-auto w-full select-none">
               <div
-                className="h-[220px] w-full touch-none [&_.recharts-surface]:pointer-events-none [&_.recharts-surface]:outline-none"
+                className="relative aspect-[2/1] w-full min-h-[320px] touch-none [&_.recharts-surface]:pointer-events-none [&_.recharts-surface]:outline-none"
                 aria-hidden
               >
-                <ResponsiveContainer width="100%">
+                <ResponsiveContainer width="100%" height="100%">
                   <RadialBarChart
                     data={gaugeData}
                     cx="50%"
                     cy="78%"
-                    innerRadius="72%"
-                    outerRadius="100%"
+                    innerRadius="68%"
+                    outerRadius="98%"
                     startAngle={180}
                     endAngle={0}
-                    barSize={18}
+                    barSize={26}
                   >
                     <PolarAngleAxis type="number" domain={[0, 100]} tick={false} axisLine={false} />
-                    <RadialBar dataKey="value" cornerRadius={10} isAnimationActive={false}>
+                    <RadialBar dataKey="value" cornerRadius={12} isAnimationActive={false}>
                       {gaugeData.map((entry) => (
                         <Cell key={entry.name} fill={entry.fill} />
                       ))}
@@ -278,11 +278,11 @@ export default function PlanDashboard({ theme }) {
                   </RadialBarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="pointer-events-none absolute inset-x-0 bottom-6 text-center">
-                <p className="text-2xl font-bold tabular-nums" style={{ color: theme.title }}>
+              <div className="pointer-events-none absolute inset-x-0 bottom-[12%] text-center">
+                <p className="text-3xl font-bold tabular-nums sm:text-4xl" style={{ color: theme.title }}>
                   {fullUsd.format(current)}
                 </p>
-                <p className="mt-1 text-sm" style={{ color: theme.subtitle }}>
+                <p className="mt-1.5 text-base" style={{ color: theme.subtitle }}>
                   {displayPercent}% of {compactUsd.format(target)}
                 </p>
               </div>

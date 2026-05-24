@@ -1,6 +1,7 @@
 import React, { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { pushAdminModalChrome, popAdminModalChrome } from "../../lib/adminDarkChrome.js";
+import AdminYearMonthFilter from "./AdminYearMonthFilter.jsx";
 
 /**
  * @typedef {{ id: string, title: string, options: Array<{ value: string, label: string, count?: number }> }} FilterSection
@@ -39,6 +40,8 @@ export default function AdminFilterDrawer({
     onApply,
     onClearAll,
     applyLabel = "Filter",
+    afterSections = null,
+    yearMonth = null,
 }) {
     const titleId = useId();
 
@@ -88,10 +91,19 @@ export default function AdminFilterDrawer({
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-4">
-                    {sections.length === 0 ? (
+                    {sections.length === 0 && !afterSections && !yearMonth ? (
                         <p className="text-sm text-slate-500 dark:text-slate-400">No filters for this page.</p>
                     ) : (
                         <div className="space-y-6">
+                            {yearMonth ? (
+                                <AdminYearMonthFilter
+                                    value={yearMonth.value}
+                                    onChange={yearMonth.onChange}
+                                    startYear={yearMonth.startYear ?? 2020}
+                                    title={yearMonth.title}
+                                    hint={yearMonth.hint}
+                                />
+                            ) : null}
                             {sections.map((section) => (
                                 <div key={section.id}>
                                     <h3 className="mb-3 text-sm font-bold text-slate-800 dark:text-slate-100">
@@ -126,6 +138,7 @@ export default function AdminFilterDrawer({
                                     )}
                                 </div>
                             ))}
+                            {afterSections ? <div className="border-t border-slate-200/90 pt-6 dark:border-slate-700/90">{afterSections}</div> : null}
                         </div>
                     )}
                 </div>

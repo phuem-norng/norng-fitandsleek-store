@@ -1,6 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import api from "../../lib/api";
 import { paymentMethodLabel } from "../../lib/posPaymentMethods";
+import { countFilterSelections } from "../../lib/adminListFilters.js";
+import { formatYearMonthLabel } from "../../lib/adminYearMonthFilter.js";
+import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
+import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
+import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 
 function formatMoney(value) {
@@ -61,56 +67,129 @@ function EmptySalesState() {
 }
 
 export default function SaleHistory() {
+  const listFilters = useAdminFilterDrawer(["seller", "payment_method"]);
+  const yearMonthFilter = useAdminYearMonthFilter(2020);
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [sellers, setSellers] = useState([]);
+  const [filterFacets, setFilterFacets] = useState(null);
   const [search, setSearch] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
-  const [sellerId, setSellerId] = useState("all");
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [listTotals, setListTotals] = useState({
+    sale_count: 0,
+    total_items: 0,
+    total_price: 0,
+  });
+  const appliedFiltersKey = JSON.stringify({
+    drawer: listFilters.applied,
+    yearMonth: yearMonthFilter.applied,
+  });
+  const prevQueryRef = useRef({ search: searchDebounced, appliedFiltersKey, page });
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchDebounced(search.trim()), 350);
     return () => window.clearTimeout(t);
   }, [search]);
 
-  const loadSales = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      params.set("per_page", "20");
-      if (searchDebounced) params.set("search", searchDebounced);
-      if (sellerId && sellerId !== "all") params.set("seller_id", sellerId);
+  useEffect(() => {
+    const prev = prevQueryRef.current;
+    const filtersChanged = prev.search !== searchDebounced || prev.appliedFiltersKey !== appliedFiltersKey;
 
-      const { data } = await api.get(`/admin/pos/sale-history?${params}`);
-      const paginator = data?.data;
-      setSales(paginator?.data || []);
-      setLastPage(paginator?.last_page || 1);
-      setTotal(paginator?.total ?? 0);
-      setSummary(data?.summary || null);
-      setSellers(data?.sellers || []);
-    } catch (e) {
-      console.error("Failed to load sale history", e);
-      setSales([]);
-      setSummary(null);
-    } finally {
-      setLoading(false);
+    if (filtersChanged && page !== 1) {
+      setPage(1);
+      return;
     }
-  }, [page, searchDebounced, sellerId]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [searchDebounced, sellerId]);
+    prevQueryRef.current = { search: searchDebounced, appliedFiltersKey, page };
 
-  useEffect(() => {
-    loadSales();
-  }, [loadSales]);
+    const ac = new AbortController();
+    const applied = listFilters.applied;
 
-  const hasFilters = searchDebounced !== "" || sellerId !== "all";
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await api.get("/admin/pos/sale-history", {
+          params: {
+            page,
+            per_page: 20,
+            ...(searchDebounced ? { search: searchDebounced } : {}),
+            ...(applied.seller?.length ? { seller_ids: applied.seller } : {}),
+            ...(applied.payment_method?.length ? { payment_methods: applied.payment_method } : {}),
+            ...(yearMonthFilter.dateRange.from ? { from_date: yearMonthFilter.dateRange.from } : {}),
+            ...(yearMonthFilter.dateRange.to ? { to_date: yearMonthFilter.dateRange.to } : {}),
+          },
+          signal: ac.signal,
+        });
+        const paginator = data?.data;
+        setSales(paginator?.data || []);
+        setLastPage(paginator?.last_page || 1);
+        setTotal(paginator?.total ?? 0);
+        setListTotals(
+          data?.list_totals ?? { sale_count: 0, total_items: 0, total_price: 0 },
+        );
+        setSummary(data?.summary || null);
+        setFilterFacets(data?.filter_facets || null);
+      } catch (e) {
+        if (axios.isCancel(e)) return;
+        console.error("Failed to load sale history", e);
+        setSales([]);
+        setSummary(null);
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [page, searchDebounced, appliedFiltersKey]);
+
+  const saleFilterSections = useMemo(() => {
+    const facets = filterFacets || {};
+    const sections = [];
+
+    if (facets.seller?.length) {
+      sections.push({
+        id: "seller",
+        title: "Seller",
+        options: facets.seller,
+      });
+    }
+
+    if (facets.payment_method?.length) {
+      sections.push({
+        id: "payment_method",
+        title: "Payment method",
+        options: facets.payment_method.map((opt) => ({
+          ...opt,
+          label: paymentMethodLabel(opt.value) || opt.label,
+        })),
+      });
+    }
+
+    return sections;
+  }, [filterFacets]);
+
+  const toolbarFilterCount =
+    countFilterSelections(listFilters.applied) + yearMonthFilter.activeCount;
+  const drawerFilterCount = toolbarFilterCount;
+  const hasFilters = searchDebounced !== "" || drawerFilterCount > 0;
+
+  const openFilterDrawer = () => {
+    yearMonthFilter.syncDraftFromApplied();
+    listFilters.openDrawer();
+  };
+
+  const applyAllFilters = () => {
+    yearMonthFilter.apply();
+    listFilters.apply();
+  };
+
+  const clearAllFilters = () => {
+    yearMonthFilter.clear();
+    listFilters.clearAll();
+  };
   const showEmpty = !loading && sales.length === 0 && !hasFilters;
 
   const summaryBlocks = useMemo(() => {
@@ -153,58 +232,49 @@ export default function SaleHistory() {
             </svg>
           </div>
 
-          <button
-            type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            disabled
-            title="More filters coming soon"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-              />
-            </svg>
-            Filter
-          </button>
-
-          <label className="relative inline-flex min-w-[10rem] items-center">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
-            </span>
-            <select
-              value={sellerId}
-              onChange={(e) => setSellerId(e.target.value)}
-              className="w-full appearance-none rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-9 text-sm text-slate-800 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-slate-600"
-            >
-              <option value="all">All sellers</option>
-              {sellers.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <svg
-              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </label>
+          <AdminFilterToolbarButton activeCount={toolbarFilterCount} onClick={openFilterDrawer} />
         </div>
+
+        {yearMonthFilter.activeCount > 0 || listFilters.activeCount > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+            <span className="font-medium">Active filters:</span>
+            {yearMonthFilter.activeCount > 0 ? (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                {formatYearMonthLabel(yearMonthFilter.applied)}
+              </span>
+            ) : null}
+            {listFilters.applied.seller?.map((id) => {
+              const name = filterFacets?.seller?.find((s) => s.value === id)?.label || id;
+              return (
+                <span key={`seller-${id}`} className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                  {name}
+                </span>
+              );
+            })}
+            {listFilters.applied.payment_method?.map((id) => (
+              <span key={`pay-${id}`} className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                {paymentMethodLabel(id)}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
+
+      <AdminFilterDrawer
+        open={listFilters.open}
+        onClose={listFilters.closeDrawer}
+        sections={saleFilterSections}
+        selected={listFilters.draft}
+        onToggle={listFilters.toggleDraft}
+        onApply={applyAllFilters}
+        onClearAll={clearAllFilters}
+        yearMonth={{
+          value: yearMonthFilter.draft,
+          onChange: yearMonthFilter.setDraft,
+          startYear: 2020,
+          title: "Sale date",
+        }}
+      />
 
       <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
         {summaryBlocks.map((block) => (
@@ -221,6 +291,49 @@ export default function SaleHistory() {
       </div>
 
       <div className="mt-6 min-h-[320px] rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/40">
+        {!loading && !showEmpty ? (
+          <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-4 dark:border-slate-700 sm:px-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-800">
+                <svg className="h-5 w-5 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">
+                  {hasFilters ? "Filtered sales" : "All sales"}
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {hasFilters ? (
+                    <>
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        {listTotals.sale_count} sale{listTotals.sale_count === 1 ? "" : "s"}
+                      </span>
+                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+                      <span>
+                        {listTotals.total_items} item{listTotals.total_items === 1 ? "" : "s"}
+                      </span>
+                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">
+                        {formatMoney(listTotals.total_price)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {listTotals.sale_count} total sale{listTotals.sale_count === 1 ? "" : "s"}
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="p-6">
             <AdminContentSkeleton />
@@ -271,6 +384,7 @@ export default function SaleHistory() {
               <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm dark:border-slate-700 sm:px-5">
                 <span className="text-slate-500 dark:text-slate-400">
                   {total} sale{total === 1 ? "" : "s"}
+                  {drawerFilterCount > 0 ? " (filtered)" : ""}
                 </span>
                 <div className="flex gap-2">
                   <button

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -16,55 +15,245 @@ class PosSaleHistoryController extends Controller
         $base = $this->completedPosSalesQuery();
 
         $summary = $this->buildSummary(clone $base);
-
-        $sellers = User::query()
-            ->select(['users.id', 'users.name'])
-            ->whereIn('users.id', (clone $base)->distinct()->pluck('user_id'))
-            ->orderBy('users.name')
-            ->get()
-            ->map(fn (User $u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-            ])
-            ->values();
+        $filterFacets = $this->buildFilterFacets(clone $base, $summary);
 
         $query = (clone $base)
             ->with(['user:id,name,email', 'items:id,order_id,name,qty,price,line_total']);
 
-        $sellerId = $request->input('seller_id');
-        if ($sellerId !== null && $sellerId !== '' && $sellerId !== 'all') {
-            $query->where('user_id', (int) $sellerId);
+        $sellerIds = $this->parseArrayParam($request, 'seller_ids');
+        if ($sellerIds !== []) {
+            $query->whereIn('orders.user_id', array_map('intval', $sellerIds));
         }
+
+        $paymentMethods = $this->parseArrayParam($request, 'payment_methods');
+        if ($paymentMethods !== []) {
+            $query->whereIn('orders.payment_method', $paymentMethods);
+        }
+
+        $periods = $this->parseArrayParam($request, 'periods');
+        $fromDate = trim((string) $request->input('from_date', ''));
+        $toDate = trim((string) $request->input('to_date', ''));
+        $this->applyTimeFilters($query, $periods, $fromDate, $toDate);
 
         $search = trim((string) $request->input('search', ''));
         if ($search !== '') {
-            $like = '%'.addcslashes($search, '%_\\').'%';
-            $query->where(function (Builder $q) use ($like) {
-                $q->where('order_number', 'like', $like)
-                    ->orWhereHas('user', fn (Builder $uq) => $uq->where('name', 'like', $like))
-                    ->orWhereHas('items', fn (Builder $iq) => $iq->where('name', 'like', $like)
-                        ->orWhere('sku', 'like', $like));
-            });
+            $this->applySearchFilter($query, $search);
         }
 
+        $listTotals = $this->buildListTotals(clone $query);
+
         $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
-        $paginator = $query->orderByDesc('created_at')->orderByDesc('id')->paginate($perPage);
+        $paginator = $query->orderByDesc('orders.created_at')->orderByDesc('orders.id')->paginate($perPage);
 
         $paginator->getCollection()->transform(fn (Order $order) => $this->mapSale($order));
 
         return response()->json([
             'summary' => $summary,
-            'sellers' => $sellers,
+            'filter_facets' => $filterFacets,
+            'list_totals' => $listTotals,
             'data' => $paginator,
         ]);
+    }
+
+    /** @return list<string> */
+    private function parseArrayParam(Request $request, string $key): array
+    {
+        $raw = $request->input($key, []);
+        if (is_string($raw)) {
+            $raw = explode(',', $raw);
+        }
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            fn ($v) => trim((string) $v),
+            $raw
+        ), fn ($v) => $v !== ''));
+    }
+
+    private function buildFilterFacets(Builder $base, array $summary): array
+    {
+        $sellerRows = (clone $base)
+            ->join('users', 'users.id', '=', 'orders.user_id')
+            ->groupBy('users.id', 'users.name')
+            ->selectRaw('users.id, users.name, COUNT(*) as sale_count')
+            ->orderBy('users.name')
+            ->get();
+
+        $paymentRows = (clone $base)
+            ->whereNotNull('orders.payment_method')
+            ->where('orders.payment_method', '!=', '')
+            ->groupBy('orders.payment_method')
+            ->selectRaw('orders.payment_method as payment_method, COUNT(*) as sale_count')
+            ->orderBy('orders.payment_method')
+            ->get();
+
+        $periodLabels = [
+            'today' => 'Today',
+            'yesterday' => 'Yesterday',
+            'this_week' => 'This week',
+            'this_month' => 'This month',
+        ];
+
+        $periodOpts = [];
+        foreach ($periodLabels as $key => $label) {
+            $count = (int) ($summary[$key]['count'] ?? 0);
+            if ($count > 0) {
+                $periodOpts[] = [
+                    'value' => $key,
+                    'label' => $label,
+                    'count' => $count,
+                ];
+            }
+        }
+
+        return [
+            'seller' => $sellerRows->map(fn ($row) => [
+                'value' => (string) $row->id,
+                'label' => (string) $row->name,
+                'count' => (int) $row->sale_count,
+            ])->values()->all(),
+            'payment_method' => $paymentRows->map(fn ($row) => [
+                'value' => (string) $row->payment_method,
+                'label' => (string) $row->payment_method,
+                'count' => (int) $row->sale_count,
+            ])->values()->all(),
+            'period' => $periodOpts,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $periods
+     */
+    private function applyTimeFilters(Builder $query, array $periods, string $fromDate, string $toDate): void
+    {
+        $allowed = ['today', 'yesterday', 'this_week', 'this_month'];
+        $periods = array_values(array_intersect($periods, $allowed));
+        $hasPeriods = $periods !== [];
+        $hasDates = $fromDate !== '' || $toDate !== '';
+
+        if (! $hasPeriods && ! $hasDates) {
+            return;
+        }
+
+        $now = Carbon::now();
+
+        $query->where(function (Builder $outer) use ($periods, $hasPeriods, $fromDate, $toDate, $hasDates, $now) {
+            if ($hasPeriods) {
+                foreach ($periods as $period) {
+                    $outer->orWhere(function (Builder $sub) use ($period, $now) {
+                        match ($period) {
+                            'today' => $sub->whereBetween('orders.created_at', [
+                                $now->copy()->startOfDay(),
+                                $now,
+                            ]),
+                            'yesterday' => $sub->whereBetween('orders.created_at', [
+                                $now->copy()->subDay()->startOfDay(),
+                                $now->copy()->subDay()->endOfDay(),
+                            ]),
+                            'this_week' => $sub->whereBetween('orders.created_at', [
+                                $now->copy()->startOfWeek(),
+                                $now,
+                            ]),
+                            'this_month' => $sub->whereBetween('orders.created_at', [
+                                $now->copy()->startOfMonth(),
+                                $now,
+                            ]),
+                            default => null,
+                        };
+                    });
+                }
+            }
+
+            if ($hasDates) {
+                $outer->orWhere(function (Builder $sub) use ($fromDate, $toDate) {
+                    if ($fromDate !== '') {
+                        $sub->where('orders.created_at', '>=', Carbon::parse($fromDate)->startOfDay());
+                    }
+                    if ($toDate !== '') {
+                        $sub->where('orders.created_at', '<=', Carbon::parse($toDate)->endOfDay());
+                    }
+                });
+            }
+        });
     }
 
     private function completedPosSalesQuery(): Builder
     {
         return Order::query()
-            ->where('sale_channel', 'pos')
-            ->where('payment_status', 'paid')
-            ->where('status', 'completed');
+            ->where('orders.sale_channel', 'pos')
+            ->where('orders.payment_status', 'paid')
+            ->where('orders.status', 'completed');
+    }
+
+    private function applySearchFilter(Builder $query, string $search): void
+    {
+        $needle = '%'.addcslashes(mb_strtolower($search), '%_\\').'%';
+        $driver = $query->getConnection()->getDriverName();
+
+        $query->where(function (Builder $q) use ($needle, $driver) {
+            $this->whereLikeInsensitive($q, 'orders.order_number', $needle, $driver);
+
+            $q->orWhereHas('user', function (Builder $uq) use ($needle, $driver) {
+                $this->whereLikeInsensitive($uq, 'name', $needle, $driver);
+            });
+
+            $q->orWhereHas('items', function (Builder $iq) use ($needle, $driver) {
+                $iq->where(function (Builder $inner) use ($needle, $driver) {
+                    $this->whereLikeInsensitive($inner, 'name', $needle, $driver);
+                    $this->whereLikeInsensitive($inner, 'sku', $needle, $driver, true);
+                });
+            });
+
+            if ($driver === 'pgsql') {
+                $q->orWhereRaw("LOWER(orders.pos_meta->>'receipt_no') LIKE ?", [$needle]);
+            } elseif ($driver === 'sqlite') {
+                $q->orWhereRaw("LOWER(json_extract(orders.pos_meta, '$.receipt_no')) LIKE ?", [$needle]);
+            } elseif ($driver === 'mysql') {
+                $q->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(orders.pos_meta, '$.receipt_no'))) LIKE ?", [$needle]);
+            }
+        });
+    }
+
+    private function whereLikeInsensitive(
+        Builder $query,
+        string $column,
+        string $needle,
+        string $driver,
+        bool $or = false
+    ): void {
+        if ($driver === 'pgsql') {
+            $or ? $query->orWhere($column, 'ilike', $needle) : $query->where($column, 'ilike', $needle);
+
+            return;
+        }
+
+        $sql = 'LOWER('.$query->getGrammar()->wrap($column).') LIKE ?';
+        $or ? $query->orWhereRaw($sql, [$needle]) : $query->whereRaw($sql, [$needle]);
+    }
+
+    private function buildListTotals(Builder $query): array
+    {
+        $totalsQuery = clone $query;
+        $totalsQuery->getQuery()->orders = [];
+        $totalsQuery->getQuery()->unionOrders = [];
+        $totalsQuery->getQuery()->limit = null;
+        $totalsQuery->getQuery()->offset = null;
+
+        $saleCount = (int) (clone $totalsQuery)->count('orders.id');
+        $totalPrice = round((float) (clone $totalsQuery)->sum('orders.total'), 2);
+
+        $orderIdsSub = (clone $totalsQuery)->select('orders.id');
+        $totalItems = (int) \App\Models\OrderItem::query()
+            ->whereIn('order_id', $orderIdsSub)
+            ->count();
+
+        return [
+            'sale_count' => $saleCount,
+            'total_items' => $totalItems,
+            'total_price' => $totalPrice,
+        ];
     }
 
     private function buildSummary(Builder $base): array
@@ -87,8 +276,8 @@ class PosSaleHistoryController extends Controller
     private function periodTotals(Builder $query, Carbon $from, Carbon $to): array
     {
         $row = $query
-            ->whereBetween('created_at', [$from, $to])
-            ->selectRaw('COUNT(*) as sale_count, COALESCE(SUM(total), 0) as sale_total')
+            ->whereBetween('orders.created_at', [$from, $to])
+            ->selectRaw('COUNT(*) as sale_count, COALESCE(SUM(orders.total), 0) as sale_total')
             ->first();
 
         return [

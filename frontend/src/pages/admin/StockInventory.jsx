@@ -19,6 +19,8 @@ import {
 import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
 import { matchesSection } from "../../lib/adminListFilters.js";
 import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
+import { formatYearMonthLabel, yearMonthToDateRange } from "../../lib/adminYearMonthFilter.js";
+import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 import {
@@ -30,6 +32,9 @@ import {
     receiveBatchesForMaster,
     stockLabelRows,
 } from "../../lib/stockLabelReceipts";
+import AdminReportExportMenu from "../../components/admin/AdminReportExportMenu.jsx";
+import { exportAdminTable } from "../../lib/adminTableExport.js";
+import { parseBlobErrorMessage } from "../../lib/adminReportDownload.js";
 
 const STOCK_ADMIN_BASES = ["/admin/stock-inventory", "/admin/stock-received"];
 
@@ -614,8 +619,7 @@ export default function AdminBarcodeQR() {
     const [success, setSuccess] = useState("");
     const [animate, setAnimate] = useState(false);
     const [aiBusy, setAiBusy] = useState(false);
-    const [dateInFrom, setDateInFrom] = useState("");
-    const [dateInTo, setDateInTo] = useState("");
+    const yearMonthFilter = useAdminYearMonthFilter(2020);
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [previewItem, setPreviewItem] = useState(null);
     const [linkedProductsItem, setLinkedProductsItem] = useState(null);
@@ -624,6 +628,7 @@ export default function AdminBarcodeQR() {
     const [quickRestockBusy, setQuickRestockBusy] = useState(false);
     const [pendingDelete, setPendingDelete] = useState(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
+    const [exportBusy, setExportBusy] = useState(false);
     const stockFilterSectionIds = isReceivedLogPage
         ? ["stock", "category", "condition", "origin"]
         : ["stock", "category", "condition", "origin", "priceUnit"];
@@ -680,11 +685,15 @@ export default function AdminBarcodeQR() {
         setColumnVisibility(buildAllColumnsVisibility(STOCK_TABLE_COLUMNS, visible, "products"));
     };
 
-    const load = async () => {
+    const load = async (dateRange = yearMonthFilter.dateRange) => {
         setLoading(true);
         try {
+            const catParams = { include_stock_labels: true };
+            if (dateRange?.from) catParams.from_date = dateRange.from;
+            if (dateRange?.to) catParams.to_date = dateRange.to;
+
             const [catRes, brandRes, productRes] = await Promise.all([
-                api.get("/admin/categories", { params: { include_stock_labels: true } }),
+                api.get("/admin/categories", { params: catParams }),
                 api.get("/admin/brands"),
                 api.get("/admin/products", { params: { per_page: 500 } }),
             ]);
@@ -712,7 +721,12 @@ export default function AdminBarcodeQR() {
         }
     };
 
-    useEffect(() => { load(); }, []);
+    const dateQueryKey = `${yearMonthFilter.dateRange.from}|${yearMonthFilter.dateRange.to}`;
+
+    useEffect(() => {
+        load(yearMonthFilter.dateRange);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by dateQueryKey
+    }, [dateQueryKey]);
 
     useEffect(() => {
         if (!isNewPage) return;
@@ -1437,11 +1451,12 @@ export default function AdminBarcodeQR() {
         if (!isReceivedLogPage) {
             list = list.filter((r) => matchesPriceUnitFilterSet(r, listFilters.applied));
         }
-        if (dateInFrom || dateInTo) {
-            list = list.filter((r) => matchesDateInRange(r, dateInFrom, dateInTo));
+        const { from, to } = yearMonthFilter.dateRange;
+        if (from || to) {
+            list = list.filter((r) => matchesDateInRange(r, from, to));
         }
         return list;
-    }, [searchFiltered, listFilters.applied, dateInFrom, dateInTo, isReceivedLogPage, rows, products]);
+    }, [searchFiltered, listFilters.applied, yearMonthFilter.dateRange, isReceivedLogPage, rows, products]);
 
     const masterRowsForFilters = useMemo(
         () => rows.filter((r) => r.parent_id == null || r.parent_id === ""),
@@ -1516,11 +1531,8 @@ export default function AdminBarcodeQR() {
         return sections;
     }, [categories, masterRowsForFilters, isReceivedLogPage, rows]);
 
-    const hasDateInRangeFilter = Boolean(dateInFrom || dateInTo);
-    const clearDateInRange = () => {
-        setDateInFrom("");
-        setDateInTo("");
-    };
+    const hasDateInRangeFilter = yearMonthFilter.activeCount > 0;
+    const clearDateInRange = () => yearMonthFilter.clear();
 
     const trackedUnits = useMemo(() => {
         let units = 0;
@@ -1575,11 +1587,9 @@ export default function AdminBarcodeQR() {
 
     const canShowPrintLabel = (item) => isAverageBundleLabel(item);
 
-    const exportCsv = () => {
-        const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-        const header = ["Product", "Category", "Origin", "Stock", "Date In", "Status", "Price Unit", "Total Price"];
-        const lines = [header.join(",")];
-        for (const r of displayRows) {
+    const buildStockExportTable = () => {
+        const headers = ["Product", "Category", "Origin", "Stock", "Date In", "Status", "Price Unit", "Total Price"];
+        const rows = displayRows.map((r) => {
             const catLabel = formatCategoryLabel(resolveItemCategoryId(r), categories);
             const st = r.manage_stock ? (displayRowStock(r) ?? 0) : "";
             const mn = r.manage_stock ? (parseInt(r.min_stock, 10) || 0) : 0;
@@ -1594,23 +1604,53 @@ export default function AdminBarcodeQR() {
             const status = getStockAgeStatus(dateIn).label;
             const averageUnitPrice = averageUnitPriceForLabel(r);
             const totalPrice = totalPriceForLabel(r);
-            lines.push([
-                esc(r.name),
-                esc(catLabel === "—" ? "-" : catLabel),
-                esc(formatOriginCsv(r.origin)),
-                esc(stockLabel),
-                esc(isReceivedLogPage ? formatDateInWithTime(r) : formatDateIn(dateIn)),
-                esc(status),
+            return [
+                r.name || "",
+                catLabel === "—" ? "-" : catLabel,
+                formatOriginCsv(r.origin),
+                stockLabel,
+                isReceivedLogPage ? formatDateInWithTime(r) : formatDateIn(dateIn),
+                status,
                 averageUnitPrice != null ? `$${averageUnitPrice.toFixed(2)}` : "-",
                 totalPrice ? `$${totalPrice.amount.toFixed(2)} (${totalPrice.units} units)` : "-",
-            ].join(","));
+            ];
+        });
+        return { headers, rows };
+    };
+
+    const exportStockReport = async (format) => {
+        if (!displayRows.length) {
+            await errorAlert({
+                enTitle: "Nothing to export",
+                detail: "There are no rows in the current view to export.",
+            });
+            return;
         }
-        const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `barcode-items-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        const { headers, rows } = buildStockExportTable();
+        const stamp = new Date().toISOString().slice(0, 10);
+        const baseName = isReceivedLogPage ? "stock-received" : "stock-inventory";
+        setExportBusy(true);
+        try {
+            await exportAdminTable({
+                format,
+                filename: `${baseName}-${stamp}`,
+                title: isReceivedLogPage ? "Stock Received Report" : "Stock & Inventory Report",
+                subtitle: `${rows.length} row${rows.length === 1 ? "" : "s"} · exported ${stamp}`,
+                headers,
+                rows,
+            });
+            await toastSuccess({
+                enText: format === "pdf" ? "PDF downloaded successfully" : "Excel downloaded successfully",
+            });
+        } catch (e) {
+            const detail = await parseBlobErrorMessage(e?.response?.data, "Export failed");
+            await errorAlert({
+                enTitle: format === "pdf" ? "PDF export failed" : "Excel export failed",
+                detail,
+            });
+        } finally {
+            setExportBusy(false);
+        }
     };
 
     const allSelected = displayRows.length > 0 && displayRows.every((r) => selectedIds.has(r.id));
@@ -2506,16 +2546,15 @@ export default function AdminBarcodeQR() {
                             </p>
                         </div>
                         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={exportCsv}
-                                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                            >
-                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Export
-                            </button>
+                            <AdminReportExportMenu
+                                label="Export"
+                                onExportPdf={() => exportStockReport("pdf")}
+                                onExportExcel={() => exportStockReport("excel")}
+                                busy={exportBusy}
+                                accentColor={accentColor}
+                                mode={mode}
+                                className="[&_button]:h-9 [&_button]:rounded-[5px] [&_button]:px-3 [&_button]:text-sm"
+                            />
                             {!isReceivedLogPage ? (
                                 <button
                                     type="button"
@@ -2560,8 +2599,11 @@ export default function AdminBarcodeQR() {
                         </div>
 
                         <AdminFilterToolbarButton
-                            activeCount={listFilters.activeCount}
-                            onClick={listFilters.openDrawer}
+                            activeCount={listFilters.activeCount + yearMonthFilter.activeCount}
+                            onClick={() => {
+                                yearMonthFilter.syncDraftFromApplied();
+                                listFilters.openDrawer();
+                            }}
                         />
                     </div>
 
@@ -2571,52 +2613,28 @@ export default function AdminBarcodeQR() {
                         sections={stockFilterSections}
                         selected={listFilters.draft}
                         onToggle={listFilters.toggleDraft}
-                        onApply={listFilters.apply}
-                        onClearAll={listFilters.clearAll}
+                        onApply={() => {
+                            yearMonthFilter.apply();
+                            listFilters.apply();
+                            const range = yearMonthToDateRange(
+                                yearMonthFilter.draft.year,
+                                yearMonthFilter.draft.month,
+                            );
+                            load(range);
+                        }}
+                        onClearAll={() => {
+                            yearMonthFilter.clear();
+                            listFilters.clearAll();
+                            load({ from: "", to: "" });
+                        }}
+                        yearMonth={{
+                            value: yearMonthFilter.draft,
+                            onChange: yearMonthFilter.setDraft,
+                            startYear: 2020,
+                            title: "Date in",
+                            hint: "Filter stock by date-in (received) on the label.",
+                        }}
                     />
-
-                    <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-[#ECE8DD] bg-[#F4EFE8]/80 px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center dark:border-white/10 dark:bg-white/[0.04]">
-                        <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-[#6b6b64] dark:text-slate-300">
-                            <svg className="h-4 w-4 text-[#9a948a] dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            Date In range:
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                            <label className="flex items-center gap-2 text-sm font-medium text-[#6b6b64] dark:text-slate-400">
-                                <span>From</span>
-                                <input
-                                    type="date"
-                                    value={dateInFrom}
-                                    onChange={(e) => setDateInFrom(e.target.value)}
-                                    max={dateInTo || undefined}
-                                    className="h-9 min-w-[9.5rem] rounded-lg border border-[#E0DAD0] bg-white px-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/15 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100"
-                                />
-                            </label>
-                            <label className="flex items-center gap-2 text-sm font-medium text-[#6b6b64] dark:text-slate-400">
-                                <span>To</span>
-                                <input
-                                    type="date"
-                                    value={dateInTo}
-                                    onChange={(e) => setDateInTo(e.target.value)}
-                                    min={dateInFrom || undefined}
-                                    className="h-9 min-w-[9.5rem] rounded-lg border border-[#E0DAD0] bg-white px-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/15 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100"
-                                />
-                            </label>
-                            {hasDateInRangeFilter && (
-                                <button
-                                    type="button"
-                                    onClick={clearDateInRange}
-                                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#E0DAD0] bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10"
-                                >
-                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    Clear
-                                </button>
-                            )}
-                        </div>
-                    </div>
 
                     {(search || listFilters.activeCount > 0 || hasDateInRangeFilter) && (
                         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -2632,7 +2650,7 @@ export default function AdminBarcodeQR() {
                             )}
                             {hasDateInRangeFilter && (
                                 <button type="button" onClick={clearDateInRange} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
-                                    Date in: {dateInFrom ? formatDateIn(dateInFrom) : "…"} – {dateInTo ? formatDateIn(dateInTo) : "…"} ×
+                                    {formatYearMonthLabel(yearMonthFilter.applied)} ×
                                 </button>
                             )}
                         </div>

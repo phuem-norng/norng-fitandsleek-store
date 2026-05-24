@@ -34,6 +34,9 @@ import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import RevenueDashboard from "../../components/admin/RevenueDashboard.jsx";
 import StockDashboard from "../../components/admin/StockDashboard.jsx";
 import PlanDashboard from "../../components/admin/PlanDashboard.jsx";
+import ReportFormulasSection from "../../components/admin/ReportFormulasSection.jsx";
+import AdminReportExportMenu from "../../components/admin/AdminReportExportMenu.jsx";
+import { downloadBlobResponse, parseBlobErrorMessage } from "../../lib/adminReportDownload.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, "0");
@@ -286,6 +289,7 @@ export default function Reports() {
  const [dateFrom, setDateFrom] = useState("");
  const [dateTo, setDateTo] = useState("");
  const [generating, setGenerating] = useState(false);
+ const [exportBusy, setExportBusy] = useState(false);
  const [generated, setGenerated] = useState(null);
 
  const load = async () => {
@@ -391,7 +395,7 @@ export default function Reports() {
  }
  };
 
- const handleDownloadPdf = async () => {
+ const ensureReportDateRange = async () => {
  if (!dateFrom || !dateTo) {
  await errorAlert({
  khTitle: "កាលបរិច្ឆេទមិនគ្រប់",
@@ -399,36 +403,43 @@ export default function Reports() {
  khText: "សូមជ្រើសរើសថ្ងៃចាប់ផ្ដើម និងថ្ងៃបញ្ចប់",
  enText: "Please select Date From and Date To",
  });
- return;
+ return false;
  }
+ return true;
+ };
+
+ const downloadGeneratedReport = async (format) => {
+ if (!(await ensureReportDateRange())) return;
+ setExportBusy(true);
  try {
- const res = await api.get("/admin/reports/download-pdf", {
+ const endpoint = format === "pdf" ? "/admin/reports/download-pdf" : "/admin/reports/download-excel";
+ const res = await api.get(endpoint, {
  params: { type: reportType, from: dateFrom, to: dateTo },
  responseType: "blob",
  });
- const blob = new Blob([res.data], { type: "application/pdf" });
- const url = window.URL.createObjectURL(blob);
- const a = document.createElement("a");
- a.href = url;
- a.download = `report-${reportType}-${dateFrom}-to-${dateTo}.pdf`;
- document.body.appendChild(a);
- a.click();
- a.remove();
- window.URL.revokeObjectURL(url);
- await toastSuccess({ khText: "បានទាញយក PDF ដោយជោគជ័យ", enText: "PDF downloaded successfully" });
- } catch (e) {
- let message = e?.response?.data?.message;
- const data = e?.response?.data;
- if (!message && data instanceof Blob) {
- try { message = JSON.parse(await data.text())?.message; } catch { message = null; }
- }
- await errorAlert({
- khTitle: "ទាញយក PDF បរាជ័យ",
- enTitle: "Download PDF failed",
- detail: message || "Failed to download PDF",
+ const ext = format === "pdf" ? "pdf" : "xls";
+ await downloadBlobResponse(res, `report-${reportType}-${dateFrom}-to-${dateTo}.${ext}`);
+ await toastSuccess({
+ khText: format === "pdf" ? "បានទាញយក PDF ដោយជោគជ័យ" : "បានទាញយក Excel ដោយជោគជ័យ",
+ enText: format === "pdf" ? "PDF downloaded successfully" : "Excel downloaded successfully",
  });
+ } catch (e) {
+ const message = await parseBlobErrorMessage(
+ e?.response?.data,
+ format === "pdf" ? "Failed to download PDF" : "Failed to download Excel",
+ );
+ await errorAlert({
+ khTitle: format === "pdf" ? "ទាញយក PDF បរាជ័យ" : "ទាញយក Excel បរាជ័យ",
+ enTitle: format === "pdf" ? "Download PDF failed" : "Download Excel failed",
+ detail: message,
+ });
+ } finally {
+ setExportBusy(false);
  }
  };
+
+ const handleDownloadPdf = () => downloadGeneratedReport("pdf");
+ const handleDownloadExcel = () => downloadGeneratedReport("excel");
 
  const categoryDonutData = useMemo(
  () =>
@@ -980,6 +991,8 @@ export default function Reports() {
  )}
  </ReportSection>
 
+ <ReportFormulasSection theme={reportTheme} />
+
  <ReportSection title="Generate report" subtitle="Export dashboard or sales summary" theme={reportTheme} className="mt-0">
  <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-4 gap-4">
  <div>
@@ -1029,22 +1042,13 @@ export default function Reports() {
  </>
  )}
  </button>
- <button
- type="button"
- onClick={handleDownloadPdf}
- className="h-11 w-11 rounded-xl flex items-center justify-center border hover:bg-slate-50 dark:hover:bg-slate-800 transition"
- style={{
- backgroundColor: mode === "dark" ? "rgba(255,255,255,0.08)" : "transparent",
- color: accentColor,
- borderColor: accentColor,
- }}
- >
- <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v9m0 0l-3-3m3 3l3-3" />
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18h12" />
- </svg>
- <span className="sr-only">Download PDF</span>
- </button>
+ <AdminReportExportMenu
+ onExportPdf={handleDownloadPdf}
+ onExportExcel={handleDownloadExcel}
+ busy={exportBusy}
+ accentColor={accentColor}
+ mode={mode}
+ />
  </div>
  </form>
 

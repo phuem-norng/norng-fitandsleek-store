@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Models\Payment;
 use App\Models\Order;
 use App\Services\PaidOrderInventory;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,9 +34,14 @@ class PaymentAdminController extends BaseAdminController
             $query->where('order_id', $request->order_id);
         }
 
-        // Date range filter
-        if ($request->has('from_date') && $request->has('to_date')) {
-            $query->whereBetween('created_at', [$request->from_date, $request->to_date]);
+        $fromDate = trim((string) $request->input('from_date', ''));
+        if ($fromDate !== '') {
+            $query->where('created_at', '>=', Carbon::parse($fromDate)->startOfDay());
+        }
+
+        $toDate = trim((string) $request->input('to_date', ''));
+        if ($toDate !== '') {
+            $query->where('created_at', '<=', Carbon::parse($toDate)->endOfDay());
         }
 
         $payments = $query->paginate($request->get('per_page', 15));

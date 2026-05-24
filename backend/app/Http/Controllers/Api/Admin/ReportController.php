@@ -10,6 +10,8 @@ use App\Models\ShipmentTrackingEvent;
 use App\Models\User;
 use App\Models\Category;
 use App\Models\Setting;
+use App\Support\AdminSpreadsheetExport;
+use App\Support\OrderMetrics;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
@@ -69,15 +71,9 @@ class ReportController extends Controller
         $fromRange = $from->copy()->startOfDay();
         $toRange = $to->copy()->endOfDay();
 
-        $totalRevenue = Order::whereBetween('created_at', [$fromRange, $toRange])
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
-        $monthRevenue = Order::where('created_at', '>=', $thisMonth)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
-        $todayRevenue = Order::where('created_at', '>=', $today)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
+        $totalRevenue = OrderMetrics::sumRevenue($fromRange, $toRange);
+        $monthRevenue = OrderMetrics::sumRevenue($thisMonth, null);
+        $todayRevenue = OrderMetrics::sumRevenue($today, null);
 
         $ordersInRange = Order::whereBetween('created_at', [$fromRange, $toRange]);
         $totalOrders = (clone $ordersInRange)->count();
@@ -231,6 +227,85 @@ class ReportController extends Controller
             ], 500);
         }
     }
+
+    public function downloadExcel(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => ['required', 'in:sales,dashboard'],
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date'],
+        ]);
+
+        $from = Carbon::parse($validated['from']);
+        $to = Carbon::parse($validated['to']);
+
+        if ($from->gt($to)) {
+            return response()->json(['message' => 'Date From must be before Date To.'], 422);
+        }
+
+        try {
+            if ($validated['type'] === 'dashboard') {
+                $data = $this->buildDashboardReport($from, $to);
+                $filename = 'dashboard-report-'.$from->format('Ymd').'-to-'.$to->format('Ymd').'.xls';
+
+                return AdminSpreadsheetExport::download(
+                    ['Metric', 'Value'],
+                    [
+                        ['Report period', $data['from'].' to '.$data['to']],
+                        ['Revenue in range', '$'.number_format($data['revenue']['total'], 2)],
+                        ['Revenue this month', '$'.number_format($data['revenue']['month'], 2)],
+                        ['Revenue today', '$'.number_format($data['revenue']['today'], 2)],
+                        ['Total orders', (string) $data['orders']['total']],
+                        ['Pending orders', (string) $data['orders']['pending']],
+                        ['Processing orders', (string) $data['orders']['processing']],
+                        ['Completed orders', (string) $data['orders']['completed']],
+                        ['Total products', (string) $data['products']['total']],
+                        ['Active products', (string) $data['products']['active']],
+                        ['Low stock products', (string) $data['products']['low_stock']],
+                        ['Total customers', (string) $data['customers']['total']],
+                        ['New customers in range', (string) $data['customers']['new_this_month']],
+                    ],
+                    $filename,
+                );
+            }
+
+            $data = $this->buildSalesReport($from, $to);
+            $filename = 'sales-report-'.$from->format('Ymd').'-to-'.$to->format('Ymd').'.xls';
+            $rows = [];
+
+            foreach ($data['rows'] as $row) {
+                $rows[] = [
+                    (string) $row->date,
+                    (string) $row->orders,
+                    '$'.number_format((float) $row->revenue, 2),
+                ];
+            }
+
+            $rows[] = [
+                'Total',
+                (string) $data['summary']['total_orders'],
+                '$'.number_format($data['summary']['total_revenue'], 2),
+            ];
+
+            return AdminSpreadsheetExport::download(
+                ['Date', 'Orders', 'Revenue'],
+                $rows,
+                $filename,
+            );
+        } catch (\Throwable $e) {
+            Log::error('Report Excel download failed', [
+                'type' => $validated['type'],
+                'from' => $validated['from'],
+                'to' => $validated['to'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to generate Excel file. Please try again.',
+            ], 500);
+        }
+    }
+
     // Resolve a date range from request params (from/to or period days)
     private function resolveDateRange(Request $request): array
     {
@@ -265,17 +340,11 @@ class ReportController extends Controller
         $thisMonth  = now()->startOfMonth();
 
         // Revenue in the selected range
-        $totalRevenue = Order::whereBetween('created_at', [$fromRange, $toRange])
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
+        $totalRevenue = OrderMetrics::sumRevenue($fromRange, $toRange);
 
         // Always-current reference figures for the subtext
-        $monthRevenue = Order::where('created_at', '>=', $thisMonth)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
-        $todayRevenue = Order::where('created_at', '>=', $today)
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
+        $monthRevenue = OrderMetrics::sumRevenue($thisMonth, null);
+        $todayRevenue = OrderMetrics::sumRevenue($today, null);
 
         // Orders in the selected range
         $ordersInRange    = Order::whereBetween('created_at', [$fromRange, $toRange]);
@@ -933,6 +1002,7 @@ class ReportController extends Controller
         $year = (int) ($validated['year'] ?? now()->year);
         $categoryId = isset($validated['category_id']) ? (int) $validated['category_id'] : null;
         $productId = isset($validated['product_id']) ? (int) $validated['product_id'] : null;
+        $scopedByLineItems = $categoryId !== null || $productId !== null;
 
         $start = Carbon::create($year, 1, 1)->startOfDay();
         $end = Carbon::create($year, 12, 31)->endOfDay();
@@ -952,15 +1022,27 @@ class ReportController extends Controller
             $itemsQuery->where('order_items.product_id', $productId);
         }
 
-        $monthlyRows = (clone $itemsQuery)
-            ->select(
-                DB::raw('EXTRACT(MONTH FROM orders.created_at)::int as month'),
-                DB::raw('SUM(order_items.line_total) as revenue')
-            )
-            ->groupBy(DB::raw('EXTRACT(MONTH FROM orders.created_at)'))
-            ->orderBy('month')
-            ->get()
-            ->keyBy('month');
+        if ($scopedByLineItems) {
+            $monthlyRows = (clone $itemsQuery)
+                ->select(
+                    DB::raw('EXTRACT(MONTH FROM orders.created_at)::int as month'),
+                    DB::raw('SUM(order_items.line_total) as revenue')
+                )
+                ->groupBy(DB::raw('EXTRACT(MONTH FROM orders.created_at)'))
+                ->orderBy('month')
+                ->get()
+                ->keyBy('month');
+        } else {
+            $monthlyRows = OrderMetrics::revenueOrdersQuery($start, $end)
+                ->select(
+                    DB::raw('EXTRACT(MONTH FROM orders.created_at)::int as month'),
+                    DB::raw('SUM(orders.total) as revenue')
+                )
+                ->groupBy(DB::raw('EXTRACT(MONTH FROM orders.created_at)'))
+                ->orderBy('month')
+                ->get()
+                ->keyBy('month');
+        }
 
         $monthLabels = [
             1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April',
@@ -1042,7 +1124,9 @@ class ReportController extends Controller
             ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name])
             ->values();
 
-        $totalRevenue = round(array_sum(array_column($monthly, 'revenue')), 2);
+        $totalRevenue = $scopedByLineItems
+            ? round(array_sum(array_column($monthly, 'revenue')), 2)
+            : OrderMetrics::sumRevenue($start, $end);
 
         return response()->json([
             'year' => $year,
@@ -1335,10 +1419,7 @@ class ReportController extends Controller
             return 0.0;
         }
 
-        return (float) Order::query()
-            ->whereBetween('created_at', [$countFrom, $countEnd])
-            ->where('status', '!=', 'cancelled')
-            ->sum('total');
+        return OrderMetrics::sumRevenue($countFrom, $countEnd);
     }
 
     private function monthsBetweenInclusive(Carbon $start, Carbon $end): int

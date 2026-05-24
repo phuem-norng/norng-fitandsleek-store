@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
-import { matchesSection } from "../../lib/adminListFilters.js";
+import { countFilterSelections, matchesSection } from "../../lib/adminListFilters.js";
 import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
+import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
 import { AdminSectionLoader, AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 import {
  buildAllColumnsVisibility,
@@ -219,7 +220,17 @@ export default function AdminOrders() {
  const [status, setStatus] = useState("");
  const [err, setErr] = useState("");
  const [search, setSearch] = useState("");
+ const [searchDebounced, setSearchDebounced] = useState("");
+ const [summary, setSummary] = useState({
+ order_count: 0,
+ total_items: 0,
+ total_revenue: 0,
+ });
  const listFilters = useAdminFilterDrawer(["status", "payment"]);
+ const yearMonthFilter = useAdminYearMonthFilter(2020);
+ const fetchAbortRef = useRef(null);
+ const hasLoadedOnceRef = useRef(false);
+ const [refreshCounter, setRefreshCounter] = useState(0);
  const [selectedIds, setSelectedIds] = useState([]);
  const [viewMode, setViewMode] = useState("list");
  const [viewLoading, setViewLoading] = useState(false);
@@ -230,23 +241,92 @@ export default function AdminOrders() {
  loadTableColumnVisibility(ORDERS_COLUMNS_STORAGE_KEY, ORDERS_TABLE_COLUMNS),
  );
 
- const load = async () => {
- setLoading(true);
+ const ordersQueryKey = useMemo(
+ () =>
+ JSON.stringify({
+ from: yearMonthFilter.dateRange.from,
+ to: yearMonthFilter.dateRange.to,
+ status: listFilters.applied.status || [],
+ payment: listFilters.applied.payment || [],
+ search: searchDebounced,
+ refresh: refreshCounter,
+ }),
+ [
+ yearMonthFilter.dateRange.from,
+ yearMonthFilter.dateRange.to,
+ listFilters.applied,
+ searchDebounced,
+ refreshCounter,
+ ],
+ );
+
+ const refetchOrders = () => setRefreshCounter((c) => c + 1);
+
+ useEffect(() => {
+ const t = window.setTimeout(() => setSearchDebounced(search.trim()), 350);
+ return () => window.clearTimeout(t);
+ }, [search]);
+
+ useEffect(() => {
+ fetchAbortRef.current?.abort();
+ const ac = new AbortController();
+ fetchAbortRef.current = ac;
+
+ const parsed = JSON.parse(ordersQueryKey);
+ if (!hasLoadedOnceRef.current) setLoading(true);
+
+ (async () => {
  try {
- const { data } = await api.get("/admin/orders", { params: { per_page: 100, compact: 1 } });
- console.log("Orders API Response:", data);
- setRows(data?.data || []);
+ const params = { per_page: 100, compact: 1 };
+ if (parsed.from) params.from_date = parsed.from;
+ if (parsed.to) params.to_date = parsed.to;
+ if (parsed.status?.length) params.statuses = parsed.status;
+ if (parsed.payment?.length) params.payment = parsed.payment;
+ if (parsed.search) params.search = parsed.search;
+
+ const { data } = await api.get("/admin/orders", { params, signal: ac.signal });
+ if (ac.signal.aborted) return;
+
+ const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+ setRows(list);
+ setSummary(
+ data?.summary ?? { order_count: list.length, total_items: 0, total_revenue: 0 },
+ );
+ setErr("");
  } catch (error) {
+ if (ac.signal.aborted || error?.code === "ERR_CANCELED") return;
  console.error("Failed to load orders:", error.response?.data || error.message);
  setErr(error.response?.data?.message || "Failed to load orders");
  } finally {
+ if (!ac.signal.aborted) {
+ hasLoadedOnceRef.current = true;
  setLoading(false);
  }
+ }
+ })();
+
+ return () => ac.abort();
+ }, [ordersQueryKey]);
+
+ const openFilterDrawer = () => {
+ yearMonthFilter.syncDraftFromApplied();
+ listFilters.openDrawer();
  };
 
- useEffect(() => {
- load();
- }, []);
+ const applyAllFilters = () => {
+ yearMonthFilter.apply();
+ listFilters.apply();
+ };
+
+ const clearAllFilters = () => {
+ yearMonthFilter.clear();
+ listFilters.clearAll();
+ setSearch("");
+ setSearchDebounced("");
+ };
+
+ const toolbarFilterCount =
+ countFilterSelections(listFilters.applied) + yearMonthFilter.activeCount;
 
  useEffect(() => {
  try {
@@ -296,7 +376,7 @@ export default function AdminOrders() {
  try {
  const { data } = await api.patch(`/admin/orders/${selected.id}`, { status });
  setSelected(data);
- await load();
+ refetchOrders();
  } catch (e) {
  setErr(e?.response?.data?.message || "Update failed.");
  }
@@ -317,7 +397,7 @@ export default function AdminOrders() {
  await api.delete(`/admin/orders/${pendingDeleteId}`);
  if (selected?.id === pendingDeleteId) closeView();
  }
- await load();
+ refetchOrders();
  } catch (e) {
  setErr(e?.response?.data?.message || "Delete failed.");
  } finally {
@@ -327,46 +407,19 @@ export default function AdminOrders() {
  }
  };
 
- const filteredRows = rows.filter((o) => {
- const q = search.trim().toLowerCase();
- const matchesSearch = !q || (
- String(o.id || "").toLowerCase().includes(q) ||
- String(o.user?.name || "").toLowerCase().includes(q) ||
- String(o.user?.email || "").toLowerCase().includes(q) ||
- String(o.status || "").toLowerCase().includes(q) ||
- String(o.payment_status || "").toLowerCase().includes(q)
- );
-
- const fulfillment = String(o.status || "").toLowerCase();
- const matchesStatus = matchesSection(listFilters.applied, "status", (value) => {
- if (value === "awaiting_payment") return isAwaitingPayment(o);
- if (value === "processing") return fulfillment === "processing" || fulfillment === "preparing" || fulfillment === "paid";
- if (value === "shipped") return fulfillment === "shipped";
- if (value === "completed") return fulfillment === "completed" || fulfillment === "delivered";
- if (value === "cancelled") return fulfillment === "cancelled";
- return false;
- });
-
- const matchesPayment = matchesSection(listFilters.applied, "payment", (value) => {
- if (value === "paid") return isOrderPaid(o.payment_status);
- if (value === "unpaid") return !isOrderPaid(o.payment_status);
- return false;
- });
-
- return matchesSearch && matchesStatus && matchesPayment;
- });
+ const hasActiveFilters = toolbarFilterCount > 0 || search.trim() !== "";
 
  const allSelected =
- filteredRows.length > 0 && filteredRows.every((o) => selectedIds.includes(o.id));
+ rows.length > 0 && rows.every((o) => selectedIds.includes(o.id));
 
  const toggleSelectAll = () => {
  if (allSelected) {
- const filteredIds = new Set(filteredRows.map((o) => o.id));
+ const filteredIds = new Set(rows.map((o) => o.id));
  setSelectedIds((prev) => prev.filter((id) => !filteredIds.has(id)));
  return;
  }
  const next = new Set(selectedIds);
- filteredRows.forEach((o) => next.add(o.id));
+ rows.forEach((o) => next.add(o.id));
  setSelectedIds(Array.from(next));
  };
 
@@ -442,7 +495,9 @@ export default function AdminOrders() {
  ];
  }, [rows]);
 
- if (loading) return <AdminContentSkeleton title="Orders" />;
+ const showInitialSkeleton = loading && rows.length === 0;
+
+ if (showInitialSkeleton) return <AdminContentSkeleton title="Orders" />;
 
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
@@ -480,8 +535,26 @@ export default function AdminOrders() {
  </svg>
  </div>
  <div>
- <h3 className="text-slate-800 dark:text-white font-semibold">All Orders</h3>
- <p className="text-slate-500 dark:text-slate-400 text-sm">{filteredRows.length} total orders</p>
+ <h3 className="text-slate-800 dark:text-white font-semibold">
+ {hasActiveFilters ? "Filtered orders" : "All Orders"}
+ </h3>
+ <p className="text-slate-500 dark:text-slate-400 text-sm">
+ {hasActiveFilters ? (
+ <>
+ <span className="font-medium text-slate-700 dark:text-slate-200">
+ {summary.order_count} order{summary.order_count === 1 ? "" : "s"}
+ </span>
+ <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+ <span>{summary.total_items} item{summary.total_items === 1 ? "" : "s"}</span>
+ <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+ <span className="font-semibold text-slate-800 dark:text-slate-100">
+ <Money value={summary.total_revenue} />
+ </span>
+ </>
+ ) : (
+ <>{summary.order_count} total orders</>
+ )}
+ </p>
  </div>
  </div>
  <div className="flex flex-wrap items-center gap-2 md:gap-3 justify-end w-full md:w-auto">
@@ -491,18 +564,21 @@ export default function AdminOrders() {
  placeholder="Search orders..."
  className="h-10 w-full md:w-64 rounded-lg border admin-border admin-surface px-3 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-[var(--admin-primary)] focus:bg-transparent"
  />
- <AdminFilterToolbarButton
- activeCount={listFilters.activeCount}
- onClick={listFilters.openDrawer}
- />
+ <AdminFilterToolbarButton activeCount={toolbarFilterCount} onClick={openFilterDrawer} />
  <AdminFilterDrawer
  open={listFilters.open}
  onClose={listFilters.closeDrawer}
  sections={orderFilterSections}
  selected={listFilters.draft}
  onToggle={listFilters.toggleDraft}
- onApply={listFilters.apply}
- onClearAll={listFilters.clearAll}
+ onApply={applyAllFilters}
+ onClearAll={clearAllFilters}
+ yearMonth={{
+ value: yearMonthFilter.draft,
+ onChange: yearMonthFilter.setDraft,
+ startYear: 2020,
+ title: "Order date",
+ }}
  />
  {/* View Toggle */}
  <div className="inline-flex items-center rounded-lg border admin-border admin-surface p-1 gap-0.5 order-2 md:order-none">
@@ -569,7 +645,7 @@ export default function AdminOrders() {
  </>
  )}
  <button
- onClick={load}
+ onClick={refetchOrders}
  className="px-4 py-2 border admin-border text-slate-700 dark:text-slate-200 admin-surface rounded-lg hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition-colors flex items-center gap-2"
  >
  {loading ? (
@@ -591,9 +667,9 @@ export default function AdminOrders() {
  </div>
  </div>
 
- {loading ? (
+ {loading && rows.length === 0 ? (
  <AdminSectionLoader rows={6} />
- ) : filteredRows.length === 0 ? (
+ ) : rows.length === 0 ? (
  <div className="p-12 text-center">
  <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
  <svg className="w-10 h-10 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -629,7 +705,7 @@ export default function AdminOrders() {
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
- {filteredRows.map((o) => (
+ {rows.map((o) => (
  <tr key={o.id} className="hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition-colors">
  {isColVisible("select") ? (
  <td className="px-4 md:px-6 py-3 md:py-4">
@@ -727,7 +803,7 @@ export default function AdminOrders() {
  </div>
  ) : (
  <div className={"p-6 " + (viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "grid gap-4 lg:grid-cols-2")}>
- {filteredRows.map((o) => (
+ {rows.map((o) => (
  <div key={o.id} className="rounded-xl border admin-border admin-surface p-4 flex flex-col gap-3">
  <div className="flex items-center justify-between">
  <div className="flex items-center gap-2">

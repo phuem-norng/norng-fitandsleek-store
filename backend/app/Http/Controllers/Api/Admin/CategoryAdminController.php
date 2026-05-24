@@ -206,6 +206,24 @@ class CategoryAdminController extends Controller
         // Stock & Inventory uses barcode_qr rows; keep them out of the Categories admin list unless requested.
         if (! $request->boolean('include_stock_labels')) {
             $query->catalogOnly();
+        } else {
+            $fromDate = trim((string) $request->input('from_date', ''));
+            $toDate = trim((string) $request->input('to_date', ''));
+            if ($fromDate !== '' || $toDate !== '') {
+                $stockType = \App\Models\Category::STOCK_INVENTORY_TYPE;
+                $query->where('type', $stockType)->where(function ($outer) use ($fromDate, $toDate) {
+                    $outer->whereNull('parent_id')
+                        ->orWhere(function ($child) use ($fromDate, $toDate) {
+                            $child->whereNotNull('parent_id');
+                            if ($fromDate !== '') {
+                                $child->where('date_in', '>=', $fromDate);
+                            }
+                            if ($toDate !== '') {
+                                $child->where('date_in', '<=', $toDate);
+                            }
+                        });
+                });
+            }
         }
 
         $items = $query->get()->map(fn ($c) => $this->mapCategory($c, forList: true));

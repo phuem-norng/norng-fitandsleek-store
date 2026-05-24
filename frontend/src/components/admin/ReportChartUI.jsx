@@ -135,9 +135,10 @@ export function ReportDonutChart({
   );
 }
 
-export function ReportSection({ title, subtitle, children, theme, className = "" }) {
+export function ReportSection({ id, title, subtitle, children, theme, className = "" }) {
   return (
     <section
+      id={id}
       className={`mb-8 rounded-2xl border p-6 ${className}`}
       style={{
         background: theme.cardBg,
