@@ -57,6 +57,7 @@ import AdminDiscounts from "./pages/admin/Discounts.jsx";
 import UserManagement from "./pages/admin/UserManagement.jsx";
 import AdminManagement from "./pages/admin/AdminManagement.jsx";
 import AdminPayments from "./pages/admin/Payments.jsx";
+import SaleHistory from "./pages/admin/SaleHistory.jsx";
 import HomepageSettingsTest from "./pages/HomepageSettingsTest.jsx";
 import PublicHomepageManager from "./pages/PublicHomepageManager.jsx";
 import ExtendedHomepageManager from "./pages/ExtendedHomepageManager.jsx";
@@ -271,6 +272,7 @@ export default function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="admin-management" element={<AdminManagement />} />
           <Route path="payments" element={<AdminPayments />} />
+          <Route path="payments/sale-history" element={<SaleHistory />} />
           <Route path="replacement-cases" element={<AdminReplacementCases />} />
           <Route path="payment-settings" element={<PaymentSettings />} />
         </Route>

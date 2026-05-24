@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\Admin\HomepageAdminController;
 use App\Http\Controllers\Api\Admin\HomepageSettingsController;
 use App\Http\Controllers\Api\Admin\BarcodeScanController;
 use App\Http\Controllers\Api\Admin\PosSaleController;
+use App\Http\Controllers\Api\Admin\PosSaleHistoryController;
 use App\Http\Controllers\Api\Admin\CategoryAdminController;
 use App\Http\Controllers\Api\Admin\InventoryIntegrityController;
 use App\Http\Controllers\Api\Admin\ProductAdminController;
@@ -258,6 +259,7 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     // POS: complete sale (stock + paid order) or save unpaid draft
     Route::post('/pos/complete-sale', [PosSaleController::class, 'completeSale']);
     Route::post('/pos/draft-order', [PosSaleController::class, 'saveDraft']);
+    Route::get('/pos/sale-history', [PosSaleHistoryController::class, 'index']);
 
     // CRUD
     Route::post('categories/{category}/quick-restock', [CategoryAdminController::class, 'quickRestock']);
@@ -308,6 +310,13 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::get('/reports/monthly-driver-performance', [ReportController::class, 'monthlyDriverPerformance']);
     Route::get('/reports/top-products', [ReportController::class, 'topProducts']);
     Route::get('/reports/categories', [ReportController::class, 'categoryPerformance']);
+    Route::get('/reports/product-analytics', [ReportController::class, 'productAnalytics']);
+    Route::get('/reports/category-sales', [ReportController::class, 'categorySalesAnalytics']);
+    Route::get('/reports/order-analytics', [ReportController::class, 'orderAnalytics']);
+    Route::get('/reports/revenue-analytics', [ReportController::class, 'revenueAnalytics']);
+    Route::get('/reports/stock-analytics', [ReportController::class, 'stockAnalytics']);
+    Route::get('/reports/plan', [ReportController::class, 'plan']);
+    Route::put('/reports/plan-target', [ReportController::class, 'updatePlanTarget']);
     Route::get('/reports/recent-orders', [ReportController::class, 'recentOrders']);
     Route::get('/reports/generate', [ReportController::class, 'generate']);
     Route::get('/reports/download-pdf', [ReportController::class, 'downloadPdf']);

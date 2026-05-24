@@ -57,6 +57,7 @@ const PAGE_ITEMS = [
   { id: "page-chatbot", title: "Chatbot", description: "AI assistant settings", path: "/admin/chatbot", icon: Bot, keywords: "ai assistant" },
   { id: "page-notifications", title: "Notifications", description: "System notifications", path: "/admin/notifications", icon: Bell, keywords: "alerts" },
   { id: "page-payments", title: "Payments", description: "Payment transactions", path: "/admin/payments", icon: CreditCard, keywords: "billing khqr transactions" },
+  { id: "page-sale-history", title: "Sale History", description: "POS checkout sales", path: "/admin/payments/sale-history", icon: CreditCard, keywords: "pos sales checkout history" },
   { id: "page-replacements", title: "Replacements", description: "Replacement cases", path: "/admin/replacement-cases", icon: RotateCcw, keywords: "returns refunds exchange" },
   { id: "page-homepage", title: "Home Page", description: "Storefront homepage", path: "/admin/homepage", icon: Home, keywords: "storefront banner hero" },
   { id: "page-homepage-complete", title: "Complete Homepage Manager", description: "Advanced homepage editor", path: "/admin/homepage-complete", icon: PanelsTopLeft, keywords: "homepage builder" },
