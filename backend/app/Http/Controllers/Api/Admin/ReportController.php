@@ -284,6 +284,14 @@ class ReportController extends Controller
         $processingOrders = (clone $ordersInRange)->where('status', 'processing')->count();
         $completedOrders  = (clone $ordersInRange)->where('status', 'completed')->count();
 
+        /** Counts grouped by lifecycle status — used for dashboard charts */
+        $ordersByStatusRows = Order::query()
+            ->whereBetween('created_at', [$fromRange, $toRange])
+            ->select('status', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('status')
+            ->orderByDesc(DB::raw('COUNT(*)'))
+            ->get();
+
         // Product stats — inventory has no date context
         $totalProducts   = Product::count();
         $activeProducts  = Product::where('is_active', true)->count();
@@ -307,6 +315,11 @@ class ReportController extends Controller
                 'processing' => $processingOrders,
                 'completed'  => $completedOrders,
             ],
+            /** For charts: `{ status: string, count: int }[]` ordered by descending count */
+            'orders_by_status' => $ordersByStatusRows->map(fn ($row) => [
+                'status' => (string) $row->status,
+                'count'  => (int) $row->cnt,
+            ])->values(),
             'products' => [
                 'total'     => $totalProducts,
                 'active'    => $activeProducts,
@@ -315,6 +328,10 @@ class ReportController extends Controller
             'customers' => [
                 'total'          => $totalCustomers,
                 'new_this_month' => $newCustomersInRange,
+            ],
+            'period' => [
+                'from' => $fromRange->toDateString(),
+                'to' => $toRange->toDateString(),
             ],
         ]);
     }

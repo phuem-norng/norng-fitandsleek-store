@@ -21,6 +21,8 @@ class HomepageSeeder extends Seeder
                 'position' => 'hero',
                 'is_active' => true,
                 'order' => 1,
+                'page' => 'home',
+                'sort_order' => 1,
             ],
             [
                 'title' => 'Fresh street-ready drops',
@@ -30,6 +32,8 @@ class HomepageSeeder extends Seeder
                 'position' => 'hero',
                 'is_active' => true,
                 'order' => 2,
+                'page' => 'home',
+                'sort_order' => 2,
             ],
         ];
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../lib/api";
+import { resolveImageUrl } from "../lib/images";
 import {
   Dialog,
   DialogPopup,
@@ -373,7 +374,7 @@ export default function TrackOrderPage() {
                   {order.items?.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
                       <img
-                        src={item.image_url || "/placeholder.svg"}
+                        src={resolveImageUrl(item.image_url || "/placeholder.svg")}
                         alt={item.name}
                         className="w-16 h-16 object-cover rounded-lg"
                       />

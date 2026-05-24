@@ -8,6 +8,7 @@ import SupportChatWidget from "../widgets/SupportChatWidget.jsx";
 import CartDrawer from "../shop/CartDrawer.jsx";
 import NotificationDrawer from "./NotificationDrawer.jsx";
 import ScrollToTop from "../ScrollToTop.jsx";
+import ApiDegradedBanner from "./ApiDegradedBanner.jsx";
 import api from "../../lib/api.js";
 import { useAuth } from "../../state/auth.jsx";
 
@@ -18,6 +19,11 @@ export default function SiteLayout() {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsUnread, setNotificationsUnread] = useState(0);
   const { user } = useAuth();
+
+  /** Storefront must never keep dashboard dark-mode marker on `<html>` (Tailwind `dark:` scope). */
+  useEffect(() => {
+    document.documentElement.removeAttribute("data-admin-theme");
+  }, []);
 
   const loadNotifications = async () => {
     setNotificationsLoading(true);
@@ -77,12 +83,13 @@ export default function SiteLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       <Topbar />
+      <ApiDegradedBanner />
       <Header
         onOpenCart={() => setCartOpen(true)}
         onOpenNotifications={() => setNotificationsOpen(true)}
         notificationsUnread={notificationsUnread}
       />
-      <main className="flex-1 fs-page-enter pb-28 sm:pb-24 lg:pb-0">
+      <main className="fs-main-content flex-1 fs-page-enter pb-28 sm:pb-24 lg:pb-0 text-base leading-relaxed text-slate-800 antialiased dark:text-slate-100">
         <Outlet />
       </main>
       <Footer />

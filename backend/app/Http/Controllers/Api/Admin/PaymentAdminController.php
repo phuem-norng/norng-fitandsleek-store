@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Models\Payment;
 use App\Models\Order;
+use App\Services\PaidOrderInventory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PaymentAdminController extends BaseAdminController
 {
@@ -89,16 +91,40 @@ class PaymentAdminController extends BaseAdminController
             'reference_code' => 'nullable|string|max:100',
         ]);
 
-        $payment->update([
-            'status' => 'success',
-            'verified_by' => auth()->guard('sanctum')->user()->id,
-            'verified_at' => $validated['verified_at'] ?? now(),
-            'reference_code' => $validated['reference_code'] ?? 'Verified by admin',
-        ]);
+        DB::transaction(function () use ($payment, $validated, $authUser) {
+            $payment->update([
+                'status' => 'paid',
+                'paid_at' => $validated['verified_at'] ?? now(),
+                'verified_by' => $authUser?->id ?? auth()->guard('sanctum')->id(),
+                'verified_at' => $validated['verified_at'] ?? now(),
+                'reference_code' => $validated['reference_code'] ?? 'Verified by admin',
+            ]);
+
+            if (! $payment->order_id) {
+                return;
+            }
+
+            $order = Order::query()->whereKey($payment->order_id)->lockForUpdate()->first();
+            if (! $order || $order->payment_status === 'paid') {
+                return;
+            }
+
+            $fulfillmentStatus = in_array($order->status, ['pending', 'paid'], true)
+                ? 'processing'
+                : $order->status;
+
+            $order->update([
+                'payment_status' => 'paid',
+                'status' => $fulfillmentStatus,
+            ]);
+
+            $order->load('items.product');
+            PaidOrderInventory::applyForOrder($order);
+        });
 
         return response()->json([
             'message' => 'Payment verified successfully',
-            'data' => $payment,
+            'data' => $payment->fresh(),
         ]);
     }
 

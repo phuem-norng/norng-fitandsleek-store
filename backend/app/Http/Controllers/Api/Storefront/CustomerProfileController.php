@@ -96,11 +96,12 @@ class CustomerProfileController extends Controller
 
         // Update user
         $user->update(['profile_image_path' => $path]);
+        $user->refresh();
 
         return response()->json([
             'message' => 'Profile image uploaded successfully',
             'profile_image_path' => $path,
-            'profile_image_url' => asset('storage/' . $path),
+            'profile_image_url' => $user->profile_image_url,
         ]);
     }
 
@@ -348,7 +349,7 @@ class CustomerProfileController extends Controller
             ['name' => 'My Wishlist', 'is_default' => true]
         );
 
-        $products = $wishlist->products()->with(['category', 'activeSale'])->get();
+        $products = $wishlist->products()->with(['category', 'activeDiscount'])->get();
 
         return response()->json([
             'data'  => $products,

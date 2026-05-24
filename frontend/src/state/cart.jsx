@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
 import { useAuth } from "./auth";
+import { triggerTelegramHaptic } from "../lib/telegramWebApp";
+import { clientVariantMaxQty } from "../lib/variantMatrix.js";
 
 const CartCtx = createContext(null);
 const LOCAL_CART_KEY = "fs_guest_cart";
@@ -84,16 +86,20 @@ export function CartProvider({ children }) {
       if (!product?.id) throw new Error("PRODUCT_REQUIRED");
 
       const unitPrice =
-        product.discount?.sale_price ?? product.activeSale?.sale_price ?? product.price ?? 0;
+        product.discount?.sale_price ??
+          product.active_discount?.sale_price ??
+          product.activeDiscount?.sale_price ??
+          product.price ??
+          0;
 
       const current = readLocalCart().items;
-      const maxStock = Number.isFinite(Number(product?.stock)) ? Number(product.stock) : null;
+      const maxStock = clientVariantMaxQty(product, color, size);
       const variantKey = `${product.id}::${size || ""}::${color || ""}`;
       const existing = current.find((it) => it.id === variantKey);
-      const totalForProduct = current
-        .filter((it) => it.product?.id === product.id)
+      const totalForVariant = current
+        .filter((it) => it.product?.id === product.id && it.color === color && it.size === size)
         .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
-      if (maxStock !== null && totalForProduct + quantity > maxStock) {
+      if (totalForVariant + quantity > maxStock) {
         setError("Stock limit reached for this product.");
         throw new Error("STOCK_LIMIT");
       }
@@ -120,6 +126,7 @@ export function CartProvider({ children }) {
       const local = writeLocalCart(next);
       setCart({ items: local.items });
       setTotal(local.total);
+      triggerTelegramHaptic("impact", "medium");
       return { cart: { items: local.items }, total: local.total };
     }
 
@@ -129,9 +136,11 @@ export function CartProvider({ children }) {
       const { data } = await api.post("/cart/items", { product_id: productId, quantity, size: size || null, color: color || null });
       setCart(data.cart);
       setTotal(data.total);
+      triggerTelegramHaptic("impact", "medium");
       return data;
     } catch (err) {
       console.error("Add to cart error:", err);
+      triggerTelegramHaptic("notification", "error");
       if (err.response?.status === 401 || err.response?.status === 403) {
         throw new Error("LOGIN_REQUIRED");
       }
@@ -143,10 +152,18 @@ export function CartProvider({ children }) {
     if (!user || !token) {
       const current = readLocalCart().items;
       const item = current.find((it) => it.id === itemId);
-      const maxStock = Number.isFinite(Number(item?.product?.stock)) ? Number(item.product.stock) : null;
-      if (maxStock !== null) {
+      const maxStock = item?.product
+        ? clientVariantMaxQty(item.product, item.color, item.size)
+        : null;
+      if (Number.isFinite(maxStock)) {
         const otherQty = current
-          .filter((it) => it.product?.id === item?.product?.id && it.id !== itemId)
+          .filter(
+            (it) =>
+              it.product?.id === item?.product?.id &&
+              it.id !== itemId &&
+              it.color === item?.color &&
+              it.size === item?.size
+          )
           .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
         if (otherQty + quantity > maxStock) {
           setError("Stock limit reached for this product.");

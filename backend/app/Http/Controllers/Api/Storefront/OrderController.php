@@ -7,6 +7,7 @@ use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Services\ProductVariantInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -92,10 +93,27 @@ class OrderController extends Controller
 
         $userId = (int) $request->user()->id;
 
-        $cart = Cart::with('items.product.activeSale')->where('user_id', $userId)->first();
+        $cart = Cart::with('items.product.activeDiscount')->where('user_id', $userId)->first();
 
         if (! $cart || $cart->items->isEmpty()) {
             return response()->json(['message' => 'Cart is empty.'], 422);
+        }
+
+        foreach ($cart->items as $ci) {
+            $product = Product::with('activeDiscount')->find((int) $ci->product_id);
+            if (! $product || ! (bool) $product->is_active) {
+                throw ValidationException::withMessages([
+                    'cart' => ['One or more products are unavailable. Please refresh your cart and try again.'],
+                ]);
+            }
+            if (is_numeric($product->stock)) {
+                $cap = ProductVariantInventory::effectiveCapForCartLine($product, $ci->color, $ci->size);
+                if ((int) $ci->quantity > $cap) {
+                    throw ValidationException::withMessages([
+                        'cart' => ['Not enough stock for: '.$product->name.'.'],
+                    ]);
+                }
+            }
         }
 
         $order = DB::transaction(function () use ($userId, $cart, $validated) {
@@ -106,7 +124,7 @@ class OrderController extends Controller
             foreach ($cart->items as $i) {
                 $productId = (int) $i->product_id;
                 if (!isset($validatedProducts[$productId])) {
-                    $product = Product::with('activeSale')->find($productId);
+                    $product = Product::with('activeDiscount')->find($productId);
                     if (! $product || ! (bool) $product->is_active) {
                         throw ValidationException::withMessages([
                             'cart' => ['One or more products are unavailable. Please refresh your cart and try again.'],
@@ -143,6 +161,7 @@ class OrderController extends Controller
                     'order_id' => $order->id,
                     'product_id' => $ci->product_id,
                     'size' => $ci->size ?? null,
+                    'color' => $ci->color ?? null,
                     'name' => $product->name ?? 'Product',
                     'sku' => $product->sku ?? '',
                     'price' => $unitPrice,

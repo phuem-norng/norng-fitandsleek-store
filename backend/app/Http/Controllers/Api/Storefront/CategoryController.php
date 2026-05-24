@@ -10,7 +10,11 @@ class CategoryController extends Controller
 {
     public function index()
     {
-        $cats = Category::where('is_active', true)->orderBy('sort_order')->get()
+        $cats = Category::query()
+            ->where('is_active', true)
+            ->catalogOnly()
+            ->orderBy('sort_order')
+            ->get()
             ->map(fn($c) => [
                 'id' => $c->id,
                 'name' => $c->name,

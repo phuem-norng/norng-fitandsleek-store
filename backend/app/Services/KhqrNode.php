@@ -34,13 +34,19 @@ class KhqrNode
             $exitCode = $process->getExitCode();
             $exitText = $process->getExitCodeText();
 
-            throw new RuntimeException(sprintf(
+            $message = sprintf(
                 'Node KHQR generator failed (bin=%s, exit=%s %s): %s',
                 $nodeBinary,
                 $exitCode ?? 'null',
                 $exitText ?? '',
                 $details !== '' ? $details : 'Unknown error'
-            ));
+            );
+
+            if ($this->looksLikeMissingNodeModules($details)) {
+                $message .= ' — Install deps on this server: `php artisan bakong:install-khqr` (requires npm in PATH), or `cd node-khqr && npm ci`.';
+            }
+
+            throw new RuntimeException($message);
         }
 
         $decoded = json_decode(trim($process->getOutput()), true);
@@ -80,5 +86,14 @@ class KhqrNode
 
         // Windows drive path, e.g. C:\...
         return (bool) preg_match('/^[a-zA-Z]:\\\\/', $value);
+    }
+
+    private function looksLikeMissingNodeModules(string $details): bool
+    {
+        $lower = strtolower($details);
+
+        return str_contains($lower, 'cannot find module')
+            || str_contains($lower, 'module_not_found')
+            || str_contains($lower, "can't find module");
     }
 }

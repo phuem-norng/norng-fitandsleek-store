@@ -33,7 +33,8 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Do not serve /storage from the private disk: Laravel would require signed URLs (403 for direct image URLs).
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],
@@ -43,6 +44,8 @@ return [
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL'), '/').'/storage',
             'visibility' => 'public',
+            // Serve /storage/* from storage/app/public (unsigned URLs for storefront/admin images).
+            'serve' => true,
             'throw' => false,
             'report' => false,
         ],

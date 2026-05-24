@@ -23,7 +23,7 @@ const menuItems = [
   { path: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { path: "/admin/reports", label: "Reports", icon: BarChart3 },
   { path: "/admin/products", label: "Products", icon: Package },
-  { path: "/admin/sales", label: "Sales", icon: BadgePercent },
+  { path: "/admin/discounts", label: "Discount", icon: BadgePercent },
   { path: "/admin/categories", label: "Categories", icon: Tags },
   { path: "/admin/brands", label: "Brands", icon: Building2 },
   { path: "/admin/homepage", label: "Home Page", icon: Home },

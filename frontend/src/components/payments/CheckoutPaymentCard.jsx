@@ -101,7 +101,7 @@ const NetworkBadges = ({ active }) => {
       {nets.map(({ id, label, bg, text }) => (
         <span
           key={id}
-          className={`text-[10px] font-black px-2 py-0.5 rounded ${bg} ${text} transition-all ${
+          className={`text-xs leading-tight font-semibold px-2 py-0.5 rounded ${bg} ${text} transition-all ${
             active && active !== id ? "opacity-25 grayscale" : "opacity-100"
           }`}
         >
@@ -169,7 +169,7 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
           {/* row 1 */}
           <div className="relative flex items-start justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-white/60 font-semibold">Fit &amp; Sleek</p>
+              <p className="text-xs leading-tight uppercase tracking-[0.3em] text-white/60 font-semibold">Fit &amp; Sleek</p>
             </div>
             <div className="flex items-center gap-2">
               <ContactlessIcon />
@@ -204,13 +204,13 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
           {/* row 4 */}
           <div className="relative grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="uppercase text-white/50 tracking-widest text-[9px] mb-0.5">Card holder</div>
+              <div className="uppercase text-white/50 tracking-widest text-xs leading-tight mb-0.5">Card holder</div>
               <div className="font-semibold tracking-wider uppercase truncate">
                 {card.name || "YOUR NAME"}
               </div>
             </div>
             <div className="text-right">
-              <div className="uppercase text-white/50 tracking-widest text-[9px] mb-0.5">Expires</div>
+              <div className="uppercase text-white/50 tracking-widest text-xs leading-tight mb-0.5">Expires</div>
               <div className="font-semibold tracking-wider">{card.expiry || "MM / YY"}</div>
             </div>
           </div>
@@ -227,7 +227,7 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
             <path strokeLinecap="round" d="M2 10h20"/>
           </svg>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
+            <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
               {tr("cardNumber", "Card number")}
             </p>
             <input
@@ -253,7 +253,7 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
             <path strokeLinecap="round" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
           </svg>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
+            <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
               {tr("cardNameOnCard", "Name on card")}
             </p>
             <input
@@ -273,7 +273,7 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
         <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-700">
           {/* expiry */}
           <div className={`px-4 py-3.5 transition-colors ${focused === "expiry" ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""} ${errors.expiry ? "bg-red-50 dark:bg-red-900/10" : ""}`}>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
+            <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
               {tr("cardExpiry", "Expiry")}
             </p>
             <input
@@ -290,9 +290,9 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
           </div>
           {/* cvc */}
           <div className={`px-4 py-3.5 transition-colors ${focused === "cvc" ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""} ${errors.cvc ? "bg-red-50 dark:bg-red-900/10" : ""}`}>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5 flex items-center gap-1">
+            <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5 flex items-center gap-1">
               {tr("cardCvc", "CVC / CVV")}
-              <span title="3-4 digit code on the back of your card" className="cursor-help text-slate-300 dark:text-slate-600 text-[9px] rounded-full border w-3.5 h-3.5 inline-flex items-center justify-center">?</span>
+              <span title="3-4 digit code on the back of your card" className="cursor-help text-slate-300 dark:text-slate-600 text-xs leading-tight rounded-full border w-3.5 h-3.5 inline-flex items-center justify-center">?</span>
             </p>
             <input
               value={card.cvc || ""}
@@ -309,7 +309,7 @@ export default function CheckoutPaymentCard({ value, errors = {}, onChange, t })
           </div>
           {/* country */}
           <div className={`px-4 py-3.5 transition-colors ${focused === "country" ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""} ${errors.country ? "bg-red-50 dark:bg-red-900/10" : ""}`}>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
+            <p className="text-xs leading-tight uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">
               {tr("cardBillingCountry", "Country")}
             </p>
             <input

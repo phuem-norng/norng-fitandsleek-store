@@ -28,20 +28,20 @@ class PaymentSettingsController extends Controller
 
         return response()->json([
             'bakong' => [
-                'receive_account' => $settings['bakong_receive_account']?->value ?? '',
-                'merchant_name' => $settings['bakong_merchant_name']?->value ?? '',
-                'merchant_city' => $settings['bakong_merchant_city']?->value ?? '',
+                'receive_account' => $settings->get('bakong_receive_account')?->value ?? '',
+                'merchant_name' => $settings->get('bakong_merchant_name')?->value ?? '',
+                'merchant_city' => $settings->get('bakong_merchant_city')?->value ?? '',
             ],
             'card' => [
-                'provider' => $settings['card_provider']?->value ?? 'demo',
-                'stripe_key' => $settings['stripe_key']?->value ?? '',
-                'stripe_secret' => $settings['stripe_secret']?->value ?? '',
-                'square_app_id' => $settings['square_app_id']?->value ?? '',
-                'square_access_token' => $settings['square_access_token']?->value ?? '',
+                'provider' => $settings->get('card_provider')?->value ?? 'demo',
+                'stripe_key' => $settings->get('stripe_key')?->value ?? '',
+                'stripe_secret' => $settings->get('stripe_secret')?->value ?? '',
+                'square_app_id' => $settings->get('square_app_id')?->value ?? '',
+                'square_access_token' => $settings->get('square_access_token')?->value ?? '',
             ],
             'enabled_methods' => [
-                'bakong_khqr' => (bool)($settings['payment_method_bakong_khqr']?->value ?? true),
-                'card_visa' => (bool)($settings['payment_method_card_visa']?->value ?? true),
+                'bakong_khqr' => (bool) ($settings->get('payment_method_bakong_khqr')?->value ?? true),
+                'card_visa' => (bool) ($settings->get('payment_method_card_visa')?->value ?? true),
             ],
         ]);
     }

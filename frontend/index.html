@@ -2,29 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>FitandSleek</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Khmer:wght@300;400;500;600;700&family=Kantumruy+Pro:wght@300;400;500;600;700&family=Battambang:wght@300;400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Montserrat:wght@600;700;800&family=Noto+Sans+Khmer:wght@300;400;500;600;700&family=Kantumruy+Pro:wght@300;400;500;600;700&family=Battambang:wght@300;400;700&family=Bebas+Neue&display=swap"
       rel="stylesheet"
     />
-    <script>
-      // Apply dark mode immediately before React loads to prevent flash
-      (function() {
-        const saved = localStorage.getItem("admin-dark-mode");
-        if (saved === "true") {
-          document.documentElement.classList.add("dark");
-        } else if (saved === null) {
-          // No saved preference, check system preference
-          if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            document.documentElement.classList.add("dark");
-          }
-        }
-      })();
-    </script>
+    <!-- Defer so a slow/unreachable telegram.org cannot block first paint and the React bundle. -->
+    <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <div id="root"></div>

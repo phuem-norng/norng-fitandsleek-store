@@ -8,6 +8,8 @@ laravel-container.log
 # Environment and secrets
 .env
 .env.*
+!.env.example
+scripts/cloudflare-tunnel-app-hostname.env
 *.pem
 *.key
 *.crt

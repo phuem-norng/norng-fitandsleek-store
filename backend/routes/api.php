@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthSessionController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\BakongPaymentController;
+use App\Http\Controllers\Api\TelegramWebhookController;
 
 // Storefront
 use App\Http\Controllers\Api\Storefront\CategoryController;
@@ -28,12 +29,16 @@ use App\Http\Controllers\Api\Storefront\CustomerProfileController;
 use App\Http\Controllers\Api\Storefront\ReplacementCaseController as StorefrontReplacementCaseController;
 use App\Http\Controllers\Api\Storefront\ChatbotController;
 use App\Http\Controllers\Api\Storefront\LegalContentController;
+use App\Http\Controllers\Api\Storefront\PublicMediaController;
 use App\Http\Controllers\Api\Admin\ChatbotSettingsController;
 
 // Admin
 use App\Http\Controllers\Api\Admin\HomepageAdminController;
 use App\Http\Controllers\Api\Admin\HomepageSettingsController;
+use App\Http\Controllers\Api\Admin\BarcodeScanController;
+use App\Http\Controllers\Api\Admin\PosSaleController;
 use App\Http\Controllers\Api\Admin\CategoryAdminController;
+use App\Http\Controllers\Api\Admin\InventoryIntegrityController;
 use App\Http\Controllers\Api\Admin\ProductAdminController;
 use App\Http\Controllers\Api\Admin\OrderAdminController;
 use App\Http\Controllers\Api\Admin\InvoiceAdminController;
@@ -49,6 +54,7 @@ use App\Http\Controllers\Api\Admin\PaymentSettingsController;
 use App\Http\Controllers\Api\Admin\ShipmentAdminController;
 use App\Http\Controllers\Api\Admin\ReplacementCaseAdminController;
 use App\Http\Controllers\Api\Admin\SuperAdminController;
+use App\Http\Controllers\Api\Admin\TelegramUserAdminController;
 use App\Http\Controllers\Api\Driver\ShipmentDriverController;
 
 // Admin - Search & Notifications
@@ -57,10 +63,29 @@ use App\Http\Controllers\Api\Admin\AdminNotificationController;
 use App\Http\Controllers\Api\Admin\ContactController;
 use App\Http\Controllers\Api\Admin\ProfileController;
 use App\Http\Controllers\Api\Admin\FooterHeaderController;
-use App\Http\Controllers\Api\Admin\SaleAdminController;
+use App\Http\Controllers\Api\Admin\DiscountAdminController;
 use App\Http\Controllers\Api\Admin\DriverAdminController;
+use App\Http\Controllers\Api\Admin\AdminAiChatController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
+
+// Public files with CORS (for Flutter web / cross-origin clients; path = storage/app/public/...)
+Route::get('/media/{path}', [PublicMediaController::class, 'show'])
+    ->where('path', '.*');
+
+// Site logo at public/logo.png (same as web <img src="/logo.png">) with CORS for Flutter web.
+Route::get('/site-logo', function () {
+    $path = public_path('logo.png');
+    if (! is_file($path)) {
+        abort(404);
+    }
+    $mime = @mime_content_type($path) ?: 'image/png';
+
+    return response()->file($path, [
+        'Content-Type' => $mime,
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+});
 
 // Current user
 Route::get('/me', function (Request $request) {
@@ -85,6 +110,7 @@ Route::get('/auth/{provider}/callback', [SocialAuthController::class, 'callback'
 Route::get('/auth/social/exchange/{ticket}', [SocialAuthController::class, 'exchange']);
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
+Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
 
 // -------------------------
 // PUBLIC STOREFRONT
@@ -193,6 +219,13 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
 });
 
 // -------------------------
+// ADMIN AI (proxied to self-hosted Dify — key stays server-side)
+// -------------------------
+Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->group(function () {
+    Route::post('/ai/chat', [AdminAiChatController::class, 'chat']);
+});
+
+// -------------------------
 // ADMIN
 // -------------------------
 Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->group(function () {
@@ -218,7 +251,18 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     // Product gallery image upload
     Route::post('/products/gallery-upload', [ProductAdminController::class, 'uploadGalleryImage']);
 
+    // Barcode scan → lookup (no stock change) + sale (deduct stock)
+    Route::get('/barcode-scan/lookup', [BarcodeScanController::class, 'lookup']);
+    Route::post('/barcode-scan/sale', [BarcodeScanController::class, 'sale']);
+
+    // POS: complete sale (stock + paid order) or save unpaid draft
+    Route::post('/pos/complete-sale', [PosSaleController::class, 'completeSale']);
+    Route::post('/pos/draft-order', [PosSaleController::class, 'saveDraft']);
+
     // CRUD
+    Route::post('categories/{category}/quick-restock', [CategoryAdminController::class, 'quickRestock']);
+    Route::get('inventory-integrity', [InventoryIntegrityController::class, 'index']);
+    Route::post('inventory-integrity/repair', [InventoryIntegrityController::class, 'repair']);
     Route::apiResource('categories', CategoryAdminController::class);
     Route::apiResource('brands', BrandAdminController::class);
     Route::apiResource('products', ProductAdminController::class);
@@ -246,6 +290,18 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::patch('customers/{customer}', [CustomerAdminController::class, 'update']);
     Route::delete('customers/{customer}', [CustomerAdminController::class, 'destroy']);
 
+    // Telegram Users
+    Route::get('/telegram-users', [TelegramUserAdminController::class, 'index']);
+    Route::post('/telegram-users/broadcast', [TelegramUserAdminController::class, 'broadcast']);
+    Route::get('/telegram-users/broadcasts', [TelegramUserAdminController::class, 'broadcasts']);
+    Route::patch('/telegram-users/broadcasts/{broadcastId}/cancel', [TelegramUserAdminController::class, 'cancel']);
+    Route::patch('/telegram-users/broadcasts/{broadcastId}/pause', [TelegramUserAdminController::class, 'pause']);
+    Route::patch('/telegram-users/broadcasts/{broadcastId}/resume', [TelegramUserAdminController::class, 'resume']);
+    Route::post('/telegram-users/broadcasts/{broadcastId}/retry-failed', [TelegramUserAdminController::class, 'retryFailed']);
+    Route::get('/telegram-users/broadcasts/{broadcastId}/progress', [TelegramUserAdminController::class, 'progress']);
+    Route::get('/telegram-users/broadcasts/{broadcastId}/stats', [TelegramUserAdminController::class, 'stats']);
+    Route::get('/telegram-users/maintenance-stats', [TelegramUserAdminController::class, 'maintenanceStats']);
+
     // Reports
     Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
     Route::get('/reports/sales', [ReportController::class, 'sales']);
@@ -255,6 +311,8 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::get('/reports/recent-orders', [ReportController::class, 'recentOrders']);
     Route::get('/reports/generate', [ReportController::class, 'generate']);
     Route::get('/reports/download-pdf', [ReportController::class, 'downloadPdf']);
+
+    Route::get('/nav-badges', [\App\Http\Controllers\Api\Admin\AdminNavBadgesController::class, 'index']);
 
     // Admin Search & Notifications
     Route::get('/search', [AdminSearchController::class, 'search']);
@@ -291,10 +349,10 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::get('/chatbot/settings', [ChatbotSettingsController::class, 'show']);
     Route::put('/chatbot/settings', [ChatbotSettingsController::class, 'update']);
 
-    // Sales Management
-    Route::apiResource('sales', SaleAdminController::class);
-    Route::post('/sales/bulk-toggle', [SaleAdminController::class, 'bulkToggle']);
-    Route::get('/sales/active/all', [SaleAdminController::class, 'getActiveSales']);
+    // Product discount management
+    Route::apiResource('discounts', DiscountAdminController::class);
+    Route::post('/discounts/bulk-toggle', [DiscountAdminController::class, 'bulkToggle']);
+    Route::get('/discounts/active/all', [DiscountAdminController::class, 'getActiveDiscounts']);
 
     // Payments Management
     Route::get('/payments', [PaymentAdminController::class, 'index']);

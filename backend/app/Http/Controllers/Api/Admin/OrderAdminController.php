@@ -8,11 +8,20 @@ use Illuminate\Http\Request;
 
 class OrderAdminController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Order::with(['user', 'items.product'])
-            ->orderByDesc('id')
-            ->paginate(20);
+        $perPage = min(max((int) $request->input('per_page', 20), 1), 200);
+        $compact = $request->boolean('compact');
+
+        $query = Order::query()->with(['user']);
+
+        if ($compact) {
+            $query->withCount('items');
+        } else {
+            $query->with(['items.product']);
+        }
+
+        return $query->orderByDesc('id')->paginate($perPage);
     }
 
     public function show(Order $order)

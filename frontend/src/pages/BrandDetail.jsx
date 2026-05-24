@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../lib/api";
 import ProductCard from "../components/shop/ProductCard.jsx";
 import { useLanguage } from "../lib/i18n.jsx";
+import { resolveImageUrl } from "../lib/images";
 
 function useQuery() {
   const { search } = useLocation();
@@ -78,7 +79,7 @@ export default function BrandDetail() {
         </div>
         {brand?.logo_url && (
           <img
-            src={brand.logo_url}
+            src={resolveImageUrl(brand.logo_url)}
             alt={brand.name}
             className="h-12 w-auto object-contain"
             loading="lazy"

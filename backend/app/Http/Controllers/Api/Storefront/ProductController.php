@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Api\Storefront;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $q = Product::query()->with(['category', 'brand', 'activeSale']);
+        $q = Product::query()->with(['category', 'brand', 'activeDiscount']);
 
         // Filter by specific product IDs (used by wishlist)
         if ($request->filled('ids')) {
@@ -21,6 +22,7 @@ class ProductController extends Controller
         }
 
         $this->applyParentCategoryFilter($q, $request);
+        $tabOrdered = $this->applyTabFilter($q, $request);
 
         if ($request->filled('category')) {
             $categorySlug = (string) $request->input('category');
@@ -60,16 +62,8 @@ class ProductController extends Controller
             $allowedGenders = ['men', 'women', 'boys', 'girls'];
 
             if (in_array($gender, $allowedGenders, true)) {
-                // Support both legacy datasets (categories.gender filled)
-                // and imported dumps where gender is encoded in name/slug.
                 $q->whereHas('category', function ($categoryQuery) use ($gender) {
-                    $categoryQuery->where(function ($inner) use ($gender) {
-                        $inner->whereRaw('LOWER(COALESCE(gender, \'\')) = ?', [$gender])
-                            ->orWhereRaw('LOWER(COALESCE(name, \'\')) = ?', [$gender])
-                            ->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$gender . '-%'])
-                            ->orWhereRaw('LOWER(COALESCE(slug, \'\')) = ?', [$gender])
-                            ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', [$gender . '-%']);
-                    });
+                    $this->applyCategoryAudienceFilter($categoryQuery, $gender);
                 });
             }
         }
@@ -85,9 +79,48 @@ class ProductController extends Controller
         }
 
         $perPage = min((int) $request->get('per_page', 12), 200);
-        $products = $q->orderByDesc('id')->paginate($perPage);
+        if (!$tabOrdered) {
+            $q->orderByDesc('products.id');
+        }
+        $products = $q->paginate($perPage);
 
         return response()->json($products);
+    }
+
+    /**
+     * Browse tabs from header / homepage (new, trending, this-week, sale).
+     */
+    private function applyTabFilter($query, Request $request): bool
+    {
+        if (!$request->filled('tab')) {
+            return false;
+        }
+
+        $tab = strtolower(trim((string) $request->input('tab')));
+        if ($tab === '' || $tab === 'wishlist') {
+            return false;
+        }
+
+        switch ($tab) {
+            case 'new':
+                $query->orderByDesc('products.created_at')->orderByDesc('products.id');
+                return true;
+            case 'this-week':
+                $query->where('products.created_at', '>=', Carbon::now()->startOfWeek())
+                    ->orderByDesc('products.created_at')
+                    ->orderByDesc('products.id');
+                return true;
+            case 'trending':
+                $query->orderByDesc('products.updated_at')->orderByDesc('products.id');
+                return true;
+            case 'sale':
+                $query->where('products.is_active', true)
+                    ->whereHas('activeDiscount')
+                    ->orderByDesc('products.id');
+                return true;
+            default:
+                return false;
+        }
     }
 
     private function applyParentCategoryFilter($query, Request $request): void
@@ -101,39 +134,62 @@ class ProductController extends Controller
             return;
         }
 
-        $allowedParents = [
-            'men' => 'men',
-            'women' => 'women',
-            'boys' => 'boys',
-            'girls' => 'girls',
-        ];
-
         $parent = strtolower($rawParent);
-        if (!isset($allowedParents[$parent])) {
+        if (!in_array($parent, ['men', 'women', 'boys', 'girls'], true)) {
             return;
         }
 
-        $prefix = $allowedParents[$parent];
+        $query->whereHas('category', function ($categoryQuery) use ($parent) {
+            $this->applyCategoryAudienceFilter($categoryQuery, $parent);
+        });
+    }
 
-        $query->whereHas('category', function ($categoryQuery) use ($prefix) {
-            $categoryQuery->where(function ($nameQuery) use ($prefix) {
-                $nameQuery->whereRaw('LOWER(name) = ?', [$prefix])
-                    ->orWhereRaw('LOWER(name) LIKE ?', [$prefix . '-%']);
-            });
+    /**
+     * Match categories for Men/Women/Boys/Girls across gender column and names like "Women - Dresses".
+     */
+    private function applyCategoryAudienceFilter($categoryQuery, string $audience): void
+    {
+        $audience = strtolower(trim($audience));
+        $labels = [
+            'men' => ['Men', 'Man', 'MEN', 'MAN'],
+            'women' => ['Women', 'Woman', 'WOMEN', 'WOMAN'],
+            'boys' => ['Boy', 'Boys', 'BOY', 'BOYS'],
+            'girls' => ['Girl', 'Girls', 'GIRL', 'GIRLS'],
+        ];
+
+        if (!isset($labels[$audience])) {
+            return;
+        }
+
+        $display = $labels[$audience][0];
+
+        $categoryQuery->where(function ($inner) use ($audience, $labels, $display) {
+            foreach ($labels[$audience] as $variant) {
+                $lower = strtolower($variant);
+                $inner->orWhereRaw('LOWER(COALESCE(gender, \'\')) = ?', [$lower])
+                    ->orWhereRaw('UPPER(COALESCE(gender, \'\')) = ?', [strtoupper($variant)]);
+            }
+
+            $prefix = strtolower($display);
+            $inner->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$prefix . ' -%'])
+                ->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$prefix . '-%'])
+                ->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', [$prefix . ' %'])
+                ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', [$prefix . '-%'])
+                ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', [$prefix . '%']);
         });
     }
 
     public function show(string $slug)
     {
-        $product = Product::with(['category', 'activeSale'])->where('slug', $slug)->firstOrFail();
-        if ($product->activeSale) {
+        $product = Product::with(['category', 'activeDiscount'])->where('slug', $slug)->firstOrFail();
+        if ($product->activeDiscount) {
             $product->discount = [
-                'type' => $product->activeSale->discount_type,
-                'value' => $product->activeSale->discount_value,
+                'type' => $product->activeDiscount->discount_type,
+                'value' => $product->activeDiscount->discount_value,
                 'original_price' => (float) $product->price,
-                'sale_price' => (float) $product->activeSale->sale_price,
+                'sale_price' => (float) $product->activeDiscount->sale_price,
                 'discount_percentage' => $this->calculateDiscountPercentage($product),
-                'end_date' => $product->activeSale->end_date,
+                'end_date' => $product->activeDiscount->end_date,
             ];
         }
         return response()->json($product);
@@ -145,8 +201,8 @@ class ProductController extends Controller
     public function discounts(Request $request)
     {
         $query = Product::query()
-            ->with(['category', 'activeSale'])
-            ->whereHas('activeSale')
+            ->with(['category', 'activeDiscount'])
+            ->whereHas('activeDiscount')
             ->where('is_active', true);
 
         // Filter by category
@@ -184,12 +240,12 @@ class ProductController extends Controller
 
         // Filter by price range
         if ($request->filled('min_price')) {
-            $query->whereHas('activeSale', function ($q) use ($request) {
+            $query->whereHas('activeDiscount', function ($q) use ($request) {
                 $q->where('sale_price', '>=', (float) $request->input('min_price'));
             });
         }
         if ($request->filled('max_price')) {
-            $query->whereHas('activeSale', function ($q) use ($request) {
+            $query->whereHas('activeDiscount', function ($q) use ($request) {
                 $q->where('sale_price', '<=', (float) $request->input('max_price'));
             });
         }
@@ -198,15 +254,15 @@ class ProductController extends Controller
         $sort = $request->get('sort', 'newest');
         switch ($sort) {
             case 'price_low':
-                $query->join('sales', 'products.id', '=', 'sales.product_id')
-                    ->where('sales.is_active', 1)
-                    ->orderBy('sales.sale_price', 'asc')
+                $query->join('discounts', 'products.id', '=', 'discounts.product_id')
+                    ->where('discounts.is_active', 1)
+                    ->orderBy('discounts.sale_price', 'asc')
                     ->select('products.*');
                 break;
             case 'price_high':
-                $query->join('sales', 'products.id', '=', 'sales.product_id')
-                    ->where('sales.is_active', 1)
-                    ->orderBy('sales.sale_price', 'desc')
+                $query->join('discounts', 'products.id', '=', 'discounts.product_id')
+                    ->where('discounts.is_active', 1)
+                    ->orderBy('discounts.sale_price', 'desc')
                     ->select('products.*');
                 break;
             case 'discount':
@@ -214,14 +270,14 @@ class ProductController extends Controller
                 $query->orderByRaw('(
                     SELECT 
                         CASE 
-                            WHEN sales.discount_type = "percentage" THEN sales.discount_value
-                            ELSE (sales.discount_value / products.price * 100)
+                            WHEN discounts.discount_type = "percentage" THEN discounts.discount_value
+                            ELSE (discounts.discount_value / products.price * 100)
                         END
-                    FROM sales
-                    WHERE sales.product_id = products.id
-                    AND sales.is_active = 1
-                    AND sales.start_date <= NOW()
-                    AND sales.end_date >= NOW()
+                    FROM discounts
+                    WHERE discounts.product_id = products.id
+                    AND discounts.is_active = 1
+                    AND discounts.start_date <= NOW()
+                    AND discounts.end_date >= NOW()
                 ) DESC');
                 break;
             case 'newest':
@@ -233,14 +289,14 @@ class ProductController extends Controller
 
         // Format response with discount info
         $products->getCollection()->transform(function ($product) {
-            if ($product->activeSale) {
+            if ($product->activeDiscount) {
                 $product->discount = [
-                    'type' => $product->activeSale->discount_type,
-                    'value' => $product->activeSale->discount_value,
+                    'type' => $product->activeDiscount->discount_type,
+                    'value' => $product->activeDiscount->discount_value,
                     'original_price' => (float) $product->price,
-                    'sale_price' => (float) $product->activeSale->sale_price,
+                    'sale_price' => (float) $product->activeDiscount->sale_price,
                     'discount_percentage' => $this->calculateDiscountPercentage($product),
-                    'end_date' => $product->activeSale->end_date,
+                    'end_date' => $product->activeDiscount->end_date,
                 ];
             }
             return $product;
@@ -254,14 +310,14 @@ class ProductController extends Controller
      */
     private function calculateDiscountPercentage($product)
     {
-        if (!$product->activeSale) {
+        if (!$product->activeDiscount) {
             return 0;
         }
 
-        if ($product->activeSale->discount_type === 'percentage') {
-            return (int) $product->activeSale->discount_value;
+        if ($product->activeDiscount->discount_type === 'percentage') {
+            return (int) $product->activeDiscount->discount_value;
         }
 
-        return round(($product->activeSale->discount_value / $product->price) * 100);
+        return round(($product->activeDiscount->discount_value / $product->price) * 100);
     }
 }

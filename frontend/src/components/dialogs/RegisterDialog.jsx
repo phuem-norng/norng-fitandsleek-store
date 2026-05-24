@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Chrome, Facebook, Lock, User } from "lucide-react";
+import { Chrome, Facebook, Lock, User, Mail, Phone } from "lucide-react";
 import { Link } from "react-router-dom";
 import { resolveBackendOrigin } from "../../lib/backendOrigin";
 import { useAuth } from "../../state/auth";
@@ -114,21 +114,21 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogPopup className="p-0 overflow-hidden rounded-3xl shadow-2xl border border-white/10 bg-white/10 backdrop-blur-xl text-white modal-no-scroll" from="top" position="center" showCloseButton={true}>
-        <div className="px-6 pt-5 pb-4 border-b border-white/10">
+      <DialogPopup className="auth-dialog-shell modal-no-scroll min-w-0 max-h-[92dvh] overflow-x-hidden overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-white/10 p-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] text-white shadow-2xl backdrop-blur-xl scrollbar-hide" from="top" position="center" showCloseButton={true}>
+        <div className="border-b border-white/10 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
           <Link to="/" className="flex items-center justify-center">
-            <Logo className="h-14 w-auto" src={settings?.header?.logo_url || "/logo.png"} alt="FitandSleek" />
+            <Logo className="h-12 w-auto max-w-full sm:h-14" src={settings?.header?.logo_url || "/logo.png"} alt="FitandSleek" />
           </Link>
         </div>
 
-        <div className="px-6 pt-5 pb-4 border-b border-white/10">
+        <div className="border-b border-white/10 px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-5">
           <DialogTitle className="text-2xl font-black tracking-tight text-white">Create Account</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/70">
             Join FitandSleek and start shopping
           </DialogDescription>
         </div>
 
-        <div className="px-6 pt-5 pb-6">
+        <div className="px-4 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5">
           <Tabs
             value="register"
             onValueChange={(value) => {
@@ -149,12 +149,13 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
             <TabsContents>
               <TabsContent value="register">
                 {!otpMode ? (
-                  <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mt-4">
-                    <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                      <div>
-                        <label htmlFor="register-name" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Full Name</label>
-                        <div className="relative">
-                          <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+                  <form onSubmit={handleSubmit} className="mt-4 flex min-w-0 flex-col gap-3 sm:gap-4">
+                    <div className="min-w-0">
+                        <label htmlFor="register-name" className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/70 leading-snug">
+                          Full Name
+                        </label>
+                        <div className="relative mt-1.5">
+                          <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" aria-hidden />
                           <input
                             id="register-name"
                             name="name"
@@ -162,16 +163,18 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                             value={form.name}
                             onChange={(e) => setForm({ ...form, name: e.target.value })}
                             placeholder="John Doe"
-                            className="w-full h-12 rounded-2xl bg-white/10 text-white placeholder-white/60 border border-white/15 pl-11 pr-4 shadow-sm focus:bg-white/20 focus:border-transparent focus:ring-2 focus:ring-white/30 outline-none transition-all duration-200"
+                            className="h-12 w-full min-w-0 rounded-2xl border border-white/15 bg-white/10 pl-11 pr-4 text-white shadow-sm outline-none transition-all duration-200 placeholder:text-white/60 focus:border-transparent focus:bg-white/20 focus:ring-2 focus:ring-white/30"
                             required
                           />
                         </div>
-                      </div>
+                    </div>
 
-                      <div>
-                        <label htmlFor="register-email" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Email Address</label>
-                        <div className="relative">
-                          <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+                    <div className="min-w-0">
+                        <label htmlFor="register-email" className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/70 leading-snug">
+                          Email Address
+                        </label>
+                        <div className="relative mt-1.5">
+                          <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" aria-hidden />
                           <input
                             id="register-email"
                             name="email"
@@ -179,16 +182,18 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                             value={form.email}
                             onChange={(e) => setForm({ ...form, email: e.target.value })}
                             placeholder="your@email.com"
-                            className="w-full h-12 rounded-2xl bg-white/10 text-white placeholder-white/60 border border-white/15 pl-11 pr-4 shadow-sm focus:bg-white/20 focus:border-transparent focus:ring-2 focus:ring-white/30 outline-none transition-all duration-200"
+                            className="h-12 w-full min-w-0 rounded-2xl border border-white/15 bg-white/10 pl-11 pr-4 text-white shadow-sm outline-none transition-all duration-200 placeholder:text-white/60 focus:border-transparent focus:bg-white/20 focus:ring-2 focus:ring-white/30"
                             required
                           />
                         </div>
-                      </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="register-phone" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Phone Number</label>
-                      <div className="relative">
+                    <div className="min-w-0">
+                      <label htmlFor="register-phone" className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/70 leading-snug">
+                        Phone Number
+                      </label>
+                      <div className="relative mt-1.5">
+                        <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" aria-hidden />
                         <input
                           id="register-phone"
                           name="phone"
@@ -196,15 +201,17 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                           value={form.phone}
                           onChange={(e) => setForm({ ...form, phone: e.target.value })}
                           placeholder="+855..."
-                          className="w-full h-12 rounded-2xl bg-white/10 text-white placeholder-white/60 border border-white/15 px-4 shadow-sm focus:bg-white/20 focus:border-transparent focus:ring-2 focus:ring-white/30 outline-none transition-all duration-200"
+                          className="h-12 w-full min-w-0 rounded-2xl border border-white/15 bg-white/10 pl-11 pr-4 text-white shadow-sm outline-none transition-all duration-200 placeholder:text-white/60 focus:border-transparent focus:bg-white/20 focus:ring-2 focus:ring-white/30"
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="register-password" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Password</label>
-                      <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+                    <div className="min-w-0">
+                      <label htmlFor="register-password" className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/70 leading-snug">
+                        Password
+                      </label>
+                      <div className="relative mt-1.5">
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" aria-hidden />
                         <input
                           id="register-password"
                           name="password"
@@ -212,16 +219,18 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                           value={form.password}
                           onChange={(e) => setForm({ ...form, password: e.target.value })}
                           placeholder="••••••••"
-                          className="w-full h-12 rounded-2xl bg-white/10 text-white placeholder-white/60 border border-white/15 pl-11 pr-4 shadow-sm focus:bg-white/20 focus:border-transparent focus:ring-2 focus:ring-white/30 outline-none transition-all duration-200"
+                          className="h-12 w-full min-w-0 rounded-2xl border border-white/15 bg-white/10 pl-11 pr-4 text-white shadow-sm outline-none transition-all duration-200 placeholder:text-white/60 focus:border-transparent focus:bg-white/20 focus:ring-2 focus:ring-white/30"
                           required
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="register-password-confirm" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Confirm Password</label>
-                      <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+                    <div className="min-w-0">
+                      <label htmlFor="register-password-confirm" className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/70 leading-snug">
+                        Confirm password
+                      </label>
+                      <div className="relative mt-1.5">
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" aria-hidden />
                         <input
                           id="register-password-confirm"
                           name="password_confirmation"
@@ -229,7 +238,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                           value={form.password_confirmation}
                           onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })}
                           placeholder="••••••••"
-                          className="w-full h-12 rounded-2xl bg-white/10 text-white placeholder-white/60 border border-white/15 pl-11 pr-4 shadow-sm focus:bg-white/20 focus:border-transparent focus:ring-2 focus:ring-white/30 outline-none transition-all duration-200"
+                          className="h-12 w-full min-w-0 rounded-2xl border border-white/15 bg-white/10 pl-11 pr-4 text-white shadow-sm outline-none transition-all duration-200 placeholder:text-white/60 focus:border-transparent focus:bg-white/20 focus:ring-2 focus:ring-white/30"
                           required
                         />
                       </div>
@@ -240,11 +249,11 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                       )}
                     </div>
 
-                    <div className="md:col-span-3 flex flex-col gap-2 pt-4">
+                    <div className="flex w-full min-w-0 flex-col gap-2 pt-2">
                       <button
                         type="submit"
                         disabled={loading}
-                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#5C7E64] via-[#6F8F72] to-[#93B895] text-white text-sm font-semibold shadow-lg shadow-[#6F8F72]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
+                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#586F64] via-[#6e8b7e] to-[#9BB0A5] text-white text-sm font-semibold shadow-lg shadow-[#6e8b7e]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
                       >
                         {loading ? "Creating account..." : "Create Account"}
                       </button>
@@ -257,11 +266,11 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                     </div>
                   </form>
                 ) : (
-                  <form onSubmit={handleVerifyOtp} className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mt-4">
-                    <div className="md:col-span-2">
-                      <label htmlFor="register-otp-code" className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Verification Code</label>
+                  <form onSubmit={handleVerifyOtp} className="mt-4 flex min-w-0 flex-col gap-3 sm:gap-4">
+                    <div className="min-w-0">
+                      <label htmlFor="register-otp-code" className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">Verification Code</label>
                       <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" />
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" aria-hidden />
                         <input
                           id="register-otp-code"
                           name="otp_code"
@@ -276,16 +285,16 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                     </div>
 
                     {error && (
-                      <div className="md:col-span-2 mt-1 text-xs text-rose-200 bg-rose-500/10 border border-rose-400/20 rounded-lg px-3 py-2">
+                      <div className="mt-1 rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
                         {error}
                       </div>
                     )}
 
-                    <div className="md:col-span-2 flex flex-col gap-2 pt-4">
+                    <div className="flex w-full min-w-0 flex-col gap-2 pt-2">
                       <button
                         type="submit"
                         disabled={loading}
-                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#5C7E64] via-[#6F8F72] to-[#93B895] text-white text-sm font-semibold shadow-lg shadow-[#6F8F72]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
+                        className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#586F64] via-[#6e8b7e] to-[#9BB0A5] text-white text-sm font-semibold shadow-lg shadow-[#6e8b7e]/35 hover:brightness-105 active:scale-[0.98] transition-all duration-200"
                       >
                         {loading ? "Verifying..." : "Verify"}
                       </button>
@@ -309,7 +318,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
 
                 {!otpMode && (
                   <>
-                    <div className="mt-4 text-center text-sm text-white/70">
+                    <div className="mt-4 px-1 text-center text-sm text-white/70">
                       Already have an account?{" "}
                       <button
                         type="button"
@@ -329,22 +338,22 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
                       <span className="h-px flex-1 bg-white/20" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pb-6">
+                    <div className="flex min-w-0 flex-col gap-3 pb-2">
                       <button
                         type="button"
                         onClick={() => handleSocial("google")}
-                        className="w-full h-11 rounded-2xl bg-white/10 text-white text-sm font-semibold border border-white/15 hover:bg-white/20 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+                        className="flex h-12 w-full min-w-0 items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/20 active:scale-[0.98]"
                       >
-                        <Chrome className="w-4 h-4" />
-                        Continue with Google
+                        <Chrome className="h-5 w-5 shrink-0" aria-hidden />
+                        <span className="truncate">Continue with Google</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleSocial("facebook")}
-                        className="w-full h-11 rounded-2xl bg-white/10 text-white text-sm font-semibold border border-white/15 hover:bg-white/20 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
+                        className="flex h-12 w-full min-w-0 items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/20 active:scale-[0.98]"
                       >
-                        <Facebook className="w-4 h-4" />
-                        Continue with Facebook
+                        <Facebook className="h-5 w-5 shrink-0" aria-hidden />
+                        <span className="truncate">Continue with Facebook</span>
                       </button>
                     </div>
                   </>

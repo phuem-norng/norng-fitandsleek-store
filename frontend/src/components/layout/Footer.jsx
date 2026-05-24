@@ -74,7 +74,7 @@ export default function Footer() {
 
 
   return (
-    <footer className="hidden md:block border-t border-zinc-200" style={{ backgroundColor: footerSettings.background_color || '#6F8F72' }}>
+    <footer className="hidden md:block border-t border-zinc-200" style={{ backgroundColor: footerSettings.background_color || '#6e8b7e' }}>
       <div className="container-safe py-12 grid gap-8 md:grid-cols-4">
         {/* Brand Section */}
         <div className="space-y-4">

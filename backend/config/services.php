@@ -76,6 +76,17 @@ return [
         'from' => env('TWILIO_FROM'),
     ],
 
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_name' => env('TELEGRAM_BOT_NAME'),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+        'broadcast_messages_per_second' => (int) env('TELEGRAM_BROADCAST_MESSAGES_PER_SECOND', 25),
+        'broadcast_chunk_size' => (int) env('TELEGRAM_BROADCAST_CHUNK_SIZE', 100),
+        'broadcast_retry_attempts' => (int) env('TELEGRAM_BROADCAST_RETRY_ATTEMPTS', 3),
+        'broadcast_estimated_workers' => (int) env('TELEGRAM_BROADCAST_ESTIMATED_WORKERS', 1),
+        'broadcast_retention_days' => (int) env('TELEGRAM_BROADCAST_RETENTION_DAYS', 30),
+    ],
+
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-1.0-pro'),
@@ -113,6 +124,19 @@ return [
         'qdrant_url' => env('QDRANT_URL', 'http://localhost:6333'),
         'qdrant_collection' => env('QDRANT_COLLECTION', 'products'),
         'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 120),
+    ],
+
+    /*
+    | Self-hosted Dify → local LLM (Ollama / Llama 3 / DeepSeek).
+    | API key: Dify Studio → API Access → create key for your Chat app.
+    */
+    'dify' => [
+        'base_url' => env('DIFY_BASE_URL', 'http://localhost'),
+        'api_key' => env('DIFY_API_KEY'),
+        'app_id' => env('DIFY_APP_ID', ''),
+        'timeout' => (int) env('DIFY_TIMEOUT', 120),
+        // Set true once your Dify app defines a `dashboard_context` input variable.
+        'use_inputs_only' => filter_var(env('DIFY_USE_INPUTS_ONLY', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
 ];

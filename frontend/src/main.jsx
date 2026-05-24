@@ -8,6 +8,9 @@ import { CartProvider } from "./state/cart.jsx";
 import { WishlistProvider } from "./state/wishlist.jsx";
 import { LanguageProvider } from "./lib/i18n.jsx";
 import { ThemeProvider } from "./state/theme.jsx";
+import { initTelegramWebApp } from "./lib/telegramWebApp.js";
+
+initTelegramWebApp();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

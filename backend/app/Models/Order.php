@@ -8,6 +8,7 @@ class Order extends Model
 {
     protected $fillable = [
         'user_id',
+        'sale_channel',
         'order_number',
         'status',
         'payment_status',
@@ -18,6 +19,7 @@ class Order extends Model
         'total',
         'shipping_address',
         'billing_address',
+        'pos_meta',
     ];
 
     protected $casts = [
@@ -27,6 +29,7 @@ class Order extends Model
         'discount' => 'decimal:2',
         'shipping_address' => 'array',
         'billing_address' => 'array',
+        'pos_meta' => 'array',
     ];
 
     public function user()

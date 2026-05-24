@@ -4,12 +4,47 @@ namespace App\Support;
 
 class Media
 {
+    private static function isPrivateHost(string $host): bool
+    {
+        $host = strtolower($host);
+        if (in_array($host, ['localhost', '127.0.0.1', 'host.docker.internal', 'backend'], true)) {
+            return true;
+        }
+
+        return preg_match('/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/', $host) === 1;
+    }
+
     public static function url(?string $path): ?string
     {
-        if (!$path) return null;
+        if (!$path) {
+            return null;
+        }
+
+        $path = trim($path);
 
         // already absolute url
-        if (preg_match('#^https?://#i', $path)) return $path;
+        if (preg_match('#^https?://#i', $path)) {
+            $parts = parse_url($path);
+            $host = strtolower((string) ($parts['host'] ?? ''));
+            if ($host !== '' && self::isPrivateHost($host)) {
+                $normalizedPath = '/' . ltrim((string) ($parts['path'] ?? ''), '/');
+                return $normalizedPath !== '/' ? $normalizedPath : null;
+            }
+            return $path;
+        }
+
+        if (str_starts_with($path, '/storage/')) {
+            return $path;
+        }
+
+        if (str_starts_with($path, 'storage/')) {
+            return '/' . $path;
+        }
+
+        if (!str_contains($path, '/')) {
+            // Filename-only fallback for legacy banner/image fields.
+            return '/storage/banners/' . ltrim($path, '/');
+        }
 
         $normalized = ltrim($path, '/');
         if (str_starts_with($normalized, 'storage/')) {
@@ -22,7 +57,7 @@ class Media
         }
 
         // storage:link -> /storage
-        return \asset('storage/' . $normalized);
+        return '/storage/' . $normalized;
     }
 
     // Backward-compatible alias (so both calls work)

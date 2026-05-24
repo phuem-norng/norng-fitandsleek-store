@@ -1,5 +1,181 @@
+# Compose profiles (default = light dev stack; stops heavy containers on `up`):
+#   (none)     db + backend + frontend only — use: pwsh scripts/docker-up.ps1
+#   full       everything below + workers + ai + pgAdmin — use: pwsh scripts/docker-up.ps1 -Mode full
+#   workers    queue-worker + scheduler
+#   ai         qdrant + ai-service (image search / vectorize)
+#   tools      pgAdmin
+# Optional tunnel: docker compose --profile cloudflare-token up -d
+#
+# --- Docker Desktop (Windows / Mac): published ports ---
+#   Postgres (host):     localhost:5433  → container :5432  (use this in pgAdmin from the host if not using service "db")
+#   pgAdmin:             http://localhost:5050
+#   Laravel API:         http://localhost:8001  (maps to service "backend" :8000)
+#   SPA (static build):   http://localhost:5173
+#   Qdrant:              localhost:6333
+#
+# backend/.env (mounted into the PHP container) must use the Compose network for the DB, not localhost:
+#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=fitandsleek_v2
+#
+# Frontend image is built for the browser on your machine: default VITE_BACKEND_ORIGIN=http://localhost:8001
+# so the open tab calls the API on host port 8001. Rebuild after changing: docker compose build frontend
+#
+# Compose loads a repo-root `.env` for ${DB_*} substitution on the `db` service. Keep there:
+#   COMPOSE_PROJECT_NAME=fitandsleek_ai
+#   DB_DATABASE / DB_USERNAME / DB_PASSWORD (same as backend/.env), or run: pwsh scripts/docker-up.ps1
+# Do NOT inject DB_* into the backend container: that overrides mounted backend/.env.
+
+name: fitandsleek_ai
+
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: fitandsleek_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_v2}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Norng@123}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    profiles: [tools, full]
+    image: dpage/pgadmin4:latest
+    container_name: fitandsleek_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@fitandsleek.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fitandsleek_backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      APP_URL: http://localhost:8001
+      APP_PORT: 8000
+      SERVER_PORT: 8000
+      # Inside the stack, Postgres is the `db` service (not host 127.0.0.1).
+      DB_HOST: db
+      DB_PORT: "5432"
+      # Use Compose DNS so indexing works without host port forwarding quirks.
+      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      QDRANT_URL: http://qdrant:6333
+    # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
+    command: ["web"]
+    ports:
+      - "8001:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend/app:/var/www/html/app
+      - ./backend/config:/var/www/html/config
+      - ./backend/database/migrations:/var/www/html/database/migrations
+      - ./backend/.env:/var/www/html/.env
+      - ./backend/routes:/var/www/html/routes
+      - ./backend/public:/var/www/html/public
+      - ./backend/storage/app/public:/var/www/html/storage/app/public
+
+  # Processes SyncProductToQdrant and other queued jobs (needs QUEUE_CONNECTION=redis|database in backend/.env).
+  queue-worker:
+    profiles: [workers, full]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fitandsleek_queue
+    restart: unless-stopped
+    depends_on:
+      - db
+      - qdrant
+      - ai-service
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      QDRANT_URL: http://qdrant:6333
+    command: ["worker", "queue:work", "--sleep=3", "--tries=3", "--timeout=180", "--max-jobs=500"]
+    volumes:
+      - ./backend/app:/var/www/html/app
+      - ./backend/config:/var/www/html/config
+      - ./backend/database/migrations:/var/www/html/database/migrations
+      - ./backend/.env:/var/www/html/.env
+      - ./backend/routes:/var/www/html/routes
+      - ./backend/public:/var/www/html/public
+      - ./backend/storage/app/public:/var/www/html/storage/app/public
+
+  # Runs Laravel scheduler (includes qdrant:index-products --only-missing every 10 minutes).
+  scheduler:
+    profiles: [workers, full]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fitandsleek_scheduler
+    restart: unless-stopped
+    depends_on:
+      - db
+      - qdrant
+      - ai-service
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      QDRANT_URL: http://qdrant:6333
+    command: ["artisan", "schedule:work"]
+    volumes:
+      - ./backend/app:/var/www/html/app
+      - ./backend/config:/var/www/html/config
+      - ./backend/database/migrations:/var/www/html/database/migrations
+      - ./backend/.env:/var/www/html/.env
+      - ./backend/routes:/var/www/html/routes
+      - ./backend/public:/var/www/html/public
+      - ./backend/storage/app/public:/var/www/html/storage/app/public
+
+  # Static `serve` does not proxy `/api`. For a public hostname, the tunnel/reverse proxy must route
+  # `/api` (and usually `/storage`) to Laravel; the SPA then calls same-origin `/api` (set
+  # VITE_API_BASE_URL=/api) or relies on PROD fallback in `frontend/src/lib/backendOrigin.js` when the
+  # image was built with localhost as VITE_BACKEND_ORIGIN.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_BACKEND_ORIGIN: ${VITE_BACKEND_ORIGIN:-http://localhost:8001}
+        VITE_STORAGE_MEDIA_ORIGIN: ${VITE_STORAGE_MEDIA_ORIGIN:-}
+    image: fitandsleek-frontend:latest
+    container_name: fitandsleek_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   qdrant:
+    profiles: [ai, full]
     image: qdrant/qdrant:latest
     container_name: qdrant
     restart: unless-stopped
@@ -10,6 +186,7 @@ services:
       - qdrant_storage:/qdrant/storage
 
   ai-service:
+    profiles: [ai, full]
     build:
       context: ./ai-service
       dockerfile: Dockerfile
@@ -18,17 +195,79 @@ services:
     restart: unless-stopped
     working_dir: /app
     volumes:
-      - ./ai-service:/app
       - ai_model_cache:/root/.cache/huggingface
     environment:
       QDRANT_URL: http://qdrant:6333
       PYTHONUNBUFFERED: "1"
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     depends_on:
       - qdrant
     ports:
       - "9000:8000"
 
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: fitandsleek_ngrok
+    restart: unless-stopped
+    profiles:
+      - ngrok
+    depends_on:
+      - backend
+    env_file:
+      - ./backend/.env
+    command:
+      - "http"
+      - "backend:8000"
+    ports:
+      - "4040:4040"
+
+  cf_frontend:
+    image: cloudflare/cloudflared:latest
+    container_name: fitandsleek_cf_frontend
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    command:
+      - "tunnel"
+      - "--no-autoupdate"
+      - "--url"
+      - "http://frontend:5173"
+    profiles:
+      - cloudflare
+
+  cf_backend:
+    image: cloudflare/cloudflared:latest
+    container_name: fitandsleek_cf_backend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    command:
+      - "tunnel"
+      - "--no-autoupdate"
+      - "--url"
+      - "http://backend:8000"
+    profiles:
+      - cloudflare
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: fitandsleek_tunnel
+    restart: unless-stopped
+    profiles:
+      - cloudflare-token
+    depends_on:
+      - frontend
+      - backend
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+
 volumes:
+  postgres_data:
+    name: fitandsleek_fullstack_postgres_data
+    external: true
+  pgadmin_data:
+    name: fitandsleek_fullstack_pgadmin_data
+    external: true
   qdrant_storage:
   ai_model_cache:

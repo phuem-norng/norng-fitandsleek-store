@@ -11,7 +11,22 @@ class HomepageSettingsController extends Controller
 {
     private function resolveAppLogoUrl(): string
     {
-        return asset(config('app.logo_url', '/logo.png'));
+        $configured = (string) config('app.logo_url', '/logo.png');
+        if ($configured === '') {
+            return '/logo.png';
+        }
+
+        if (str_starts_with($configured, 'http://') || str_starts_with($configured, 'https://')) {
+            $parts = parse_url($configured);
+            $host = strtolower((string) ($parts['host'] ?? ''));
+            if (in_array($host, ['localhost', '127.0.0.1', 'host.docker.internal', 'backend'], true)) {
+                $path = '/' . ltrim((string) ($parts['path'] ?? ''), '/');
+                return $path !== '/' ? $path : '/logo.png';
+            }
+            return $configured;
+        }
+
+        return '/' . ltrim($configured, '/');
     }
 
     /**
@@ -56,7 +71,7 @@ class HomepageSettingsController extends Controller
                 'header' => [
                     'logo_text' => 'Fitandsleek',
                     'logo_url' => $appLogoUrl,
-                    'background_color' => '#6F8F72',
+                    'background_color' => '#6e8b7e',
                     'search_placeholder' => 'Search products...',
                     'search_enabled' => true,
                     'cart_enabled' => true,
@@ -190,7 +205,7 @@ class HomepageSettingsController extends Controller
                     'contact_phone' => '+855 00 00 000',
                     'contact_address' => 'Phnom Penh, Cambodia',
                     'copyright_text' => '© 2026 Fitandsleek. All rights reserved.',
-                    'background_color' => '#6F8F72',
+                    'background_color' => '#6e8b7e',
                     'social_title' => 'FOLLOW US',
                     'social_enabled' => true,
                     'support_enabled' => true,

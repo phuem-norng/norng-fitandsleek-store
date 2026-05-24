@@ -1,99 +1,109 @@
 # FitandSleek Pro
 
-FitandSleek Pro is a full-stack eCommerce platform with a Laravel API backend and a React frontend.  
-This repository includes the application code, local environment scripts, and Docker-based development setup.
+Full-stack eCommerce platform: **Laravel API**, **React admin & storefront**, and **Flutter mobile** app.
+
+| Layer | Stack |
+| --- | --- |
+| Backend | Laravel 12, PHP, PostgreSQL, Sanctum |
+| Web | React 18, Vite, Tailwind CSS |
+| Mobile | Flutter (same Laravel API) |
+| AI / extras | Python services in `fastapi/` and `ai-service/` |
+| DevOps | Docker Compose, Composer, npm |
+
+---
 
 ## Table of Contents
 
-- [Project Overview](#project-overview)
-- [Key Features](#key-features)
-- [Technology Stack](#technology-stack)
-- [Repository Structure](#repository-structure)
+- [Features](#features)
+- [Repository structure](#repository-structure)
 - [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Manual Setup](#manual-setup)
-- [Environment Variables](#environment-variables)
-- [Running with Docker](#running-with-docker)
-- [API Overview](#api-overview)
+- [Quick start](#quick-start)
+- [Manual setup](#manual-setup)
+- [Environment variables](#environment-variables)
+- [Docker](#docker)
+- [API overview](#api-overview)
 - [Database](#database)
-- [Common Development Commands](#common-development-commands)
+- [Development commands](#development-commands)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
 
-## Project Overview
+---
 
-The platform supports a complete commerce workflow:
+## Features
 
-- Product catalog browsing with categories and search
-- Customer authentication and profile management
-- Cart and checkout processing
-- Payment handling and order tracking
-- Admin modules for products, categories, customers, and orders
+- **Storefront** — product listings, detail pages, cart, checkout
+- **Admin** — products, categories, orders, stock & inventory, discounts, customers
+- **Auth** — Laravel Sanctum (register, login, session/token)
+- **Stock & labels** — barcode/QR inventory labels linked to catalog products
+- **Media** — product images and static assets
+- **Multi-service** — Laravel + React + Flutter + optional AI services
 
-## Key Features
+---
 
-- **Storefront**: product listings, detail pages, cart, and checkout
-- **Authentication**: Laravel Sanctum-based auth endpoints and session/token flow
-- **Admin operations**: management pages and APIs for commerce operations
-- **Media support**: product imagery and static assets for storefront and admin
-- **Multi-service architecture**: Laravel backend, React frontend, and supporting services
+## Repository structure
 
-## Technology Stack
+```
+fitandsleek/
+├── backend/          # Laravel API, migrations, seeders
+├── frontend/         # React (Vite + Tailwind) — admin + storefront
+├── mobile/           # Flutter mobile storefront
+├── fastapi/          # Python API helpers
+├── ai-service/       # AI integration utilities
+├── docker-compose.yml
+├── docker-compose.fullstack.yml
+├── setup.bat         # Windows bootstrap
+└── setup.sh          # macOS / Linux bootstrap
+```
 
-- **Backend**: Laravel 12, PHP, PostgreSQL, Sanctum
-- **Frontend**: React 18, Vite, Tailwind CSS
-- **Supporting services**: Python/FastAPI modules in `fastapi/` and `ai-service/`
-- **Tooling**: Docker Compose, Composer, npm
-
-## Repository Structure
-
-- `backend/` - Laravel application (API, business logic, migrations, seeders)
-- `frontend/` - React application (Vite + Tailwind)
-- `fastapi/` - Additional Python API service components
-- `ai-service/` - AI-related service code and integration utilities
-- `docker-compose.yml` - Core container orchestration
-- `docker-compose.fullstack.yml` - Extended full-stack compose setup
-- `setup.bat` / `setup.sh` - One-step local bootstrap scripts
+---
 
 ## Prerequisites
 
-Install these dependencies before setup:
-
-- PHP 8.1+ and Composer
+- PHP 8.1+ and [Composer](https://getcomposer.org/)
 - Node.js 18+ and npm
 - PostgreSQL 13+
-- Docker Desktop (recommended)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended)
+- Flutter SDK (only if you run the mobile app)
 
-## Quick Start
+---
 
-Run from the project root.
+## Quick start
 
-### Windows
+Run from the **project root**.
+
+**Windows**
 
 ```bat
 setup.bat
 ```
 
-### macOS/Linux
+**macOS / Linux**
 
 ```bash
 sh setup.sh
 ```
 
-What setup scripts do:
+The setup scripts will:
 
 1. Create `backend/.env` from `backend/.env.example` if missing
-2. Install backend dependencies (`composer install`)
-3. Install frontend dependencies (`npm install`)
-4. Run Laravel migrations
-5. Start containers via Docker Compose
+2. Run `composer install` and `npm install`
+3. Run Laravel migrations
+4. Start services via Docker Compose (when configured)
 
-## Manual Setup
+**Default URLs**
 
-Use manual setup when you want explicit control of each step.
+| Service | URL |
+| --- | --- |
+| API | http://127.0.0.1:8001 |
+| Web (Vite) | http://127.0.0.1:5173 |
+| Flutter web (optional) | http://127.0.0.1:3000 |
 
-### 1) Backend setup
+---
+
+## Manual setup
+
+### Backend
 
 ```bash
 cd backend
@@ -105,9 +115,7 @@ php artisan storage:link
 php artisan serve
 ```
 
-Default backend URL: `http://127.0.0.1:8001`
-
-### 2) Frontend setup
+### Frontend
 
 ```bash
 cd frontend
@@ -115,67 +123,83 @@ npm install
 npm run dev
 ```
 
-Default frontend URL: `http://127.0.0.1:5173`
+### Mobile (optional)
 
-## Environment Variables
+```bash
+cd mobile
+flutter pub get
+flutter run -d web-server --web-port=3000 --web-hostname=0.0.0.0
+```
 
-### Backend (`backend/.env`)
+---
 
-Configure database, app URL, cache/session, mail, and external service credentials.
+## Environment variables
 
-Important notes:
+### Backend — `backend/.env`
 
-- Ensure DB credentials match your PostgreSQL instance.
-- Keep secrets private and never commit sensitive keys.
+Set database credentials, `APP_URL`, mail, and any third-party keys. **Do not commit secrets.**
 
-### Frontend (`frontend/.env`)
-
-Recommended local values:
+### Frontend — `frontend/.env`
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8001/api
 VITE_BACKEND_ORIGIN=http://127.0.0.1:8001
 ```
 
-## Running with Docker
+---
 
-From project root:
+## Docker
 
-```bash
-docker compose up -d --build
+**Light dev stack** (Postgres + API + frontend):
+
+```powershell
+pwsh scripts/docker-up.ps1
 ```
 
-If your environment uses older Docker Compose:
+**Full stack** (queue, scheduler, Qdrant, AI, pgAdmin):
 
-```bash
-docker-compose up -d --build
+```powershell
+pwsh scripts/docker-up.ps1 -Mode full
 ```
 
-To stop services:
+Or with Compose directly:
+
+```bash
+docker compose up -d --build --remove-orphans
+docker compose --profile full up -d --build
+```
+
+Stop:
 
 ```bash
 docker compose down
 ```
 
-## API Overview
+---
 
-Representative endpoint groups used by the frontend:
+## API overview
 
-- **Auth**: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me`
-- **Catalog**: `GET /api/categories`, `GET /api/products`, `GET /api/products/{slug}`
-- **Cart**: `GET /api/cart`, `POST /api/cart/items`, `PATCH /api/cart/items/{id}`, `DELETE /api/cart/items/{id}`
-- **Orders**: `POST /api/checkout`, `GET /api/orders`
-- **Admin**: `/api/admin/categories`, `/api/admin/products`, `/api/admin/orders`, `/api/admin/customers`
+| Area | Examples |
+| --- | --- |
+| Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/me` |
+| Catalog | `GET /api/categories`, `GET /api/products`, `GET /api/products/{slug}` |
+| Cart | `GET /api/cart`, `POST /api/cart/items` |
+| Orders | `POST /api/checkout`, `GET /api/orders` |
+| Admin | `/api/admin/categories`, `/api/admin/products`, `/api/admin/orders` |
+
+---
 
 ## Database
 
 - Migrations: `backend/database/migrations/`
 - Seeders: `backend/database/seeders/`
-- Optional sample import: `fitandsleekpro.sql` (if available in your local copy)
+- Optional SQL dump: `fitandsleekpro.sql` (if present locally)
 
-## Common Development Commands
+---
 
-### Backend
+## Development commands
+
+**Backend**
 
 ```bash
 cd backend
@@ -184,7 +208,7 @@ php artisan migrate
 php artisan test
 ```
 
-### Frontend
+**Frontend**
 
 ```bash
 cd frontend
@@ -193,28 +217,29 @@ npm run build
 npm run preview
 ```
 
+---
+
 ## Troubleshooting
 
-- **Frontend folder appears as submodule on GitHub**
-  - Remove gitlink tracking and nested `frontend/.git`, then commit and push frontend as normal files.
-- **`npm install` or `composer install` fails**
-  - Confirm required versions of Node.js, npm, PHP, and Composer are installed.
-- **Database connection error**
-  - Verify database host, port, username, password, and database name in `backend/.env`.
-- **CORS or API URL issues**
-  - Check `VITE_API_BASE_URL` and `VITE_BACKEND_ORIGIN` in `frontend/.env`.
+| Issue | What to check |
+| --- | --- |
+| README or repo looks broken on GitHub | Ensure `README.md` is UTF-8 with normal line breaks (no binary/null bytes at end of file). |
+| `frontend/` shows as a submodule | Remove nested `frontend/.git` and recommit frontend as normal files. |
+| `npm install` / `composer install` fails | Verify Node, npm, PHP, and Composer versions. |
+| Database connection error | `DB_*` settings in `backend/.env`. |
+| CORS / API errors | `VITE_API_BASE_URL` and `VITE_BACKEND_ORIGIN` in `frontend/.env`. |
+
+---
 
 ## Contributing
 
-This is an internal project repository.
+1. Branch from `main`
+2. Keep commits focused
+3. Run tests/build before opening a PR
+4. Request review before merge
 
-Recommended workflow:
-
-1. Create a feature branch from `main`
-2. Keep commits focused and descriptive
-3. Run relevant tests/builds before opening a pull request
-4. Request review and address feedback before merge
+---
 
 ## License
 
-All rights reserved unless explicitly stated otherwise by the repository owner.
+All rights reserved unless stated otherwise by the repository owner.

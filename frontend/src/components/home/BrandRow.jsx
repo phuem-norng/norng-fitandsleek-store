@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
 
 function BrandLogo({ name, logo_url }) {
   const [logoFailed, setLogoFailed] = useState(false);
@@ -10,7 +11,7 @@ function BrandLogo({ name, logo_url }) {
     <div className="h-14 w-28 flex items-center justify-center transition-transform duration-300 hover:-translate-y-0.5">
       {canRenderLogo ? (
         <img
-          src={logo_url}
+          src={resolveImageUrl(logo_url)}
           alt={name}
           onError={() => setLogoFailed(true)}
           className="h-10 w-auto object-contain transition-transform duration-300 hover:scale-105"
@@ -94,7 +95,7 @@ export default function BrandRow() {
             <button
               type="button"
               onClick={() => scrollBy(-1)}
-              className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full bg-white/90 shadow-sm border border-zinc-200 hover:bg-white transition-all duration-200 ease-out ${
+              className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full border-0 bg-transparent text-zinc-800 shadow-none hover:opacity-75 transition-opacity duration-200 ease-out ${
                 canScrollLeft ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
               }`}
               aria-label="Scroll left"
@@ -107,7 +108,7 @@ export default function BrandRow() {
             <button
               type="button"
               onClick={() => scrollBy(1)}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full bg-white/90 shadow-sm border border-zinc-200 hover:bg-white transition-all duration-200 ease-out ${
+              className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full border-0 bg-transparent text-zinc-800 shadow-none hover:opacity-75 transition-opacity duration-200 ease-out ${
                 canScrollRight ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
               }`}
               aria-label="Scroll right"

@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\BakongApi;
 use App\Services\BakongKhqrService;
+use App\Services\PaidOrderInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -73,6 +74,17 @@ class PaymentController extends Controller
         // For now, we'll simulate successful verification
         
         DB::transaction(function () use ($payment, $order) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->payment_status === 'paid') {
+                $payment->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                ]);
+
+                return;
+            }
+
             $payment->update([
                 'status' => 'paid',
                 'paid_at' => now(),
@@ -84,14 +96,7 @@ class PaymentController extends Controller
             ]);
 
             $order->load('items.product');
-            foreach ($order->items as $item) {
-                $product = $item->product;
-                if ($product && $product->stock !== null) {
-                    $product->update([
-                        'stock' => max(0, (int) $product->stock - (int) ($item->qty ?? 0)),
-                    ]);
-                }
-            }
+            PaidOrderInventory::applyForOrder($order);
         });
 
         // Clear cart only after payment succeeds
@@ -154,6 +159,18 @@ class PaymentController extends Controller
         }
 
         DB::transaction(function () use ($payment, $order, $validated) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->payment_status === 'paid') {
+                $payment->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'reference_code' => 'CARD-' . strtoupper(substr($validated['card_number'], -4)) . '-' . now()->timestamp,
+                ]);
+
+                return;
+            }
+
             $payment->update([
                 'status' => 'paid',
                 'paid_at' => now(),
@@ -166,14 +183,7 @@ class PaymentController extends Controller
             ]);
 
             $order->load('items.product');
-            foreach ($order->items as $item) {
-                $product = $item->product;
-                if ($product && $product->stock !== null) {
-                    $product->update([
-                        'stock' => max(0, (int) $product->stock - (int) ($item->qty ?? 0)),
-                    ]);
-                }
-            }
+            PaidOrderInventory::applyForOrder($order);
         });
 
         // Clear cart only after payment succeeds
@@ -195,14 +205,14 @@ class PaymentController extends Controller
 
         return [
             'bakong' => [
-                'receive_account' => $settings['bakong_receive_account']?->value ?? config('services.bakong.receive_account'),
-                'merchant_name' => $settings['bakong_merchant_name']?->value ?? config('services.bakong.merchant_name'),
-                'merchant_city' => $settings['bakong_merchant_city']?->value ?? config('services.bakong.merchant_city'),
-                'enabled' => (bool)($settings['payment_method_bakong_khqr']?->value ?? true),
+                'receive_account' => $settings->get('bakong_receive_account')?->value ?? config('services.bakong.receive_account'),
+                'merchant_name' => $settings->get('bakong_merchant_name')?->value ?? config('services.bakong.merchant_name'),
+                'merchant_city' => $settings->get('bakong_merchant_city')?->value ?? config('services.bakong.merchant_city'),
+                'enabled' => (bool) ($settings->get('payment_method_bakong_khqr')?->value ?? true),
             ],
             'card' => [
-                'provider' => $settings['card_provider']?->value ?? 'demo',
-                'enabled' => (bool)($settings['payment_method_card_visa']?->value ?? true),
+                'provider' => $settings->get('card_provider')?->value ?? 'demo',
+                'enabled' => (bool) ($settings->get('payment_method_card_visa')?->value ?? true),
             ],
         ];
     }
@@ -331,6 +341,8 @@ class PaymentController extends Controller
 
             if ((int) $responseCode === 0 && ! empty($transaction) && $matchesOrder) {
                 DB::transaction(function () use ($payment, $order, $transaction, $response) {
+                    $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
                     $payment->update([
                         'status' => 'paid',
                         'paid_at' => now(),
@@ -345,14 +357,8 @@ class PaymentController extends Controller
                         ]);
                         $this->clearUserCart((int) $order->user_id);
 
-                        foreach ($order->items as $item) {
-                            $product = $item->product;
-                            if ($product && $product->stock !== null) {
-                                $product->update([
-                                    'stock' => max(0, (int) $product->stock - (int) ($item->qty ?? 0)),
-                                ]);
-                            }
-                        }
+                        $order->load('items.product');
+                        PaidOrderInventory::applyForOrder($order);
                     }
                 });
             }
@@ -412,29 +418,39 @@ class PaymentController extends Controller
         $status = data_get($data, 'status') ?? data_get($data, 'data.status');
         $status = $this->normalizeKhqrStatus($status);
 
-        $payment->update([
-            'status' => $status,
-            'paid_at' => $status === 'paid' ? now() : null,
-            'raw_response' => $data,
-        ]);
+        if ($status === 'paid' && $payment->order_id) {
+            DB::transaction(function () use ($payment, $status, $data) {
+                $payment->update([
+                    'status' => $status,
+                    'paid_at' => now(),
+                    'raw_response' => $data,
+                ]);
 
-        if ($status === 'paid' && $payment->order && $payment->order->payment_status !== 'paid') {
-            $order = $payment->order->load('items.product');
-            $order->update([
-                'payment_status' => 'paid',
-                'status' => 'processing',
-            ]);
-
-            $this->clearUserCart((int) $order->user_id);
-
-            foreach ($order->items as $item) {
-                $product = $item->product;
-                if ($product && $product->stock !== null) {
-                    $product->update([
-                        'stock' => max(0, (int) $product->stock - (int) ($item->qty ?? 0)),
-                    ]);
+                $order = Order::query()->whereKey($payment->order_id)->lockForUpdate()->first();
+                if (! $order) {
+                    return;
                 }
-            }
+
+                if ($order->payment_status === 'paid') {
+                    return;
+                }
+
+                $order->update([
+                    'payment_status' => 'paid',
+                    'status' => 'processing',
+                ]);
+
+                $this->clearUserCart((int) $order->user_id);
+
+                $order->load('items.product');
+                PaidOrderInventory::applyForOrder($order);
+            });
+        } else {
+            $payment->update([
+                'status' => $status,
+                'paid_at' => $status === 'paid' ? now() : null,
+                'raw_response' => $data,
+            ]);
         }
 
         return response()->json(['ok' => true]);

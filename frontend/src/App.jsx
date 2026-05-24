@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import SiteLayout from "./components/layout/SiteLayout.jsx";
 import Home from "./pages/Home.jsx";
 import Search from "./pages/Search.jsx";
@@ -29,6 +29,9 @@ import AdminLayout from "./pages/admin/AdminLayout.jsx";
 import AdminProducts from "./pages/admin/Products.jsx";
 import AdminCategories from "./pages/admin/Categories.jsx";
 import AdminBrands from "./pages/admin/Brands.jsx";
+import AdminBarcodeQR from "./pages/admin/StockInventory.jsx";
+import InventoryIntegrity from "./pages/admin/InventoryIntegrity.jsx";
+import AdminPosScan from "./pages/admin/Checkout.jsx";
 import AdminOrders from "./pages/admin/Orders.jsx";
 import AdminInvoicePage from "./pages/admin/Invoice.jsx";
 import AdminCustomers from "./pages/admin/Customers.jsx";
@@ -37,8 +40,10 @@ import AdminDashboard from "./pages/admin/Dashboard.jsx";
 import AdminHome from "./pages/admin/AdminHome.jsx";
 import HomePageManager from "./pages/admin/HomePageManager.jsx";
 import CompleteHomepageManager from "./pages/admin/CompleteHomepageManager.jsx";
+import { CatalogAvailabilityProvider } from "./state/catalogAvailability.jsx";
 import { HomepageSettingsProvider, useHomepageSettings } from "./state/homepageSettings.jsx";
 import { useLanguage } from "./lib/i18n.jsx";
+import CustomCursor from "./components/CustomCursor.jsx";
 import Reports from "./pages/admin/Reports.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
@@ -48,20 +53,25 @@ import Messages from "./pages/admin/Messages.jsx";
 import ChatbotSettings from "./pages/admin/ChatbotSettings.jsx";
 import Notifications from "./pages/admin/Notifications.jsx";
 import Profile from "./pages/admin/Profile.jsx";
-import AdminSales from "./pages/admin/Sales.jsx";
+import AdminDiscounts from "./pages/admin/Discounts.jsx";
 import UserManagement from "./pages/admin/UserManagement.jsx";
 import AdminManagement from "./pages/admin/AdminManagement.jsx";
 import AdminPayments from "./pages/admin/Payments.jsx";
 import HomepageSettingsTest from "./pages/HomepageSettingsTest.jsx";
 import PublicHomepageManager from "./pages/PublicHomepageManager.jsx";
 import ExtendedHomepageManager from "./pages/ExtendedHomepageManager.jsx";
-import AdminShipments from "./pages/admin/Shipments.jsx";
-import AdminDrivers from "./pages/admin/Drivers.jsx";
 import AdminReplacementCases from "./pages/admin/ReplacementCases.jsx";
 import PaymentSettings from "./pages/admin/PaymentSettings.jsx";
 import DriverScanPage from "./pages/driver/Scan.jsx";
 import { useAuth } from "./state/auth.jsx";
+import { useTheme } from "./state/theme.jsx";
 import { AdminContentSkeleton } from "./components/admin/AdminLoading.jsx";
+
+/** Old URLs used `/admin/barcode-qr`; preserve redirects after rename to `/admin/stock-inventory`. */
+function LegacyBarcodeQrToStockInventoryEdit() {
+  const { id } = useParams();
+  return <Navigate to={`/admin/stock-inventory/${id}/edit`} replace />;
+}
 
 function CustomerPageSkeleton() {
   return (
@@ -120,8 +130,8 @@ function isAdminUser(user) {
 function RequireAdmin({ children }) {
   const { user, booted } = useAuth();
   if (!booted) return (
-    <div className="p-6">
-      <AdminContentSkeleton lines={2} imageHeight={140} className="max-w-4xl mx-auto" />
+    <div className="flex min-h-[100dvh] w-full flex-col p-6">
+      <AdminContentSkeleton lines={2} imageHeight={140} className="mx-auto w-full max-w-4xl flex-1" />
     </div>
   );
   if (!user) return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
@@ -129,11 +139,33 @@ function RequireAdmin({ children }) {
   return children;
 }
 
+/** Sets `data-admin-theme` on `<html>` only on `/admin` when dark mode is on. Tailwind `dark:` is scoped to `html.admin-dashboard[data-admin-theme="dark"]` so the storefront never inherits it. */
+function AdminHtmlThemeSync() {
+  const location = useLocation();
+  const { mode, hydrated } = useTheme();
+
+  React.useEffect(() => {
+    const root = document.documentElement;
+    if (!hydrated) return;
+    const onAdmin = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+    if (onAdmin && mode === "dark") {
+      root.setAttribute("data-admin-theme", "dark");
+    } else {
+      root.removeAttribute("data-admin-theme");
+    }
+  }, [location.pathname, mode, hydrated]);
+
+  return null;
+}
+
 export default function App() {
   return (
-    <HomepageSettingsProvider>
-      <FontSettingsSync />
-      <Routes>
+    <CatalogAvailabilityProvider>
+      <HomepageSettingsProvider>
+        <FontSettingsSync />
+        <AdminHtmlThemeSync />
+        <CustomCursor />
+        <Routes>
         <Route element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="/search" element={<Search />} />
@@ -207,9 +239,23 @@ export default function App() {
           <Route index element={<AdminHome />} />
           <Route path="reports" element={<Reports />} />
           <Route path="products" element={<AdminProducts />} />
-          <Route path="sales" element={<AdminSales />} />
+          <Route path="inventory" element={<AdminProducts />} />
+          <Route path="discounts" element={<AdminDiscounts />} />
+          <Route path="sales" element={<AdminDiscounts />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="brands" element={<AdminBrands />} />
+          <Route path="stock-inventory/new" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory/:id/edit" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory" element={<AdminBarcodeQR />} />
+          <Route path="stock-received/new" element={<AdminBarcodeQR />} />
+          <Route path="stock-received/:id/edit" element={<AdminBarcodeQR />} />
+          <Route path="stock-received" element={<AdminBarcodeQR />} />
+          <Route path="inventory-integrity" element={<InventoryIntegrity />} />
+          <Route path="barcode-qr/new" element={<Navigate to="/admin/stock-inventory/new" replace />} />
+          <Route path="barcode-qr/:id/edit" element={<LegacyBarcodeQrToStockInventoryEdit />} />
+          <Route path="barcode-qr" element={<Navigate to="/admin/stock-inventory" replace />} />
+          <Route path="checkout" element={<AdminPosScan />} />
+          <Route path="pos" element={<Navigate to="/admin/checkout" replace />} />
           <Route path="homepage" element={<HomePageManager />} />
           <Route path="homepage-complete" element={<CompleteHomepageManager />} />
           <Route path="orders" element={<AdminOrders />} />
@@ -225,15 +271,14 @@ export default function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="admin-management" element={<AdminManagement />} />
           <Route path="payments" element={<AdminPayments />} />
-          <Route path="drivers" element={<AdminDrivers />} />
-          <Route path="shipments" element={<AdminShipments />} />
           <Route path="replacement-cases" element={<AdminReplacementCases />} />
           <Route path="payment-settings" element={<PaymentSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </HomepageSettingsProvider>
+        </Routes>
+      </HomepageSettingsProvider>
+    </CatalogAvailabilityProvider>
   );
 }
 

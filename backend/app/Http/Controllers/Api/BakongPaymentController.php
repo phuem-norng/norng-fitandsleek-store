@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\PaidOrderInventory;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\Payment;
@@ -191,21 +192,20 @@ class BakongPaymentController extends Controller
 
     private function markOrderAsPaid(Order $order): void
     {
-        $order->update([
+        $locked = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+        if ($locked->payment_status === 'paid') {
+            return;
+        }
+
+        $locked->update([
             'payment_status' => 'paid',
             'status' => 'processing',
         ]);
 
-        $order->loadMissing('items.product');
+        $locked->loadMissing('items.product');
 
-        foreach ($order->items as $item) {
-            $product = $item->product;
-            if ($product && $product->stock !== null) {
-                $product->update([
-                    'stock' => max(0, (int) $product->stock - (int) ($item->qty ?? 0)),
-                ]);
-            }
-        }
+        PaidOrderInventory::applyForOrder($locked);
     }
 
     private function formatPaymentResponse(Payment $payment): array

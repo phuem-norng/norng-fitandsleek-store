@@ -1,9 +1,10 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../state/cart";
 import { useAuth } from "../state/auth";
 import { resolveImageUrl } from "../lib/images";
 import { useLanguage } from "../lib/i18n.jsx";
+import { setupTelegramBackButton, setupTelegramMainButton, triggerTelegramHaptic } from "../lib/telegramWebApp";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -15,6 +16,37 @@ export default function CartPage() {
   const items = cart?.items || [];
   const { t } = useLanguage();
   const { user } = useAuth();
+  const nav = useNavigate();
+
+  React.useEffect(() => {
+    const safeTotal = Number(total || 0);
+    const checkoutLabel = `${t("checkout") || "Checkout"} • $${safeTotal.toFixed(2)}`;
+
+    const goCheckout = () => {
+      triggerTelegramHaptic("impact", "light");
+      if (!user) {
+        window.dispatchEvent(new Event("fs:open-login"));
+        return;
+      }
+      nav("/checkout");
+    };
+    const goBack = () => nav(-1);
+
+    const cleanupMain = setupTelegramMainButton({
+      text: checkoutLabel,
+      onClick: goCheckout,
+      color: "#111111",
+      textColor: "#FFFFFF",
+      isVisible: items.length > 0,
+      isEnabled: !loading,
+    });
+    const cleanupBack = setupTelegramBackButton({ onClick: goBack, isVisible: true });
+
+    return () => {
+      cleanupMain();
+      cleanupBack();
+    };
+  }, [items.length, loading, nav, t, total, user]);
 
   const getPriceMeta = (item) => {
     const unitPaid = Number(item?.unit_price || item?.product?.final_price || item?.product?.price || 0);
@@ -149,7 +181,7 @@ export default function CartPage() {
             {t('checkout')}
           </Link>
 
-          <p className="mt-3 text-[11px] text-zinc-500">
+          <p className="mt-3 text-xs text-zinc-500">
             {t('checkoutNoteStart')} <code className="font-mono">POST /api/checkout</code> {t('checkoutNoteEnd')}
           </p>
         </div>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Product;
+use App\Services\ProductVariantInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -14,6 +15,23 @@ class CartController extends Controller
     private function resolveUnitPrice(Product $product): float
     {
         return (float) ($product->final_price ?? $product->price ?? 0);
+    }
+
+    private function existingVariantQuantity(int $cartId, int $productId, ?string $size, ?string $color): int
+    {
+        $q = CartItem::where('cart_id', $cartId)->where('product_id', $productId);
+        if ($size !== null && $size !== '') {
+            $q->where('size', $size);
+        } else {
+            $q->whereNull('size');
+        }
+        if ($color !== null && $color !== '') {
+            $q->where('color', $color);
+        } else {
+            $q->whereNull('color');
+        }
+
+        return (int) $q->sum('quantity');
     }
 
     private function userCartId(int $userId): int
@@ -31,7 +49,7 @@ class CartController extends Controller
         $userId = (int) $request->user()->id;
         $cartId = $this->userCartId($userId);
 
-        $cart = Cart::with(['items.product.category', 'items.product.activeSale'])->findOrFail($cartId);
+        $cart = Cart::with(['items.product.category', 'items.product.activeDiscount'])->findOrFail($cartId);
 
         $total = 0;
         foreach ($cart->items as $i) {
@@ -65,10 +83,8 @@ class CartController extends Controller
         $color = $data['color'] ?? null;
 
         if (is_numeric($product->stock)) {
-            $stock = (int) $product->stock;
-            $existingTotal = CartItem::where('cart_id', $cartId)
-                ->where('product_id', $product->id)
-                ->sum('quantity');
+            $stock = ProductVariantInventory::effectiveCapForCartLine($product, $color, $size);
+            $existingTotal = $this->existingVariantQuantity($cartId, $product->id, $size, $color);
             if ($existingTotal + $qty > $stock) {
                 return response()->json([
                     'message' => 'Stock limit reached for this product.',
@@ -121,11 +137,21 @@ class CartController extends Controller
         $product = Product::find($item->product_id);
         $newQty = (int) $data['quantity'];
         if ($product && is_numeric($product->stock)) {
-            $stock = (int) $product->stock;
+            $stock = ProductVariantInventory::effectiveCapForCartLine($product, $item->color, $item->size);
             $otherQty = CartItem::where('cart_id', $cartId)
                 ->where('product_id', $item->product_id)
-                ->where('id', '!=', $item->id)
-                ->sum('quantity');
+                ->where('id', '!=', $item->id);
+            if ($item->size !== null && $item->size !== '') {
+                $otherQty->where('size', $item->size);
+            } else {
+                $otherQty->whereNull('size');
+            }
+            if ($item->color !== null && $item->color !== '') {
+                $otherQty->where('color', $item->color);
+            } else {
+                $otherQty->whereNull('color');
+            }
+            $otherQty = (int) $otherQty->sum('quantity');
             if ($otherQty + $newQty > $stock) {
                 return response()->json([
                     'message' => 'Stock limit reached for this product.',

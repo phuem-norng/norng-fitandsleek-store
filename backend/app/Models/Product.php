@@ -10,6 +10,8 @@ class Product extends Model
         'category_id',
         'brand_id',
         'sku',
+        'barcode_code',
+        'stock_label_id',
         'name',
         'slug',
         'description',
@@ -27,6 +29,7 @@ class Product extends Model
         'model_info',
         'colors',
         'sizes',
+        'variant_matrix',
         'size_guide',
         'delivery_info',
         'support_phone',
@@ -44,6 +47,7 @@ class Product extends Model
         'attributes' => 'array',
         'colors' => 'array',
         'sizes' => 'array',
+        'variant_matrix' => 'array',
         'payment_methods' => 'array',
     ];
 
@@ -64,9 +68,9 @@ class Product extends Model
         return $this->belongsTo(Brand::class);
     }
 
-    public function sale()
+    public function discount()
     {
-        return $this->hasOne(Sale::class);
+        return $this->hasOne(Discount::class);
     }
 
     public function images()
@@ -94,9 +98,9 @@ class Product extends Model
         return $this->belongsToMany(Wishlist::class, 'wishlist_items');
     }
 
-    public function activeSale()
+    public function activeDiscount()
     {
-        return $this->hasOne(Sale::class)
+        return $this->hasOne(Discount::class)
             ->where('is_active', true)
             ->where('start_date', '<=', now())
             ->where('end_date', '>=', now());
@@ -104,23 +108,23 @@ class Product extends Model
 
     public function getDiscountPriceAttribute(): ?float
     {
-        $activeSale = $this->resolveActiveSale();
-        if (!$activeSale || $activeSale->sale_price === null) {
+        $activeDiscount = $this->resolveActiveDiscount();
+        if (!$activeDiscount || $activeDiscount->sale_price === null) {
             return null;
         }
 
-        return (float) $activeSale->sale_price;
+        return (float) $activeDiscount->sale_price;
     }
 
     public function getDiscountPercentageAttribute(): ?int
     {
-        $activeSale = $this->resolveActiveSale();
-        if (!$activeSale) {
+        $activeDiscount = $this->resolveActiveDiscount();
+        if (!$activeDiscount) {
             return null;
         }
 
-        if ($activeSale->discount_type === 'percentage') {
-            return (int) round((float) $activeSale->discount_value);
+        if ($activeDiscount->discount_type === 'percentage') {
+            return (int) round((float) $activeDiscount->discount_value);
         }
 
         $basePrice = (float) $this->price;
@@ -142,12 +146,12 @@ class Product extends Model
         return $this->discount_price !== null && $this->discount_price < (float) $this->price;
     }
 
-    private function resolveActiveSale(): ?Sale
+    private function resolveActiveDiscount(): ?Discount
     {
-        if ($this->relationLoaded('activeSale')) {
-            return $this->getRelation('activeSale');
+        if ($this->relationLoaded('activeDiscount')) {
+            return $this->getRelation('activeDiscount');
         }
 
-        return $this->activeSale()->first();
+        return $this->activeDiscount()->first();
     }
 }

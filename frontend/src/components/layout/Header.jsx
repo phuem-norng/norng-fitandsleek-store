@@ -11,15 +11,7 @@ import { Camera, X, Bell, Menu, Search, User, Heart, ShoppingBag } from "lucide-
 import Logo from "../Logo.jsx";
 import LoginDialog from "../dialogs/LoginDialog.jsx";
 import RegisterDialog from "../dialogs/RegisterDialog.jsx";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-} from "../ui/AlertDialog.jsx";
+import SmartSearchModal from "../search/SmartSearchModal.jsx";
 
 function cn(...xs) {
   return xs.filter(Boolean).join(" ");
@@ -34,7 +26,7 @@ function getInitials(label) {
 function Badge({ value }) {
   if (!value) return null;
   return (
-    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-[10px] leading-[18px] text-center animate-pulse">
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-xs leading-tight leading-[18px] text-center animate-pulse">
       {value}
     </span>
   );
@@ -51,8 +43,11 @@ function Icon({ name }) {
 
 function ProfileMenu({ user, onLogout, t, className = "" }) {
   const [open, setOpen] = useState(false);
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const ref = useRef(null);
-  const avatarSrc = user?.profile_image_url || user?.profile_image_path ? resolveImageUrl(user.profile_image_url || user.profile_image_path) : null;
+  const avatarSrc = user?.profile_image_url || user?.profile_image_path
+    ? resolveImageUrl(user.profile_image_url || user.profile_image_path)
+    : null;
   const initials = getInitials(user?.name || user?.email || "");
 
   useEffect(() => {
@@ -66,6 +61,10 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
+  useEffect(() => {
+    setAvatarBroken(false);
+  }, [avatarSrc]);
+
   if (!user) return null;
 
   return (
@@ -76,8 +75,13 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
         aria-label={t("account")}
       >
         <span className="w-9 h-9 rounded-full bg-zinc-900/10 text-zinc-900 flex items-center justify-center overflow-hidden">
-          {avatarSrc ? (
-            <img src={avatarSrc} alt={user?.name || "Profile"} className="w-full h-full object-cover" />
+          {avatarSrc && !avatarBroken ? (
+            <img
+              src={avatarSrc}
+              alt={user?.name || "Profile"}
+              className="w-full h-full object-cover"
+              onError={() => setAvatarBroken(true)}
+            />
           ) : (
             <span className="text-xs font-bold">{initials || "U"}</span>
           )}
@@ -88,8 +92,13 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
         <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50">
           <div className="px-4 py-4 border-b border-slate-100 flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-zinc-900/10 text-zinc-900 flex items-center justify-center overflow-hidden">
-              {avatarSrc ? (
-                <img src={avatarSrc} alt={user?.name || "Profile"} className="w-full h-full object-cover" />
+              {avatarSrc && !avatarBroken ? (
+                <img
+                  src={avatarSrc}
+                  alt={user?.name || "Profile"}
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarBroken(true)}
+                />
               ) : (
                 <span className="text-sm font-bold">{initials || "U"}</span>
               )}
@@ -170,67 +179,67 @@ function DropdownMenu({ items, children, hasSubtitle }) {
             // Full-width sections layout
             <div className="container-safe mx-auto py-6 px-8">
               <div className="grid grid-cols-4 gap-10">
-              {safeItems.filter(item => item?.type === 'section').map((section, idx) => (
-                <div key={idx} className={section.className || ''}>
-                  {section.to ? (
-                    <Link
-                      to={section.to}
-                      className="block group mb-3"
-                    >
-                      <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1 group-hover:text-emerald-600 transition-colors">
-                        {section.label}
-                      </h4>
-                      {section.description && (
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          {section.description}
-                        </p>
-                      )}
-                    </Link>
-                  ) : (
-                    <div className="block mb-3">
-                      <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1">
-                        {section.label}
-                      </h4>
-                      {section.description && (
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          {section.description}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    {section.items && section.items.map((item, itemIdx) => (
+                {safeItems.filter(item => item?.type === 'section').map((section, idx) => (
+                  <div key={idx} className={section.className || ''}>
+                    {section.to ? (
                       <Link
-                        key={itemIdx}
-                        to={item.to}
-                        className="fs-menu-item"
+                        to={section.to}
+                        className="block group mb-3"
                       >
-                        {item.label}
+                        <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1 group-hover:text-emerald-600 transition-colors">
+                          {section.label}
+                        </h4>
+                        {section.description && (
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            {section.description}
+                          </p>
+                        )}
                       </Link>
-                    ))}
+                    ) : (
+                      <div className="block mb-3">
+                        <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1">
+                          {section.label}
+                        </h4>
+                        {section.description && (
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            {section.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      {section.items && section.items.map((item, itemIdx) => (
+                        <Link
+                          key={itemIdx}
+                          to={item.to}
+                          className="fs-menu-item"
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
             </div>
           ) : (
             // Simple list layout - horizontal row
             <div className="container-safe mx-auto py-6 px-8">
               <div className="flex items-center justify-center gap-3 flex-wrap">
                 {safeItems.map((item, idx) => (
-                <Link
-                  key={idx}
-                  to={item.to}
-                  className={cn(
-                    "px-6 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
-                    item.highlight 
-                      ? "text-zinc-900 font-semibold bg-zinc-100 hover:bg-zinc-200" 
-                      : "text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
+                  <Link
+                    key={idx}
+                    to={item.to}
+                    className={cn(
+                      "px-6 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
+                      item.highlight
+                        ? "text-zinc-900 font-semibold bg-zinc-100 hover:bg-zinc-200"
+                        : "text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
               </div>
             </div>
           )}
@@ -266,7 +275,7 @@ function AnimatedNavLink({ to, label, hasDropdown, onHover, isHovered }) {
 function NavBar({ navItems }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [showMore, setShowMore] = useState(false);
-  
+
   // Responsive menu: show fewer items on smaller desktops, more on larger screens
   const visibleItemsCount = navItems.length > 8 ? 5 : navItems.length > 6 ? 5 : Math.min(6, navItems.length);
   const visibleItems = navItems.slice(0, visibleItemsCount);
@@ -287,27 +296,27 @@ function NavBar({ navItems }) {
           return item.items ? (
             <DropdownMenu key={itemKey} items={item.items}>
               {(isOpen) => (
-                <AnimatedNavLink 
-                  to={item.to} 
-                  label={item.label} 
-                  hasDropdown 
+                <AnimatedNavLink
+                  to={item.to}
+                  label={item.label}
+                  hasDropdown
                   onHover={() => setHoveredIndex(index)}
                   isHovered={hoveredIndex === index || isOpen}
                 />
               )}
             </DropdownMenu>
           ) : (
-            <AnimatedNavLink 
-              key={itemKey} 
-              to={item.to} 
-              label={item.label} 
+            <AnimatedNavLink
+              key={itemKey}
+              to={item.to}
+              label={item.label}
               hasDropdown={false}
               onHover={() => setHoveredIndex(index)}
               isHovered={hoveredIndex === index}
             />
           );
         })}
-        
+
         {/* More dropdown for overflow items */}
         {hasMore && (
           <div className="relative">
@@ -347,14 +356,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   const wishlist = useWishlist();
   const { t, language, toggleLanguage } = useLanguage();
   const { settings } = useHomepageSettings();
-  const [q, setQ] = useState("");
   const [showSearchDialog, setShowSearchDialog] = useState(false);
-  const searchInputRef = useRef(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const suggestionTimeoutRef = useRef(null);
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [showRegisterDialog, setShowRegisterDialog] = useState(false);
   const [showLeftMenu, setShowLeftMenu] = useState(false);
@@ -646,9 +648,9 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       {
         key: 'newIn',
         label: 'NEW IN',
-        to: "/search?q=New%20Arrivals",
+        to: "/search?tab=new",
         items: [
-          { label: 'New Arrivals', to: "/search?q=New%20Arrivals" },
+          { label: 'New Arrivals', to: "/search?tab=new" },
           { label: 'Trending Now', to: "/search?q=Trending%20Now" },
           { label: 'This Week', to: "/search?q=This%20Week" },
         ],
@@ -764,9 +766,9 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           },
         ],
       },
-      { 
+      {
         key: 'sale',
-        label: label('sale', t('sale')), 
+        label: label('sale', t('sale')),
         to: "/search?tab=sale",
         items: [
           { label: label('allSaleItems', t('allSaleItems')), to: "/search?tab=sale" },
@@ -784,117 +786,19 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     [t, headerSettings.nav_labels, headerSettings.nav_visibility, headerSettings.custom_nav]
   );
 
-  // Fetch autocomplete suggestions
-  const fetchSuggestions = async (searchTerm) => {
-    if (!searchTerm || searchTerm.trim().length < 2) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    setLoadingSuggestions(true);
-    try {
-      const { data } = await api.get("/products", {
-        params: { q: searchTerm, per_page: 8 }
-      });
-      const products = data?.data || data || [];
-      setSuggestions(products.slice(0, 8));
-      setShowSuggestions(products.length > 0);
-    } catch (error) {
-      console.error("Failed to fetch suggestions:", error);
-      setSuggestions([]);
-      setShowSuggestions(false);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  };
-
-  // Debounced search input handler
-  const handleSearchInput = (value) => {
-    setQ(value);
-    setSelectedIndex(-1);
-    
-    // Clear previous timeout
-    if (suggestionTimeoutRef.current) {
-      clearTimeout(suggestionTimeoutRef.current);
-    }
-
-    // Debounce API call
-    suggestionTimeoutRef.current = setTimeout(() => {
-      fetchSuggestions(value);
-    }, 300);
-  };
-
-  // Handle keyboard navigation
-  const handleKeyDown = (e) => {
-    if (!showSuggestions || suggestions.length === 0) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) => 
-        prev < suggestions.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-    } else if (e.key === "Enter" && selectedIndex >= 0) {
-      e.preventDefault();
-      const selected = suggestions[selectedIndex];
-      if (selected) {
-        setShowSearchDialog(false);
-        setSuggestions([]);
-        setShowSuggestions(false);
-        nav(`/p/${selected.slug}`);
-      }
-    } else if (e.key === "Escape") {
-      setShowSuggestions(false);
-      setSelectedIndex(-1);
-    }
-  };
-
-  // Select suggestion by click
-  const selectSuggestion = (product) => {
-    setShowSearchDialog(false);
-    setSuggestions([]);
-    setShowSuggestions(false);
-    setQ("");
-    nav(`/p/${product.slug}`);
-  };
-
-  // Highlight matching text
-  const highlightMatch = (text, query) => {
-    if (!query || !text) return text;
-    
-    const parts = text.split(new RegExp(`(${query})`, 'gi'));
-    return (
-      <span>
-        {parts.map((part, i) => 
-          part.toLowerCase() === query.toLowerCase() ? (
-            <strong key={i} className="font-extrabold text-zinc-900 bg-yellow-100/50 px-0.5 rounded">{part}</strong>
-          ) : (
-            <span key={i}>{part}</span>
-          )
-        )}
-      </span>
-    );
-  };
-
-  const submitSearch = (e) => {
-    e.preventDefault();
-    const term = q.trim();
-    setSuggestions([]);
-    setShowSuggestions(false);
-    nav(term ? `/search?q=${encodeURIComponent(term)}` : "/search");
-  };
-
   useEffect(() => {
-    if (!showSearchDialog) return;
-    const tId = setTimeout(() => searchInputRef.current?.focus(), 0);
-    return () => clearTimeout(tId);
-  }, [showSearchDialog]);
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (headerSettings.search_enabled) setShowSearchDialog(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [headerSettings.search_enabled]);
 
   return (
-    <div className="sticky top-0 z-30 backdrop-blur-md shadow-sm" style={{ backgroundColor: headerSettings.background_color || '#6F8F72' }}>
+    <div className="sticky top-0 z-30 backdrop-blur-md shadow-sm" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
       {/* Mobile: logo + search only */}
       <div className="lg:hidden container-safe h-14 md:h-16 flex items-center gap-2 sm:gap-3">
         <Link to="/" className="shrink-0 max-w-[80px] sm:max-w-none">
@@ -1036,7 +940,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       </div>
 
       {/* Desktop Navigation Row */}
-      <div className="hidden lg:block border-b border-white/20 relative" style={{ backgroundColor: headerSettings.background_color || '#6F8F72' }}>
+      <div className="hidden lg:block border-b border-white/20 relative" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
         <NavBar navItems={navItems} />
       </div>
 
@@ -1110,160 +1014,12 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
         </div>
       )}
 
-      {/* Image Search Modal */}
-      <AlertDialog open={showSearchDialog} onOpenChange={(open) => {
-        setShowSearchDialog(open);
-        if (!open) {
-          setSuggestions([]);
-          setShowSuggestions(false);
-          setSelectedIndex(-1);
-          setQ("");
-        }
-      }}>
-        <AlertDialogContent className="top-[10%] translate-y-0 max-w-2xl p-0 overflow-hidden border border-slate-200">
-          <AlertDialogHeader>
-            <div className="px-6 pt-6 pb-2">
-              <AlertDialogTitle className="text-3xl font-black tracking-tight text-slate-900">
-                {t('searchProducts')}
-              </AlertDialogTitle>
-              <AlertDialogDescription className="mt-2 text-base text-slate-500">
-                Smart search with instant suggestions.
-              </AlertDialogDescription>
-            </div>
-          </AlertDialogHeader>
-
-          <form
-            onSubmit={(e) => {
-              submitSearch(e);
-              setShowSearchDialog(false);
-            }}
-            className="space-y-5 px-6 pb-6"
-          >
-            <div className="relative">
-              <input
-                ref={searchInputRef}
-                value={q}
-                onChange={(e) => handleSearchInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={searchPlaceholder}
-                className="w-full h-14 rounded-2xl border border-slate-200 bg-white pl-12 pr-14 text-lg text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-zinc-900"
-                autoFocus
-                autoComplete="off"
-              />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                <Search className="w-5 h-5" />
-              </span>
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                <kbd className="hidden sm:inline-flex h-6 items-center rounded-md border border-slate-200 px-2 text-[11px] font-medium text-slate-500">
-                  Enter
-                </kbd>
-              </span>
-
-              {/* Autocomplete Suggestions Dropdown */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-2xl shadow-2xl border border-slate-200/80 max-h-[320px] overflow-hidden z-50 backdrop-blur-sm">
-                  {loadingSuggestions && (
-                    <div className="px-4 py-3 text-sm text-slate-500 text-center animate-pulse">
-                      Loading...
-                    </div>
-                  )}
-                  
-                  <div className="overflow-y-auto max-h-[320px] py-2">
-                    {!loadingSuggestions && suggestions.map((product, index) => (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => selectSuggestion(product)}
-                        className={`w-full px-5 py-3 text-left hover:bg-gradient-to-r hover:from-zinc-50 hover:to-slate-50 transition-all duration-200 group ${
-                          selectedIndex === index ? 'bg-gradient-to-r from-zinc-100 to-slate-100' : ''
-                        }`}
-                        onMouseEnter={() => setSelectedIndex(index)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-100 flex-shrink-0">
-                            <img
-                              src={resolveImageUrl(product.image_url)}
-                              alt={product.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-[15px] text-slate-800 font-medium group-hover:text-zinc-900 transition-colors leading-snug truncate">
-                              {highlightMatch(product.name, q)}
-                            </div>
-                            <div className="text-xs text-slate-500 truncate">
-                              ${Number(product.price || 0).toFixed(2)}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* View All Results */}
-                  <button
-                    type="submit"
-                    className="w-full px-5 py-3.5 text-sm font-semibold text-zinc-900 bg-gradient-to-r from-slate-50 to-zinc-50 hover:from-slate-100 hover:to-zinc-100 transition-all duration-200 border-t border-slate-200/80 flex items-center justify-center gap-2"
-                  >
-                    <Search className="w-4 h-4" />
-                    <span>View all results for "{q}"</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 mr-1">
-                Popular
-              </span>
-              {[
-                { label: "Belts", to: "/search?q=Belts" },
-                { label: "Shoes", to: "/search?q=Shoes" },
-                { label: "Hoodies", to: "/search?q=Hoodies" },
-                { label: "New In", to: "/search?tab=new" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => {
-                    setShowSearchDialog(false);
-                    nav(item.to);
-                  }}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSearchDialog(false);
-                  nav('/image-search');
-                }}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-              >
-                <Camera className="w-4 h-4" />
-                Search by image
-              </button>
-              <div className="flex items-center gap-2">
-                <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-900 text-white px-5 py-2 text-sm font-semibold hover:bg-zinc-800 transition"
-                >
-                  Search
-                </button>
-              </div>
-            </div>
-          </form>
-        </AlertDialogContent>
-      </AlertDialog>
+      <SmartSearchModal
+        open={showSearchDialog}
+        onClose={() => setShowSearchDialog(false)}
+        placeholder={searchPlaceholder}
+        accentColor={headerSettings.background_color || "#10a37f"}
+      />
 
       {/* Login Dialog */}
       <LoginDialog

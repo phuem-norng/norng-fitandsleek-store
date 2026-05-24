@@ -1,68 +1,50 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Heart } from "lucide-react";
 import { Link } from "react-router-dom";
 import { resolveImageUrl } from "../../lib/images";
 import { useWishlist } from "../../state/wishlist";
-import { useCart } from "../../state/cart";
-import { useAuth } from "../../state/auth";
-import { errorAlert } from "../../lib/swal";
 
 function Money({ value }) {
   const n = Number(value || 0);
   return <span>${n.toFixed(2)}</span>;
 }
 
+/** Primary image URL for card thumbnail (first gallery / image_url). */
+function primaryImageUrl(product) {
+  const urls = [];
+  const push = (u) => {
+    if (u && typeof u === "string" && !urls.includes(u)) urls.push(u);
+  };
+  if (product?.image_url) push(product.image_url);
+  const g = product?.gallery;
+  if (Array.isArray(g)) {
+    g.forEach((img) => push(typeof img === "string" ? img : img?.url || img?.src));
+  } else if (typeof g === "string" && g.trim()) {
+    g.split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach(push);
+  }
+  return urls[0] ?? null;
+}
+
 export default function ProductCard({ p }) {
   const [imgOk, setImgOk] = useState(true);
   const wishlist = useWishlist();
-  const cart = useCart();
-  const { user } = useAuth();
 
-  const addToCart = async () => {
-    try {
-      const sizes = Array.isArray(p?.sizes)
-        ? p.sizes
-        : typeof p?.sizes === "string"
-          ? p.sizes.split(",").map((s) => s.trim()).filter(Boolean)
-          : [];
-      const colors = Array.isArray(p?.colors)
-        ? p.colors
-        : typeof p?.colors === "string"
-          ? p.colors.split(",").map((c) => c.trim()).filter(Boolean)
-          : [];
-      if (sizes.length > 0) {
-        await errorAlert({
-          khTitle: "សូមជ្រើសទំហំ",
-          enTitle: "Select size",
-          khText: "សូមជ្រើសទំហំនៅលើទំព័រទំនិញ",
-          enText: "Please select a size on the product page.",
-        });
-        if (p?.slug) window.location.href = `/p/${p.slug}`;
-        return;
-      }
-      if (colors.length > 0) {
-        await errorAlert({
-          khTitle: "សូមជ្រើសពណ៌",
-          enTitle: "Select color",
-          khText: "សូមជ្រើសពណ៌នៅលើទំព័រទំនិញ",
-          enText: "Please select a color on the product page.",
-        });
-        if (p?.slug) window.location.href = `/p/${p.slug}`;
-        return;
-      }
-      await cart.add(p, 1);
-    } catch (e) {
-      if (String(e?.message || "").includes("LOGIN_REQUIRED")) {
-        window.location.href = "/login";
-        return;
-      }
-    }
-  };
+  const rawUrl = useMemo(() => primaryImageUrl(p), [p]);
+  const src = imgOk && rawUrl ? resolveImageUrl(rawUrl) : "/placeholder.svg";
 
-  const src = imgOk ? resolveImageUrl(p.image_url) : "/placeholder.svg";
+  useEffect(() => {
+    setImgOk(true);
+  }, [p?.id]);
 
   const discountPrice =
-    p.discount_price ?? p.discount?.sale_price ?? p.activeSale?.sale_price ?? null;
+    p.discount_price ??
+    p.discount?.sale_price ??
+    p.active_discount?.sale_price ??
+    p.activeDiscount?.sale_price ??
+    null;
   const discountPercentage =
     p.discount_percentage ??
     p.discount?.discount_percentage ??
@@ -81,56 +63,57 @@ export default function ProductCard({ p }) {
   const originalPrice = hasDiscount ? p.price : p.old_price;
 
   return (
-    <div className="fs-card group overflow-hidden !rounded-none border border-gray-200 bg-white">
-      <div className="relative bg-zinc-50 overflow-hidden">
+    <div className="fs-card group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.995]">
+      <div className="relative overflow-hidden bg-zinc-50">
         <Link to={`/p/${p.slug}`} className="block aspect-[4/5] overflow-hidden">
           <img
             src={src}
             alt={p.name}
             onError={() => setImgOk(false)}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         </Link>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
 
         <button
+          type="button"
           onClick={() => wishlist.toggle(p.id)}
           className={
-            `absolute top-2 right-2 h-8 w-8 sm:h-9 sm:w-9 rounded-full border flex items-center justify-center ` +
+            `absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full border sm:h-9 sm:w-9 ` +
             (wishlist.has(p.id)
-              ? "bg-zinc-900 text-white border-zinc-900"
-              : "bg-white/95 border-zinc-200") +
-            " opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto"
+              ? "border-zinc-900 bg-zinc-900 text-white"
+              : "border-zinc-200 bg-white/95") +
+            " pointer-events-none translate-y-1 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100"
           }
           aria-label="Wishlist"
           title="Wishlist"
         >
           <Heart
-            className="w-4 h-4 sm:w-5 sm:h-5"
+            className="h-4 w-4 sm:h-5 sm:w-5"
             strokeWidth={1.5}
             fill={wishlist.has(p.id) ? "currentColor" : "none"}
           />
         </button>
 
-        {/* Badges Container - Stacked Vertically */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           {badge && (
-            <div className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+            <div className="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold leading-tight text-white shadow-sm whitespace-nowrap">
               {badge}
             </div>
           )}
 
-          {hasDiscount && (p.discount?.end_date || p.activeSale?.end_date) && (
-            <div className="bg-amber-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+          {hasDiscount && (p.discount?.end_date || p.active_discount?.end_date || p.activeDiscount?.end_date) && (
+            <div className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold leading-tight text-white shadow-sm whitespace-nowrap">
               Limited Time
             </div>
           )}
         </div>
       </div>
 
-      <div className="p-3 sm:p-4">
+      <div className="mt-auto p-3 sm:p-4">
         <div className="flex items-center gap-2">
           {originalPrice && (
-            <div className="text-[11px] text-zinc-500 line-through">
+            <div className="text-xs text-zinc-500 line-through">
               <Money value={originalPrice} />
             </div>
           )}
@@ -141,7 +124,7 @@ export default function ProductCard({ p }) {
 
         <Link
           to={`/p/${p.slug}`}
-          className="mt-1.5 text-sm font-semibold text-zinc-900 line-clamp-2 hover:text-[#F2A65A]"
+          className="mt-1.5 line-clamp-2 text-sm font-semibold text-zinc-900 hover:text-[#F2A65A]"
         >
           {p.name}
         </Link>
@@ -151,10 +134,6 @@ export default function ProductCard({ p }) {
           <span className="h-2 w-2 rounded-full bg-zinc-400" />
           <span className="h-2 w-2 rounded-full bg-zinc-200" />
         </div>
-
-        {!user ? (
-          <div className="mt-2 text-[11px] text-zinc-500">Login required for cart & checkout</div>
-        ) : null}
       </div>
     </div>
   );

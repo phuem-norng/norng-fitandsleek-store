@@ -19,7 +19,8 @@ class ImageSearchService
         $this->vectorizeUrl = rtrim((string) config('services.image_search.vectorize_url', 'http://localhost:9000/vectorize'), '/');
         $this->qdrantUrl = rtrim((string) config('services.image_search.qdrant_url', 'http://localhost:6333'), '/');
         $this->collection = (string) config('services.image_search.qdrant_collection', 'products');
-        $this->timeout = max(30, (int) config('services.image_search.timeout', 30));
+        // Vectorizer often exceeds 30s on cold start (model load); floor avoids silent timeouts.
+        $this->timeout = max(120, (int) config('services.image_search.timeout', 120));
 
         // Keep PHP alive while the vectorizer model loads on cold start.
         $bufferSeconds = 15; // small cushion for response handling
@@ -96,7 +97,7 @@ class ImageSearchService
 
         try {
             $response = Http::timeout($this->timeout)
-                ->put($this->qdrantUrl . '/collections/' . $this->collection . '/points', $payload);
+                ->put($this->qdrantUrl . '/collections/' . $this->collection . '/points?wait=true', $payload);
         } catch (ConnectionException $e) {
             throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
         }
@@ -147,7 +148,7 @@ class ImageSearchService
             ->all();
     }
 
-    private function ensureCollectionExists(): void
+    public function ensureCollectionExists(): void
     {
         try {
             $check = Http::timeout($this->timeout)
