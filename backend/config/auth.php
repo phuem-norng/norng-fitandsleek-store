@@ -115,4 +115,14 @@ return [
     // Email OTP
     'otp_expires_minutes' => env('OTP_EXPIRES_MINUTES', 10),
 
+    /*
+    | Trusted device (login verification policy)
+    | - First login on a device: email OTP and/or authenticator (if 2FA enabled), once.
+    | - Same device later: password only (no OTP) while trust is valid.
+    | - Trust ends after DEVICE_TRUST_DAYS without activity, user revokes the device in profile,
+    |   or login from a new device (then verify once on that device).
+    | - Logout does NOT remove trust; only explicit "revoke device" or expiry does.
+    */
+    'device_trust_days' => (int) env('DEVICE_TRUST_DAYS', 90),
+
 ];

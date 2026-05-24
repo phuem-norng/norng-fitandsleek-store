@@ -37,9 +37,15 @@
                 <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#1d2a3f;border-bottom:1px solid #d8e2f1;">{{ $os }}</td>
               </tr>
               <tr>
-                <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:700;color:#304764;width:38%;background-color:#f6f9ff;">IP</td>
-                <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#1d2a3f;">{{ $ip }}</td>
+                <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:700;color:#304764;width:38%;background-color:#f6f9ff;border-bottom:1px solid #d8e2f1;">IP</td>
+                <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#1d2a3f;border-bottom:1px solid #d8e2f1;">{{ $ip }}</td>
               </tr>
+              @if(!empty($location))
+              <tr>
+                <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:700;color:#304764;width:38%;background-color:#f6f9ff;">Location</td>
+                <td style="padding:10px 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#1d2a3f;">{{ $location }} <span style="color:#6a778c;font-size:12px;">(approx.)</span></td>
+              </tr>
+              @endif
             </table>
           </td>
         </tr>

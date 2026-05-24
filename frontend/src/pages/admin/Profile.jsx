@@ -5,6 +5,7 @@ import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
+import TwoFactorSettings from "../../components/security/TwoFactorSettings.jsx";
 
 export default function Profile() {
  const { user, refresh } = useAuth();
@@ -420,8 +421,9 @@ export default function Profile() {
  </form>
  )}
 
- {activeTab === "security" && (
- <form onSubmit={handlePasswordUpdate} className="max-w-2xl space-y-5">
+{activeTab === "security" && (
+ <div className="max-w-2xl space-y-6">
+ <form onSubmit={handlePasswordUpdate} className="space-y-5">
  <div>
  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Current Password</label>
  <input
@@ -472,6 +474,8 @@ export default function Profile() {
  </button>
  </div>
  </form>
+ <TwoFactorSettings variant="admin" accentColor={accentColor} />
+ </div>
  )}
 
  {activeTab === "sessions" && (

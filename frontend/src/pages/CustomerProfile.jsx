@@ -7,6 +7,7 @@ import { resolveImageUrl } from "../lib/images";
 import { Edit, MapPin, Phone, Mail, Heart, ShoppingBag, LogOut, Save, X, Upload, Package, Truck, CheckCircle, ShoppingCart } from "lucide-react";
 import { useLanguage } from "../lib/i18n.jsx";
 import Swal, { errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../lib/swal";
+import TwoFactorSettings from "../components/security/TwoFactorSettings.jsx";
 
 const createEmptyAddress = () => ({
   label: "Home",
@@ -1166,6 +1167,10 @@ export default function CustomerProfile() {
                 <h2 className="text-2xl font-black mb-6">Account Settings</h2>
 
                 <div className="space-y-6">
+                  <div className="border-b border-gray-200 pb-6">
+                    <TwoFactorSettings variant="customer" />
+                  </div>
+
                   <div className="border-b border-gray-200 pb-6">
                     <h3 className="font-bold text-lg mb-2">Email Notifications</h3>
                     <label className="flex items-center gap-3 cursor-pointer">

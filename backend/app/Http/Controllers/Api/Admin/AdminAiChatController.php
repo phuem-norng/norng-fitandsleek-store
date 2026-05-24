@@ -41,6 +41,7 @@ class AdminAiChatController extends Controller
         $payload = [
             'inputs' => array_merge(
                 $this->dashboardContext->toDifyInputs(),
+                $this->dashboardContext->enrichInputsForMessage($validated['message']),
                 ['reply_mode' => $isFollowUp ? 'concise' : 'overview'],
             ),
             'query' => $this->buildQuery($validated['message'], $isFollowUp),
@@ -148,6 +149,16 @@ class AdminAiChatController extends Controller
             return 'Gemini is temporarily busy. Retry in a minute or pick another model in Dify.';
         }
 
+        if (str_contains($hay, 'model_not_found') || str_contains($hay, 'does not exist')) {
+            return 'Dify model not found. In Dify LLM node, switch to a valid model (e.g. Groq: llama-3.3-70b-versatile or llama-3.1-8b-instant) and Publish.';
+        }
+
+        if (str_contains($hay, 'plugininvokeerror') || str_contains($hay, 'run failed')) {
+            if (preg_match('/"message"\s*:\s*"([^"]{1,200})"/', $raw, $m)) {
+                return 'Dify workflow error: ' . stripcslashes($m[1]);
+            }
+        }
+
         if (strlen($raw) > 280) {
             return 'AI provider error. Check Dify model settings and API quota, then try again.';
         }
@@ -173,24 +184,26 @@ class AdminAiChatController extends Controller
     }
 
     /**
-     * Follow-ups: short answer only. First message: plain question (stats live in inputs JSON).
-     * Legacy mode (DIFY_USE_INPUTS_ONLY=false) still avoids repeating the full text snapshot on every turn.
+     * Every message includes live DB facts in `query` so the LLM cannot hallucinate
+     * when Dify workflow variables are missing on follow-up turns.
      */
     private function buildQuery(string $message, bool $isFollowUp): string
     {
-        if ($isFollowUp) {
-            return "Reply in 1–3 short sentences. Answer ONLY what was asked. "
-                . "Do NOT repeat the full dashboard summary or unrelated metrics.\n\n"
-                . $message;
+        $facts = $this->dashboardContext->toCompactQueryContext($message);
+
+        $style = $isFollowUp
+            ? "Reply in 1–3 short sentences. Answer ONLY what was asked. Do NOT repeat unrelated metrics.\n\n"
+            : '';
+
+        if (! config('services.dify.use_inputs_only', true)) {
+            $facts = $this->dashboardContext->toPromptBlock() . "\n\n" . $facts;
         }
 
-        if (config('services.dify.use_inputs_only', true)) {
-            return $message;
-        }
-
-        $contextPrompt = $this->dashboardContext->toPromptBlock();
-
-        return "[Admin dashboard context]\n{$contextPrompt}\n\n[Admin question]\n{$message}";
+        return $style
+            . "[Live database facts — use ONLY this data; never invent numbers, emails, or dates]\n"
+            . $facts
+            . "\n\n[Admin question]\n"
+            . $message;
     }
 
     /** Accept https://api.dify.ai or https://api.dify.ai/v1 — always return …/v1 base. */

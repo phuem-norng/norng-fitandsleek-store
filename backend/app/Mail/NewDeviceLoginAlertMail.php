@@ -23,6 +23,7 @@ class NewDeviceLoginAlertMail extends Mailable
                 'browser' => $this->context['browser'] ?? '-',
                 'os' => $this->context['os'] ?? '-',
                 'ip' => $this->context['ip_address'] ?? '-',
+                'location' => $this->context['location'] ?? null,
             ]);
     }
 }

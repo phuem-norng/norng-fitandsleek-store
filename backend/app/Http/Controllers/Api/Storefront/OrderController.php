@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Services\ProductVariantInventory;
+use App\Services\SecurityAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -15,6 +16,10 @@ use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
+    public function __construct(private SecurityAuditService $securityAudit)
+    {
+    }
+
     private function resolveUnitPrice($cartItem): float
     {
         if ($cartItem->product) {
@@ -182,6 +187,16 @@ class OrderController extends Controller
 
             return $order->load(['items.product.category']);
         });
+
+        $shipping = $validated['shipping_address'] ?? [];
+        $hasDeliveryGps = ! empty($shipping['latitude']) && ! empty($shipping['longitude']);
+
+        $this->securityAudit->record($request, 'checkout.placed', $request->user(), [
+            'order_id' => $order->id,
+            'order_number' => $order->order_number,
+            'payment_method' => $validated['payment_method'],
+            'delivery_gps_provided' => $hasDeliveryGps,
+        ]);
 
         return response()->json([
             'message' => 'Checkout successful. Please complete payment.',

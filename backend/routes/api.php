@@ -7,7 +7,9 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthSessionController;
+use App\Http\Controllers\Api\SecurityAuditController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\BakongPaymentController;
 use App\Http\Controllers\Api\TelegramWebhookController;
 
@@ -70,6 +72,8 @@ use App\Http\Controllers\Api\Admin\AdminAiChatController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
 
+Route::middleware(['throttle:api'])->group(function () {
+
 // Public files with CORS (for Flutter web / cross-origin clients; path = storage/app/public/...)
 Route::get('/media/{path}', [PublicMediaController::class, 'show'])
     ->where('path', '.*');
@@ -96,21 +100,25 @@ Route::get('/me', function (Request $request) {
 // -------------------------
 // AUTH
 // -------------------------
-Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/auth/login', [AuthController::class, 'login']);
-Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
-Route::post('/auth/otp/resend', [AuthController::class, 'resendOtp']);
+Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:auth-register');
+Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+Route::post('/auth/verification/select-method', [AuthController::class, 'selectVerificationMethod'])->middleware('throttle:auth-otp-verify');
+Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp'])->middleware('throttle:auth-otp-verify');
+Route::post('/auth/otp/resend', [AuthController::class, 'resendOtp'])->middleware('throttle:auth-otp-resend');
 Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware(['auth:sanctum', 'device.bound']);
 Route::post('/auth/driver/token', [AuthController::class, 'driverToken'])->middleware(['auth:sanctum', 'device.bound']);
 Route::get('/auth/sessions', [AuthSessionController::class, 'index'])->middleware(['auth:sanctum', 'device.bound']);
+Route::get('/auth/security-activity', [SecurityAuditController::class, 'myActivity'])->middleware(['auth:sanctum', 'device.bound']);
 Route::delete('/auth/sessions/{session}', [AuthSessionController::class, 'destroy'])->middleware(['auth:sanctum', 'device.bound']);
-Route::get('/auth/facebook/redirect-direct', [AuthController::class, 'redirectToFacebook']);
-Route::get('/auth/facebook/callback-direct', [AuthController::class, 'handleFacebookCallback']);
-Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect']);
-Route::get('/auth/{provider}/callback', [SocialAuthController::class, 'callback']);
-Route::get('/auth/social/exchange/{ticket}', [SocialAuthController::class, 'exchange']);
+Route::get('/auth/facebook/redirect-direct', [AuthController::class, 'redirectToFacebook'])->middleware('throttle:auth-social');
+Route::get('/auth/facebook/callback-direct', [AuthController::class, 'handleFacebookCallback'])->middleware('throttle:auth-social');
+Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->middleware('throttle:auth-social');
+Route::get('/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->middleware('throttle:auth-social');
+Route::get('/auth/social/exchange/{ticket}', [SocialAuthController::class, 'exchange'])->middleware('throttle:auth-social');
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+Route::post('/auth/reset-password-otp', [AuthController::class, 'resetPasswordOtp'])->middleware('throttle:10,1');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
+Route::post('/auth/two-factor/challenge', [TwoFactorController::class, 'challenge'])->middleware('throttle:auth-two-factor');
 Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
 
 // -------------------------
@@ -134,7 +142,7 @@ Route::get('/brands', [StorefrontBrandController::class, 'index']);
 Route::get('/brands/{slug}', [StorefrontBrandController::class, 'show']);
 
 // Public chatbot (guests + customers)
-Route::post('/chatbot/message', [ChatbotController::class, 'message']);
+Route::post('/chatbot/message', [ChatbotController::class, 'message'])->middleware('throttle:api-sensitive');
 Route::get('/chatbot/settings', [ChatbotController::class, 'settings']);
 
 // Bakong KHQR webhook (optional)
@@ -144,14 +152,14 @@ Route::post('/payments/khqr/webhook', [PaymentController::class, 'khqrWebhook'])
 Route::get('/notifications/public', [NotificationController::class, 'index']);
 
 // Image Search (vector similarity)
-Route::post('/image-search', [ImageSearchController::class, 'search']);
-Route::post('/vision/search', [ImageSearchController::class, 'search']);
+Route::post('/image-search', [ImageSearchController::class, 'search'])->middleware('throttle:api-sensitive');
+Route::post('/vision/search', [ImageSearchController::class, 'search'])->middleware('throttle:api-sensitive');
 
 // Public shipment tracking
 Route::get('/shipments/track', [ShipmentTrackingController::class, 'track']);
 
 // Contact Form (public)
-Route::post('/contact', [ContactController::class, 'store']);
+Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:api-sensitive');
 Route::get('/legal-content', [LegalContentController::class, 'index']);
 
 // Public footer & header content
@@ -162,6 +170,13 @@ Route::get('/homepage-settings', [HomepageSettingsController::class, 'getSetting
 // AUTH STOREFRONT
 // -------------------------
 Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
+    Route::get('/auth/two-factor', [TwoFactorController::class, 'status']);
+    Route::post('/auth/two-factor/preferred-method', [TwoFactorController::class, 'updatePreferredMethod']);
+    Route::post('/auth/two-factor/setup', [TwoFactorController::class, 'setup']);
+    Route::post('/auth/two-factor/confirm', [TwoFactorController::class, 'confirm']);
+    Route::post('/auth/two-factor/disable', [TwoFactorController::class, 'disable']);
+    Route::post('/auth/two-factor/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes']);
+
     Route::get('/cart', [CartController::class, 'show']);
     Route::post('/cart/items', [CartController::class, 'addItem']);
     Route::patch('/cart/items/{itemId}', [CartController::class, 'updateItem']);
@@ -404,9 +419,12 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
         Route::delete('/superadmin/users/{user}/sessions/{session}', [SuperAdminController::class, 'revokeUserSession']);
         Route::get('/superadmin/statistics', [SuperAdminController::class, 'systemStatistics']);
         Route::get('/superadmin/user-logs', [SuperAdminController::class, 'userLogs']);
+        Route::get('/superadmin/security-audit', [SecurityAuditController::class, 'adminIndex']);
 
         // Payment Settings Management (superadmin only)
         Route::get('/superadmin/payment-settings', [PaymentSettingsController::class, 'index']);
         Route::put('/superadmin/payment-settings', [PaymentSettingsController::class, 'update']);
     });
 });
+
+}); // throttle:api

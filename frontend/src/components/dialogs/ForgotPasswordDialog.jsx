@@ -1,47 +1,122 @@
-
-
-
-
 import React, { useState } from "react";
-import api from "../../lib/api";
+import VerificationMethodPicker from "../security/VerificationMethodPicker";
+import {
+  getApiErrorDetails,
+  requestPasswordRecovery,
+  resetPasswordWithChallenge,
+  resendOtpWithChallenge,
+  selectVerificationMethod,
+  verifyAuthenticatorChallenge,
+  verifyOtpWithChallenge,
+} from "../../lib/auth-api";
+import { getDeviceMeta } from "../../lib/device";
 
 export default function ForgotPasswordDialog({ isOpen, onClose }) {
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState(0); // 0=email, 1=otp, 2=password
-  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState("email");
+  const [challengeToken, setChallengeToken] = useState("");
+  const [verificationMethods, setVerificationMethods] = useState([]);
+  const [preferredMethod, setPreferredMethod] = useState("email");
+  const [verifyKind, setVerifyKind] = useState("otp");
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSendOtp = async (e) => {
+  const resetFlow = () => {
+    setStep("email");
+    setChallengeToken("");
+    setVerificationMethods([]);
+    setCode("");
+    setPassword("");
+    setConfirm("");
+    setNotice("");
+    setError("");
+  };
+
+  const handleEmail = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
     try {
-      await api.post("/auth/forgot-password", { email });
-      setStep(1);
+      const data = await requestPasswordRecovery(email);
+      if (data?.verification_required && data?.challenge_token) {
+        setChallengeToken(data.challenge_token);
+        setVerificationMethods(data.verification_methods || []);
+        setPreferredMethod(data.preferred_method || "email");
+        setNotice(data.message || "Choose how to verify.");
+        setStep("method");
+        return;
+      }
+      setSuccess(data?.message || "If the account exists, check your email.");
+      setStep("done");
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to send OTP.");
+      const { message } = getApiErrorDetails(err, "Failed to continue.");
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    setError("");
+  const handleSelectMethod = async (method) => {
     setLoading(true);
+    setError("");
     try {
-      await api.post("/auth/otp/verify", {
-        email,
-        code: otp,
-        purpose: "forgot",
-      });
-      setStep(2);
+      const data = await selectVerificationMethod({ challengeToken, method });
+      if (data?.step === "otp") {
+        setVerifyKind("otp");
+        setNotice(data.message || "Code sent.");
+        setStep("verify");
+        return;
+      }
+      if (data?.step === "authenticator") {
+        setVerifyKind("authenticator");
+        setNotice(data.message || "Enter authenticator code.");
+        setStep("verify");
+      }
     } catch (err) {
-      setError(err?.response?.data?.message || "Invalid OTP.");
+      const { message } = getApiErrorDetails(err, "Could not start verification.");
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      if (verifyKind === "otp") {
+        const data = await verifyOtpWithChallenge({
+          email,
+          code,
+          purpose: "forgot",
+          challengeToken,
+        });
+        if (data?.verified) {
+          setStep("password");
+          return;
+        }
+      } else {
+        const data = await verifyAuthenticatorChallenge({
+          challengeToken,
+          code,
+          deviceMeta: getDeviceMeta(),
+        });
+        if (data?.verified) {
+          setStep("password");
+          return;
+        }
+      }
+      setError("Verification failed.");
+    } catch (err) {
+      const { message } = getApiErrorDetails(err, "Verification failed.");
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -51,92 +126,137 @@ export default function ForgotPasswordDialog({ isOpen, onClose }) {
     e.preventDefault();
     setError("");
     setSuccess("");
-    if (!password || password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
     if (password !== confirm) {
       setError("Passwords do not match.");
       return;
     }
     setLoading(true);
     try {
-      await api.post("/auth/reset-password-otp", {
-        email,
-        code: otp,
+      const data = await resetPasswordWithChallenge({
+        challengeToken,
         password,
-        password_confirmation: confirm,
+        passwordConfirmation: confirm,
       });
-      setSuccess("Password reset successful! You can now log in.");
+      setSuccess(data?.message || "Password reset successful!");
+      setStep("done");
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to reset password.");
+      const { message } = getApiErrorDetails(err, "Failed to reset password.");
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  return isOpen ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-lg">
-        <h2 className="text-lg font-bold mb-2">Forgot Password</h2>
-        {success ? (
-          <div className="text-green-600 mb-4">{success}</div>
-        ) : step === 0 ? (
-          <form onSubmit={handleSendOtp}>
-            <label className="block mb-2">Email Address</label>
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+        <h2 className="mb-2 text-lg font-bold text-slate-900">Forgot Password</h2>
+
+        {success ? <div className="mb-4 text-sm text-green-700">{success}</div> : null}
+        {notice && step !== "done" ? <div className="mb-4 text-sm text-emerald-700">{notice}</div> : null}
+        {error ? <div className="mb-4 text-sm text-red-600">{error}</div> : null}
+
+        {step === "email" && !success ? (
+          <form onSubmit={handleEmail}>
+            <label className="mb-2 block text-sm font-medium">Email Address</label>
             <input
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full border rounded px-3 py-2 mb-3"
+              onChange={(e) => setEmail(e.target.value)}
+              className="mb-3 w-full rounded border px-3 py-2"
               required
             />
-            {error && <div className="text-red-600 mb-2">{error}</div>}
-            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded" disabled={loading}>
-              {loading ? "Sending..." : "Send OTP"}
+            <button type="submit" className="rounded bg-indigo-600 px-4 py-2 text-white" disabled={loading}>
+              {loading ? "Continuing..." : "Continue"}
             </button>
           </form>
-        ) : step === 1 ? (
-          <form onSubmit={handleVerifyOtp}>
-            <label className="block mb-2">OTP Code</label>
+        ) : null}
+
+        {step === "method" ? (
+          <VerificationMethodPicker
+            methods={verificationMethods}
+            preferredMethod={preferredMethod}
+            loading={loading}
+            onSelect={handleSelectMethod}
+          />
+        ) : null}
+
+        {step === "verify" ? (
+          <form onSubmit={handleVerify}>
+            <label className="mb-2 block text-sm font-medium">
+              {verifyKind === "otp" ? "Email code" : "Authenticator code"}
+            </label>
             <input
               type="text"
-              value={otp}
-              onChange={e => setOtp(e.target.value)}
-              className="w-full border rounded px-3 py-2 mb-3"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="mb-3 w-full rounded border px-3 py-2"
               required
             />
-            {error && <div className="text-red-600 mb-2">{error}</div>}
-            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded" disabled={loading}>
-              {loading ? "Verifying..." : "Verify OTP"}
+            <button type="submit" className="rounded bg-indigo-600 px-4 py-2 text-white" disabled={loading}>
+              {loading ? "Verifying..." : "Verify"}
+            </button>
+            {verifyKind === "otp" ? (
+              <button
+                type="button"
+                className="mt-2 block text-sm text-indigo-600 underline"
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await resendOtpWithChallenge({ email, purpose: "forgot", challengeToken });
+                    setNotice("Code resent.");
+                  } catch (err) {
+                    setError(err?.response?.data?.message || "Resend failed");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                Resend code
+              </button>
+            ) : null}
+            <button type="button" className="mt-2 block text-sm text-gray-500 underline" onClick={() => setStep("method")}>
+              Try another method
             </button>
           </form>
-        ) : (
+        ) : null}
+
+        {step === "password" ? (
           <form onSubmit={handleReset}>
-            <label className="block mb-2">New Password</label>
+            <label className="mb-2 block text-sm font-medium">New Password</label>
             <input
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full border rounded px-3 py-2 mb-3"
+              onChange={(e) => setPassword(e.target.value)}
+              className="mb-3 w-full rounded border px-3 py-2"
               required
             />
-            <label className="block mb-2">Confirm Password</label>
+            <label className="mb-2 block text-sm font-medium">Confirm Password</label>
             <input
               type="password"
               value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              className="w-full border rounded px-3 py-2 mb-3"
+              onChange={(e) => setConfirm(e.target.value)}
+              className="mb-3 w-full rounded border px-3 py-2"
               required
             />
-            {error && <div className="text-red-600 mb-2">{error}</div>}
-            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded" disabled={loading}>
+            <button type="submit" className="rounded bg-indigo-600 px-4 py-2 text-white" disabled={loading}>
               {loading ? "Resetting..." : "Reset Password"}
             </button>
           </form>
-        )}
-        <button className="mt-4 text-sm text-gray-500 hover:text-gray-700" onClick={onClose}>Back to Login</button>
+        ) : null}
+
+        <button
+          className="mt-4 text-sm text-gray-500 hover:text-gray-700"
+          onClick={() => {
+            resetFlow();
+            onClose();
+          }}
+        >
+          Back to Login
+        </button>
       </div>
     </div>
-  ) : null;
+  );
 }

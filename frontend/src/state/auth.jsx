@@ -54,40 +54,24 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (email, password, options = {}) => {
-    const { forceOtp = false } = options;
+  const login = async (email, password) => {
     try {
       const { data } = await api.post("/auth/login", {
         email,
         password,
         ...getDeviceMeta(),
       });
-      if (!forceOtp && data?.token) {
+      if (data?.token) {
         const newToken = data.token;
         localStorage.setItem(TOKEN_KEY, newToken);
         setToken(newToken);
         setUser(data.user);
       }
-      // If forcing OTP on every login, trigger a code and defer token/user until verifyOtp
-      if (forceOtp) {
-        try {
-          await api.post("/auth/otp/resend", { email, purpose: "login" });
-        } catch {
-          // if resend fails, let the caller still show the otp UI; verifyOtp will fail visibly if code missing
-        }
-        return {
-          otp_required: true,
-          purpose: "login",
-          email,
-          message: data?.message || "OTP code sent to your email",
-        };
-      }
 
       return data;
     } catch (err) {
       const data = err?.response?.data;
-      // If backend demands OTP (e.g., account not verified), bubble it up to show OTP form
-      if (data?.otp_required) {
+      if (data?.otp_required || data?.verification_required) {
         return {
           ...data,
           email,
@@ -117,11 +101,38 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const verifyOtp = async ({ email, code, purpose }) => {
+  const selectVerificationMethod = async ({ challengeToken, method }) => {
+    const { data } = await api.post("/auth/verification/select-method", {
+      challenge_token: challengeToken,
+      method,
+    });
+    return data;
+  };
+
+  const verifyOtp = async ({ email, code, purpose, challengeToken }) => {
     const { data } = await api.post("/auth/otp/verify", {
       email,
       code,
       purpose,
+      challenge_token: challengeToken,
+      ...getDeviceMeta(),
+    });
+    if (data?.two_factor_required && data?.challenge_token) {
+      return data;
+    }
+    const newToken = data.token;
+    if (newToken) {
+      localStorage.setItem(TOKEN_KEY, newToken);
+      setToken(newToken);
+      setUser(data.user);
+    }
+    return data;
+  };
+
+  const verifyTwoFactor = async ({ challengeToken, code }) => {
+    const { data } = await api.post("/auth/two-factor/challenge", {
+      challenge_token: challengeToken,
+      code,
       ...getDeviceMeta(),
     });
     const newToken = data.token;
@@ -133,10 +144,11 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const resendOtp = async ({ email, purpose }) => {
+  const resendOtp = async ({ email, purpose, challengeToken }) => {
     const { data } = await api.post("/auth/otp/resend", {
       email,
       purpose,
+      challenge_token: challengeToken,
       ...getDeviceMeta(),
     });
     return data;
@@ -154,7 +166,19 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ user, booted, token, login, register, verifyOtp, resendOtp, logout, refresh: loadMe }),
+    () => ({
+      user,
+      booted,
+      token,
+      login,
+      register,
+      selectVerificationMethod,
+      verifyOtp,
+      verifyTwoFactor,
+      resendOtp,
+      logout,
+      refresh: loadMe,
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, booted, token]
   );

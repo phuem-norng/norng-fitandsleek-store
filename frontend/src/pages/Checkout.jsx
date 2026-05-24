@@ -9,6 +9,7 @@ import CheckoutPaymentKhqr from "../components/payments/CheckoutPaymentKhqr";
 import CheckoutPaymentCard from "../components/payments/CheckoutPaymentCard";
 import KhqrSuccessModal from "../components/alerts/KhqrSuccessModal";
 import { setupTelegramBackButton, setupTelegramMainButton, triggerTelegramHaptic } from "../lib/telegramWebApp";
+import { requestDeliveryPin } from "../lib/geolocation";
 
 const KHQR_REDIRECT_SECONDS = 60;
 
@@ -22,6 +23,8 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState("bakong_khqr");
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [deliveryPin, setDeliveryPin] = useState(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [khqrOpen, setKhqrOpen] = useState(false);
   const [khqrOrder, setKhqrOrder] = useState(null);
   const [khqrSuccessOpen, setKhqrSuccessOpen] = useState(false);
@@ -104,12 +107,23 @@ export default function Checkout() {
       return;
     }
 
-    const shippingAddress = addresses.find((a) => String(a.id) === String(selectedAddressId));
-    if (!shippingAddress) {
+    const baseAddress = addresses.find((a) => String(a.id) === String(selectedAddressId));
+    if (!baseAddress) {
       setMsg(t('selectShippingAddress') || "Please select a shipping address");
       setMsgType('error');
       return;
     }
+
+    const shippingAddress = {
+      ...baseAddress,
+      ...(deliveryPin
+        ? {
+            latitude: deliveryPin.latitude,
+            longitude: deliveryPin.longitude,
+            delivery_location_source: "checkout_gps_optional",
+          }
+        : {}),
+    };
 
     if (paymentMethod === "card_visa") {
       const errs = validateCardDetails();
@@ -414,6 +428,57 @@ export default function Checkout() {
                     })}
                   </div>
                 )}
+                {user && addresses.length > 0 ? (
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <p className="text-xs text-slate-500 mb-2">
+                      {t("checkoutGpsHint") || "Optional: pin your delivery location on the map (only when you tap below — not tracked at login)."}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={gpsLoading}
+                      onClick={() => {
+                        setGpsLoading(true);
+                        requestDeliveryPin({
+                          onSuccess: (pin) => {
+                            setDeliveryPin(pin);
+                            setGpsLoading(false);
+                            setMsg(t("checkoutGpsSuccess") || "Delivery pin updated for this order.");
+                            setMsgType("success");
+                          },
+                          onError: () => {
+                            setGpsLoading(false);
+                            setMsg(t("checkoutGpsFailed") || "Could not get location. You can continue without GPS.");
+                            setMsgType("error");
+                          },
+                        });
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[#567D74]/40 bg-[#eef3f1] px-4 py-2.5 text-sm font-semibold text-[#45645d] hover:bg-[#dce7e4] disabled:opacity-60"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {gpsLoading
+                        ? (t("locating") || "Locating…")
+                        : deliveryPin
+                          ? (t("checkoutGpsUpdate") || "Update delivery pin")
+                          : (t("checkoutGpsUse") || "Use GPS for delivery (optional)")}
+                    </button>
+                    {deliveryPin ? (
+                      <p className="mt-2 text-xs text-emerald-700">
+                        {t("checkoutGpsPinned") || "Pinned:"}{" "}
+                        <a
+                          href={`https://www.google.com/maps?q=${deliveryPin.latitude},${deliveryPin.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline font-medium"
+                        >
+                          {Number(deliveryPin.latitude).toFixed(5)}, {Number(deliveryPin.longitude).toFixed(5)}
+                        </a>
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 
