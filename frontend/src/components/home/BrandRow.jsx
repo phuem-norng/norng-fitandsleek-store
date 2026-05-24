@@ -4,12 +4,16 @@ import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
 
 function BrandLogo({ name, logo_url }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const canRenderLogo = Boolean(logo_url) && !logoFailed;
+
   return (
     <div className="h-14 w-28 flex items-center justify-center transition-transform duration-300 hover:-translate-y-0.5">
-      {logo_url ? (
+      {canRenderLogo ? (
         <img
           src={resolveImageUrl(logo_url)}
           alt={name}
+          onError={() => setLogoFailed(true)}
           className="h-10 w-auto object-contain transition-transform duration-300 hover:scale-105"
           loading="lazy"
         />

@@ -21,6 +21,9 @@ import { useHomepageSettings } from "../../state/homepageSettings.jsx";
 import { resolveImageUrl } from "../../lib/images";
 import { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../../lib/swal";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
+import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
+import { matchesSection } from "../../lib/adminListFilters.js";
+import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
 import { AdminContentSkeleton, AdminDashboardLoader, AdminSectionLoader } from "@/components/admin/AdminLoading";
 import {
   parseVariantMatrix,
@@ -378,12 +381,7 @@ export default function AdminProducts() {
  const [isUploading, setIsUploading] = useState(false);
  const [showCreateForm, setShowCreateForm] = useState(false);
  const [search, setSearch] = useState("");
- const [selectedGenders, setSelectedGenders] = useState([]); // [] = All
- const [selectedSections, setSelectedSections] = useState([]); // [] = All types
- const [genderDropdownOpen, setGenderDropdownOpen] = useState(false);
- const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false);
- const genderDropdownRef = useRef(null);
- const sectionDropdownRef = useRef(null);
+ const listFilters = useAdminFilterDrawer(["stock", "gender", "section", "category"]);
  const [selectedIds, setSelectedIds] = useState([]);
  const [columnVisibility, setColumnVisibility] = useState(() =>
   loadTableColumnVisibility(PRODUCTS_COLUMNS_STORAGE_KEY, PRODUCTS_TABLE_COLUMNS),
@@ -1603,20 +1601,6 @@ String(editing.allocated_stock ?? "").trim() === ""
  .map(([key, val]) => ({ key, title: val.title || key }));
  }, [homepageSettings]);
 
- // Close dropdowns when clicking outside
- useEffect(() => {
- const handler = (e) => {
- if (genderDropdownRef.current && !genderDropdownRef.current.contains(e.target)) {
- setGenderDropdownOpen(false);
- }
- if (sectionDropdownRef.current && !sectionDropdownRef.current.contains(e.target)) {
- setSectionDropdownOpen(false);
- }
- };
- document.addEventListener("mousedown", handler);
- return () => document.removeEventListener("mousedown", handler);
- }, []);
-
  // Gender match helper — "men" should NOT match "women"
  const matchesGender = (slug, key) => {
  const s = (slug || "").toLowerCase();
@@ -1640,17 +1624,23 @@ String(editing.allocated_stock ?? "").trim() === ""
  const catSlug = String(p.category?.slug || "").toLowerCase();
  const catName = String(p.category?.name || "").toLowerCase();
 
- const matchesGenderFilter =
- selectedGenders.length === 0 ||
- selectedGenders.some((key) => matchesGender(catSlug, key));
-
- const matchesSectionFilter =
- selectedSections.length === 0 ||
- selectedSections.some(
- (key) => catName.includes(key.toLowerCase()) || catSlug.includes(key.toLowerCase())
+ const matchesGenderFilter = matchesSection(listFilters.applied, "gender", (key) => matchesGender(catSlug, key));
+ const matchesSectionFilter = matchesSection(listFilters.applied, "section", (key) =>
+ catName.includes(key.toLowerCase()) || catSlug.includes(key.toLowerCase()));
+ const matchesStockFilter = matchesSection(listFilters.applied, "stock", (key) => {
+ if (key === "out") return Number(p.stock) === 0;
+ if (key === "in_stock") return Number(p.stock) > 0;
+ if (key === "active") return !!p.is_active;
+ if (key === "inactive") return !p.is_active;
+ return false;
+ });
+ const matchesCategoryFilter = matchesSection(
+ listFilters.applied,
+ "category",
+ (id) => String(p.category_id || "") === String(id),
  );
 
- return matchesSearch && matchesGenderFilter && matchesSectionFilter;
+ return matchesSearch && matchesGenderFilter && matchesSectionFilter && matchesStockFilter && matchesCategoryFilter;
  });
 
  const splitColumns = [
@@ -1676,6 +1666,56 @@ String(editing.allocated_stock ?? "").trim() === ""
  if (selectedIds.length === 0) return;
  setPendingBulkDelete(true);
  };
+
+ const productFilterSections = useMemo(() => {
+ const stockOpts = [
+ { value: "out", label: "Out of stock" },
+ { value: "in_stock", label: "In stock" },
+ { value: "active", label: "Active" },
+ { value: "inactive", label: "Inactive" },
+ ].map((opt) => ({
+ ...opt,
+ count: rows.filter((p) => {
+ if (opt.value === "out") return Number(p.stock) === 0;
+ if (opt.value === "in_stock") return Number(p.stock) > 0;
+ if (opt.value === "active") return !!p.is_active;
+ if (opt.value === "inactive") return !p.is_active;
+ return false;
+ }).length,
+ }));
+
+ const genderOpts = GENDER_OPTIONS.map((opt) => ({
+ value: opt.key,
+ label: opt.label,
+ count: rows.filter((p) => matchesGender(String(p.category?.slug || "").toLowerCase(), opt.key)).length,
+ }));
+
+ const sectionOpts = sectionTabs.map((tab) => ({
+ value: tab.key,
+ label: tab.title,
+ count: rows.filter((p) => {
+ const catName = String(p.category?.name || "").toLowerCase();
+ const catSlug = String(p.category?.slug || "").toLowerCase();
+ return catName.includes(tab.key.toLowerCase()) || catSlug.includes(tab.key.toLowerCase());
+ }).length,
+ }));
+
+ const categoryOpts = catalogCategories
+ .map((c) => ({
+ value: String(c.id),
+ label: c.name || "—",
+ count: rows.filter((p) => String(p.category_id || "") === String(c.id)).length,
+ }))
+ .filter((o) => o.count > 0)
+ .sort((a, b) => a.label.localeCompare(b.label));
+
+ return [
+ { id: "stock", title: "Stock", options: stockOpts },
+ { id: "gender", title: "Gender", options: genderOpts },
+ ...(sectionOpts.length ? [{ id: "section", title: "Section / type", options: sectionOpts }] : []),
+ { id: "category", title: "Categories", options: categoryOpts },
+ ];
+ }, [rows, sectionTabs, catalogCategories]);
 
  if (loading) return <AdminContentSkeleton lines={3} imageHeight={240} />;
 
@@ -2803,249 +2843,35 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
  <div className="shrink-0">
  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
- {selectedGenders.length === 0 && selectedSections.length === 0
- ? "All Products"
- : [
- ...selectedGenders.map((k) => GENDER_OPTIONS.find((g) => g.key === k)?.label ?? k),
- ...selectedSections.map((k) => sectionTabs.find((t) => t.key === k)?.title ?? k),
- ].join(" · ")}
+ {listFilters.activeCount === 0 ? "All Products" : `Filtered products`}
  </p>
  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{filteredRows.length} product{filteredRows.length !== 1 ? "s" : ""}</p>
  </div>
-
- <div className="flex flex-wrap items-center gap-2">
- {/* Gender filter */}
- <div className="relative" ref={genderDropdownRef}>
- <button
- type="button"
- onClick={() => { setGenderDropdownOpen((o) => !o); setSectionDropdownOpen(false); }}
- className="inline-flex h-8 min-w-[9.5rem] shrink-0 items-center justify-between gap-2 rounded-[5px] border px-3.5 text-xs font-medium transition-all duration-150"
- style={{
- backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
- borderColor: selectedGenders.length > 0
- ? (accentIsWhite ? "#cbd5e1" : accentColor)
- : (isDark ? "rgba(255,255,255,0.14)" : "#e2e8f0"),
- color: isDark ? "#e2e8f0" : "#334155",
- boxShadow: genderDropdownOpen ? "0 0 0 2px " + (accentIsWhite ? "#94a3b8" : accentColor) + "44" : undefined,
- }}
- >
- <span className="truncate text-left">
- {selectedGenders.length === 0
- ? "All Genders"
- : selectedGenders.map((k) => GENDER_OPTIONS.find((g) => g.key === k)?.label ?? k).join(", ")}
- </span>
- <svg
- className="h-3.5 w-3.5 shrink-0 opacity-60 transition-transform duration-200"
- style={{ transform: genderDropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }}
- fill="none" stroke="currentColor" viewBox="0 0 24 24"
- >
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
- </svg>
- </button>
-
- {genderDropdownOpen && (
- <div
- className="absolute left-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-xl border"
- style={{
- minWidth: "200px",
- backgroundColor: isDark ? "#161b22" : "#ffffff",
- borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0",
- boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
- }}
- >
- <button
- type="button"
- onClick={() => setSelectedGenders([])}
- className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium transition-colors"
- style={{
- backgroundColor: selectedGenders.length === 0
- ? (isDark ? "rgba(255,255,255,0.07)" : "#f8fafc")
- : "transparent",
- color: selectedGenders.length === 0
- ? (accentIsWhite ? (isDark ? "#e2e8f0" : "#0b0b0f") : accentColor)
- : (isDark ? "#cbd5e1" : "#475569"),
- }}
- >
- <span>All Genders</span>
- {selectedGenders.length === 0 && (
- <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
- </svg>
- )}
- </button>
-
- <div style={{ height: "1px", backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#f1f5f9", margin: "2px 0" }} />
-
- {GENDER_OPTIONS.map((opt) => {
- const isChecked = selectedGenders.includes(opt.key);
- const count = rows.filter((p) => matchesGender(String(p.category?.slug || "").toLowerCase(), opt.key)).length;
- return (
- <button
- type="button"
- key={opt.key}
- onClick={() =>
- setSelectedGenders((prev) =>
- prev.includes(opt.key) ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
- )
- }
- className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors"
- style={{
- backgroundColor: isChecked
- ? (isDark ? "rgba(255,255,255,0.07)" : "#f8fafc")
- : "transparent",
- color: isChecked
- ? (accentIsWhite ? (isDark ? "#e2e8f0" : "#0b0b0f") : accentColor)
- : (isDark ? "#cbd5e1" : "#475569"),
- fontWeight: isChecked ? 600 : 400,
- }}
- >
- <span className="flex items-center gap-2">
- {opt.label}
- <span
- className="rounded-full px-1.5 py-0.5 text-xs"
- style={{
- backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "#f1f5f9",
- color: isDark ? "#94a3b8" : "#64748b",
- }}
- >
- {count}
- </span>
- </span>
- {isChecked && (
- <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
- </svg>
- )}
- </button>
- );
- })}
- </div>
- )}
- </div>
-
- {/* Section / Type filter */}
- {sectionTabs.length > 0 && (
- <div className="relative" ref={sectionDropdownRef}>
- <button
- type="button"
- onClick={() => { setSectionDropdownOpen((o) => !o); setGenderDropdownOpen(false); }}
- className="inline-flex h-8 min-w-[9.5rem] shrink-0 items-center justify-between gap-2 rounded-[5px] border px-3.5 text-xs font-medium transition-all duration-150"
- style={{
- backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
- borderColor: selectedSections.length > 0
- ? (accentIsWhite ? "#cbd5e1" : accentColor)
- : (isDark ? "rgba(255,255,255,0.14)" : "#e2e8f0"),
- color: isDark ? "#e2e8f0" : "#334155",
- boxShadow: sectionDropdownOpen ? "0 0 0 2px " + (accentIsWhite ? "#94a3b8" : accentColor) + "44" : undefined,
- }}
- >
- <span className="truncate text-left">
- {selectedSections.length === 0
- ? "All Types"
- : selectedSections.map((k) => sectionTabs.find((t) => t.key === k)?.title ?? k).join(", ")}
- </span>
- <svg
- className="h-3.5 w-3.5 shrink-0 opacity-60 transition-transform duration-200"
- style={{ transform: sectionDropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }}
- fill="none" stroke="currentColor" viewBox="0 0 24 24"
- >
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
- </svg>
- </button>
-
- {sectionDropdownOpen && (
- <div
- className="absolute left-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-xl border"
- style={{
- minWidth: "200px",
- backgroundColor: isDark ? "#161b22" : "#ffffff",
- borderColor: isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0",
- boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
- }}
- >
- <button
- type="button"
- onClick={() => setSelectedSections([])}
- className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium transition-colors"
- style={{
- backgroundColor: selectedSections.length === 0
- ? (isDark ? "rgba(255,255,255,0.07)" : "#f8fafc")
- : "transparent",
- color: selectedSections.length === 0
- ? (accentIsWhite ? (isDark ? "#e2e8f0" : "#0b0b0f") : accentColor)
- : (isDark ? "#cbd5e1" : "#475569"),
- }}
- >
- <span>All Types</span>
- {selectedSections.length === 0 && (
- <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
- </svg>
- )}
- </button>
-
- <div style={{ height: "1px", backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#f1f5f9", margin: "2px 0" }} />
-
- {sectionTabs.map((tab) => {
- const isChecked = selectedSections.includes(tab.key);
- const count = rows.filter(
- (p) =>
- String(p.category?.name || "").toLowerCase().includes(tab.key.toLowerCase()) ||
- String(p.category?.slug || "").toLowerCase().includes(tab.key.toLowerCase())
- ).length;
- return (
- <button
- type="button"
- key={tab.key}
- onClick={() =>
- setSelectedSections((prev) =>
- prev.includes(tab.key) ? prev.filter((k) => k !== tab.key) : [...prev, tab.key]
- )
- }
- className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors"
- style={{
- backgroundColor: isChecked
- ? (isDark ? "rgba(255,255,255,0.07)" : "#f8fafc")
- : "transparent",
- color: isChecked
- ? (accentIsWhite ? (isDark ? "#e2e8f0" : "#0b0b0f") : accentColor)
- : (isDark ? "#cbd5e1" : "#475569"),
- fontWeight: isChecked ? 600 : 400,
- }}
- >
- <span className="flex items-center gap-2">
- {tab.title}
- <span
- className="rounded-full px-1.5 py-0.5 text-xs"
- style={{
- backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "#f1f5f9",
- color: isDark ? "#94a3b8" : "#64748b",
- }}
- >
- {count}
- </span>
- </span>
- {isChecked && (
- <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
- </svg>
- )}
- </button>
- );
- })}
- </div>
- )}
- </div>
- )}
  </div>
  </div>
 
- <div className="flex flex-wrap items-center gap-2">
+ <div className="mt-3 flex flex-wrap items-center gap-2">
  <input
  value={search}
  onChange={(e) => setSearch(e.target.value)}
  placeholder="Search products, barcode, SKU…"
  className="h-8 min-w-[10rem] flex-1 rounded-[5px] border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-1 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-slate-600 sm:max-w-[14rem] sm:flex-initial sm:min-w-0 sm:w-44"
+ />
+
+ <AdminFilterToolbarButton
+ activeCount={listFilters.activeCount}
+ onClick={listFilters.openDrawer}
+ className="h-8 rounded-[5px]"
+ />
+
+ <AdminFilterDrawer
+ open={listFilters.open}
+ onClose={listFilters.closeDrawer}
+ sections={productFilterSections}
+ selected={listFilters.draft}
+ onToggle={listFilters.toggleDraft}
+ onApply={listFilters.apply}
+ onClearAll={listFilters.clearAll}
  />
 
  <div
@@ -3112,7 +2938,6 @@ No variants enabled. POS scans will use Product Code / Barcode and deduct from t
  onShowAll={() => setAllTableColumnsVisible(true)}
  onHideAll={() => setAllTableColumnsVisible(false)}
  />
- </div>
  </div>
  </div>
 

@@ -452,15 +452,11 @@ class CategoryAdminController extends Controller
     {
         $validated = $request->validate([
             'quantity' => ['required', 'integer', 'min:1'],
-            'product_condition' => ['nullable', 'in:new,second_hand'],
-            'second_hand_sale_type' => ['nullable', 'in:single,average_bundle'],
         ]);
 
         $result = $stockReceive->quickRestock(
             $category,
             (int) $validated['quantity'],
-            $validated['product_condition'] ?? 'new',
-            $validated['second_hand_sale_type'] ?? null,
         );
 
         return response()->json([

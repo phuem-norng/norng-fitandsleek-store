@@ -1,6 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
+import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
+import { matchesSection } from "../../lib/adminListFilters.js";
+import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
 import { AdminSectionLoader, AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 import {
  buildAllColumnsVisibility,
@@ -216,6 +219,7 @@ export default function AdminOrders() {
  const [status, setStatus] = useState("");
  const [err, setErr] = useState("");
  const [search, setSearch] = useState("");
+ const listFilters = useAdminFilterDrawer(["status", "payment"]);
  const [selectedIds, setSelectedIds] = useState([]);
  const [viewMode, setViewMode] = useState("list");
  const [viewLoading, setViewLoading] = useState(false);
@@ -325,14 +329,31 @@ export default function AdminOrders() {
 
  const filteredRows = rows.filter((o) => {
  const q = search.trim().toLowerCase();
- if (!q) return true;
- return (
+ const matchesSearch = !q || (
  String(o.id || "").toLowerCase().includes(q) ||
  String(o.user?.name || "").toLowerCase().includes(q) ||
  String(o.user?.email || "").toLowerCase().includes(q) ||
  String(o.status || "").toLowerCase().includes(q) ||
  String(o.payment_status || "").toLowerCase().includes(q)
  );
+
+ const fulfillment = String(o.status || "").toLowerCase();
+ const matchesStatus = matchesSection(listFilters.applied, "status", (value) => {
+ if (value === "awaiting_payment") return isAwaitingPayment(o);
+ if (value === "processing") return fulfillment === "processing" || fulfillment === "preparing" || fulfillment === "paid";
+ if (value === "shipped") return fulfillment === "shipped";
+ if (value === "completed") return fulfillment === "completed" || fulfillment === "delivered";
+ if (value === "cancelled") return fulfillment === "cancelled";
+ return false;
+ });
+
+ const matchesPayment = matchesSection(listFilters.applied, "payment", (value) => {
+ if (value === "paid") return isOrderPaid(o.payment_status);
+ if (value === "unpaid") return !isOrderPaid(o.payment_status);
+ return false;
+ });
+
+ return matchesSearch && matchesStatus && matchesPayment;
  });
 
  const allSelected =
@@ -385,6 +406,42 @@ export default function AdminOrders() {
 
  const accentColor = primaryColor;
 
+ const orderFilterSections = useMemo(() => {
+ const statusOpts = [
+ { value: "awaiting_payment", label: "Awaiting payment" },
+ { value: "processing", label: "Processing" },
+ { value: "shipped", label: "Shipped" },
+ { value: "completed", label: "Completed" },
+ { value: "cancelled", label: "Cancelled" },
+ ].map((opt) => ({
+ ...opt,
+ count: rows.filter((o) => {
+ const fulfillment = String(o.status || "").toLowerCase();
+ if (opt.value === "awaiting_payment") return isAwaitingPayment(o);
+ if (opt.value === "processing") return fulfillment === "processing" || fulfillment === "preparing" || fulfillment === "paid";
+ if (opt.value === "shipped") return fulfillment === "shipped";
+ if (opt.value === "completed") return fulfillment === "completed" || fulfillment === "delivered";
+ if (opt.value === "cancelled") return fulfillment === "cancelled";
+ return false;
+ }).length,
+ }));
+
+ const paymentOpts = [
+ { value: "paid", label: "Paid" },
+ { value: "unpaid", label: "Unpaid" },
+ ].map((opt) => ({
+ ...opt,
+ count: rows.filter((o) => (
+ opt.value === "paid" ? isOrderPaid(o.payment_status) : !isOrderPaid(o.payment_status)
+ )).length,
+ }));
+
+ return [
+ { id: "status", title: "Order status", options: statusOpts },
+ { id: "payment", title: "Payment", options: paymentOpts },
+ ];
+ }, [rows]);
+
  if (loading) return <AdminContentSkeleton title="Orders" />;
 
  return (
@@ -433,6 +490,19 @@ export default function AdminOrders() {
  onChange={(e) => setSearch(e.target.value)}
  placeholder="Search orders..."
  className="h-10 w-full md:w-64 rounded-lg border admin-border admin-surface px-3 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-[var(--admin-primary)] focus:bg-transparent"
+ />
+ <AdminFilterToolbarButton
+ activeCount={listFilters.activeCount}
+ onClick={listFilters.openDrawer}
+ />
+ <AdminFilterDrawer
+ open={listFilters.open}
+ onClose={listFilters.closeDrawer}
+ sections={orderFilterSections}
+ selected={listFilters.draft}
+ onToggle={listFilters.toggleDraft}
+ onApply={listFilters.apply}
+ onClearAll={listFilters.clearAll}
  />
  {/* View Toggle */}
  <div className="inline-flex items-center rounded-lg border admin-border admin-surface p-1 gap-0.5 order-2 md:order-none">

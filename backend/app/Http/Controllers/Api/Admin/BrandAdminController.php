@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\Storage;
 
 class BrandAdminController extends Controller
 {
+    private function isExternalUrl(?string $value): bool
+    {
+        return is_string($value) && preg_match('#^https?://#i', $value) === 1;
+    }
+
     public function index()
     {
         $items = Brand::query()->orderBy('sort_order')->latest('id')->get()->map(function ($b) {
@@ -35,10 +40,20 @@ class BrandAdminController extends Controller
             'slug' => ['required','string','max:140','unique:brands,slug'],
             'sort_order' => ['nullable','integer','min:0'],
             'is_active' => ['nullable','boolean'],
-            'logo' => ['required','image','mimes:jpg,jpeg,png,webp,svg','max:5120'],
+            'logo' => ['nullable','image','mimes:jpg,jpeg,png,webp,svg','max:5120'],
+            'logo_url' => ['nullable','url','max:2048'],
         ]);
 
-        $path = $request->file('logo')->store('brands', 'public');
+        if (!$request->hasFile('logo') && empty($validated['logo_url'])) {
+            return response()->json([
+                'message' => 'Validation failed.',
+                'errors' => ['logo' => ['Please upload a logo or provide a logo URL.']],
+            ], 422);
+        }
+
+        $path = $request->hasFile('logo')
+            ? $request->file('logo')->store('brands', 'public')
+            : $validated['logo_url'];
 
         $b = Brand::create([
             'name' => $validated['name'],
@@ -69,11 +84,21 @@ class BrandAdminController extends Controller
             'sort_order' => ['sometimes','nullable','integer','min:0'],
             'is_active' => ['sometimes','nullable','boolean'],
             'logo' => ['sometimes','image','mimes:jpg,jpeg,png,webp,svg','max:5120'],
+            'logo_url' => ['sometimes','nullable','url','max:2048'],
         ]);
 
         if ($request->hasFile('logo')) {
-            if ($brand->logo_path) Storage::disk('public')->delete($brand->logo_path);
+            if ($brand->logo_path && !$this->isExternalUrl($brand->logo_path)) {
+                Storage::disk('public')->delete($brand->logo_path);
+            }
             $brand->logo_path = $request->file('logo')->store('brands', 'public');
+        }
+
+        if (array_key_exists('logo_url', $validated) && !empty($validated['logo_url'])) {
+            if ($brand->logo_path && !$this->isExternalUrl($brand->logo_path)) {
+                Storage::disk('public')->delete($brand->logo_path);
+            }
+            $brand->logo_path = $validated['logo_url'];
         }
 
         foreach (['name','slug','sort_order','is_active'] as $f) {
@@ -97,7 +122,7 @@ class BrandAdminController extends Controller
 
     public function destroy(Brand $brand)
     {
-        if ($brand->logo_path) {
+        if ($brand->logo_path && !$this->isExternalUrl($brand->logo_path)) {
             Storage::disk('public')->delete($brand->logo_path);
         }
 

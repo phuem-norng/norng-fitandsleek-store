@@ -142,8 +142,6 @@ class StockReceiveService
     public function quickRestock(
         Category $source,
         int $quantity,
-        string $productCondition = 'new',
-        ?string $secondHandSaleType = null,
     ): array {
         if ($source->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
             throw ValidationException::withMessages([
@@ -157,12 +155,6 @@ class StockReceiveService
             ]);
         }
 
-        if (!in_array($productCondition, ['new', 'second_hand'], true)) {
-            throw ValidationException::withMessages([
-                'product_condition' => ['Invalid product condition.'],
-            ]);
-        }
-
         $inventory = $source->parent_id
             ? Category::query()->find($source->parent_id)
             : $source;
@@ -173,8 +165,11 @@ class StockReceiveService
             ]);
         }
 
+        $productCondition = in_array($inventory->product_condition, ['new', 'second_hand'], true)
+            ? $inventory->product_condition
+            : 'new';
         $secondHandSaleType = $productCondition === 'second_hand'
-            ? ($secondHandSaleType === 'average_bundle' ? 'average_bundle' : 'single')
+            ? ($inventory->second_hand_sale_type === 'average_bundle' ? 'average_bundle' : 'single')
             : null;
 
         return DB::transaction(function () use ($inventory, $quantity, $productCondition, $secondHandSaleType) {

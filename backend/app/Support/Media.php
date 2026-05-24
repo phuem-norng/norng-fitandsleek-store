@@ -46,8 +46,18 @@ class Media
             return '/storage/banners/' . ltrim($path, '/');
         }
 
+        $normalized = ltrim($path, '/');
+        if (str_starts_with($normalized, 'storage/')) {
+            $normalized = ltrim(substr($normalized, 8), '/');
+        }
+
+        // If the backing file is missing, always return a safe placeholder.
+        if (!\Storage::disk('public')->exists($normalized)) {
+            return \asset('placeholder.svg');
+        }
+
         // storage:link -> /storage
-        return '/storage/' . ltrim($path, '/');
+        return '/storage/' . $normalized;
     }
 
     // Backward-compatible alias (so both calls work)

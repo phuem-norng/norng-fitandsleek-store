@@ -16,6 +16,9 @@ import {
     loadTableColumnVisibility,
     TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
+import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
+import { matchesSection } from "../../lib/adminListFilters.js";
+import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 import {
@@ -223,12 +226,6 @@ const BTN_QUICK_RESTOCK =
 const QUICK_RESTOCK_MODAL_KICKER =
     "text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--admin-primary)]";
 
-const QUICK_RESTOCK_OPTION_SELECTED =
-    "border-[color:var(--admin-primary)] bg-[rgba(var(--admin-primary-rgb),0.1)] text-slate-900 ring-2 ring-[rgba(var(--admin-primary-rgb),0.22)] dark:text-slate-50";
-
-const QUICK_RESTOCK_OPTION_IDLE =
-    "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200";
-
 const QUICK_RESTOCK_SUBMIT_BTN =
     "rounded-xl bg-[color:var(--admin-primary)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(var(--admin-primary-rgb),0.35)] transition hover:brightness-110 disabled:opacity-50";
 
@@ -272,6 +269,77 @@ const matchesDateInRange = (item, fromYmd, toYmd) => {
     return true;
 };
 
+const matchesCategoryFilterSet = (item, selected) => matchesSection(
+    selected,
+    "category",
+    (id) => String(resolveItemCategoryId(item)) === String(id),
+);
+
+const matchesConditionFilterSet = (item, selected) => matchesSection(selected, "condition", (value) => {
+    const condition = item?.product_condition || "new";
+    const saleType = item?.second_hand_sale_type || "single";
+    if (value === "new") return condition === "new";
+    if (value === "second_hand_single") return condition === "second_hand" && saleType !== "average_bundle";
+    if (value === "second_hand_average") return condition === "second_hand" && saleType === "average_bundle";
+    return false;
+});
+
+const matchesOriginFilterSet = (item, selected) => matchesSection(selected, "origin", (value) => {
+    const raw = String(item?.origin || "").trim();
+    if (!raw) return false;
+    return raw.split(",").map((s) => s.trim()).includes(value);
+});
+
+const unitPriceForLabel = (item) => {
+    if (isAverageBundleLabel(item)) {
+        const price = Number(item?.price);
+        return Number.isFinite(price) ? price : null;
+    }
+    const price = Number(item?.price);
+    return Number.isFinite(price) && price >= 0 ? price : null;
+};
+
+const matchesPriceUnitFilterSet = (item, selected) => matchesSection(selected, "priceUnit", (value) => {
+    const price = unitPriceForLabel(item);
+    if (value === "has") return price != null && price > 0;
+    if (value === "none") return price == null || price <= 0;
+    if (value === "under_25") return price != null && price < 25;
+    if (value === "25_100") return price != null && price >= 25 && price <= 100;
+    if (value === "over_100") return price != null && price > 100;
+    return false;
+});
+
+const matchesStockFilterSet = (item, selected, stockForRow) => matchesSection(selected, "stock", (value) => {
+    const st = item.manage_stock ? (stockForRow(item) ?? 0) : null;
+    const mn = parseInt(item.min_stock, 10) || 0;
+    if (value === "out") return item.manage_stock && st === 0;
+    if (value === "low") return item.manage_stock && st > 0 && mn > 0 && st <= mn;
+    if (value === "above_min") return item.manage_stock && (mn === 0 ? st > 0 : st > mn);
+    if (value === "untracked") return !item.manage_stock;
+    return false;
+});
+
+const STOCK_DRAWER_STOCK_OPTIONS = [
+    { value: "out", label: "Out of stock" },
+    { value: "low", label: "Minimum (low stock)" },
+    { value: "above_min", label: "Above the minimum" },
+    { value: "untracked", label: "Not managing stock" },
+];
+
+const STOCK_DRAWER_CONDITION_OPTIONS = [
+    { value: "new", label: "New" },
+    { value: "second_hand_single", label: "Second-hand · Single" },
+    { value: "second_hand_average", label: "Second-hand · Average" },
+];
+
+const STOCK_DRAWER_PRICE_OPTIONS = [
+    { value: "has", label: "Has unit price" },
+    { value: "none", label: "No unit price" },
+    { value: "under_25", label: "Under $25" },
+    { value: "25_100", label: "$25 – $100" },
+    { value: "over_100", label: "Over $100" },
+];
+
 const LABEL_COLORS = [
     "", "#ef4444", "#f97316", "#eab308", "#22c55e",
     "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899", "#000000",
@@ -295,8 +363,6 @@ const DEFAULT_APPEARANCE = {
 
 const EMPTY_QUICK_RESTOCK = {
     quantity: "",
-    product_condition: "new",
-    second_hand_sale_type: "single",
 };
 
 const EMPTY_FORM = {
@@ -548,7 +614,6 @@ export default function AdminBarcodeQR() {
     const [success, setSuccess] = useState("");
     const [animate, setAnimate] = useState(false);
     const [aiBusy, setAiBusy] = useState(false);
-    const [stockFilter, setStockFilter] = useState("all");
     const [dateInFrom, setDateInFrom] = useState("");
     const [dateInTo, setDateInTo] = useState("");
     const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -559,6 +624,11 @@ export default function AdminBarcodeQR() {
     const [quickRestockBusy, setQuickRestockBusy] = useState(false);
     const [pendingDelete, setPendingDelete] = useState(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
+    const stockFilterSectionIds = isReceivedLogPage
+        ? ["stock", "category", "condition", "origin"]
+        : ["stock", "category", "condition", "origin", "priceUnit"];
+    const listFilters = useAdminFilterDrawer(stockFilterSectionIds);
+
     const [columnVisibility, setColumnVisibility] = useState(() =>
         loadTableColumnVisibility(stockColumnsStorageKey(stockBase), STOCK_TABLE_COLUMNS),
     );
@@ -1246,11 +1316,7 @@ export default function AdminBarcodeQR() {
     const openQuickRestockModal = (item) => {
         const label = resolveInventoryLabel(item);
         if (!label) return;
-        setQuickRestockForm({
-            quantity: "",
-            product_condition: label.product_condition || "new",
-            second_hand_sale_type: label.second_hand_sale_type || "single",
-        });
+        setQuickRestockForm({ quantity: "" });
         setQuickRestockItem(label);
     };
 
@@ -1281,10 +1347,6 @@ export default function AdminBarcodeQR() {
         try {
             const { data } = await api.post(`/admin/categories/${quickRestockItem.id}/quick-restock`, {
                 quantity: qty,
-                product_condition: quickRestockForm.product_condition || "new",
-                second_hand_sale_type: quickRestockForm.product_condition === "second_hand"
-                    ? (quickRestockForm.second_hand_sale_type || "single")
-                    : null,
             });
             const inventory = data?.data?.inventory;
             const received = data?.data?.received;
@@ -1368,21 +1430,91 @@ export default function AdminBarcodeQR() {
         } else {
             list = list.filter((r) => r.parent_id == null);
         }
-        if (stockFilter === "low") {
-            list = list.filter((r) => {
-                if (!r.manage_stock) return false;
-                const st = displayRowStock(r) ?? 0;
-                const mn = parseInt(r.min_stock, 10) || 0;
-                return st > 0 && mn > 0 && st <= mn;
-            });
-        } else if (stockFilter === "out") {
-            list = list.filter((r) => r.manage_stock && (displayRowStock(r) ?? 0) === 0);
+        list = list.filter((r) => matchesStockFilterSet(r, listFilters.applied, displayRowStock));
+        list = list.filter((r) => matchesCategoryFilterSet(r, listFilters.applied));
+        list = list.filter((r) => matchesConditionFilterSet(r, listFilters.applied));
+        list = list.filter((r) => matchesOriginFilterSet(r, listFilters.applied));
+        if (!isReceivedLogPage) {
+            list = list.filter((r) => matchesPriceUnitFilterSet(r, listFilters.applied));
         }
         if (dateInFrom || dateInTo) {
             list = list.filter((r) => matchesDateInRange(r, dateInFrom, dateInTo));
         }
         return list;
-    }, [searchFiltered, stockFilter, dateInFrom, dateInTo, isReceivedLogPage, rows, products]);
+    }, [searchFiltered, listFilters.applied, dateInFrom, dateInTo, isReceivedLogPage, rows, products]);
+
+    const masterRowsForFilters = useMemo(
+        () => rows.filter((r) => r.parent_id == null || r.parent_id === ""),
+        [rows],
+    );
+
+    const stockFilterSections = useMemo(() => {
+        const countStock = (predicate) => masterRowsForFilters.filter(predicate).length;
+        const stockOpts = STOCK_DRAWER_STOCK_OPTIONS.map((opt) => ({
+            ...opt,
+            count: countStock((row) => matchesStockFilterSet(row, { stock: [opt.value] }, (item) => {
+                if (!item?.manage_stock) return null;
+                if (isReceivedLogPage) return effectiveRowStock(item, true, rows);
+                const onHand = inventoryOnHandForMaster(item, rows);
+                if (onHand != null) return onHand;
+                return effectiveRowStock(item, false, rows);
+            })),
+        }));
+
+        const categoryOpts = categories
+            .map((c) => ({
+                value: String(c.id),
+                label: c.name || "—",
+                count: masterRowsForFilters.filter(
+                    (row) => String(resolveItemCategoryId(row)) === String(c.id),
+                ).length,
+            }))
+            .filter((o) => o.count > 0)
+            .sort((a, b) => a.label.localeCompare(b.label));
+
+        const conditionOpts = STOCK_DRAWER_CONDITION_OPTIONS.map((opt) => ({
+            ...opt,
+            count: masterRowsForFilters.filter((row) => matchesConditionFilterSet(row, { condition: [opt.value] })).length,
+        }));
+
+        const originSeen = new Map();
+        for (const row of masterRowsForFilters) {
+            const raw = String(row.origin || "").trim();
+            if (!raw) continue;
+            for (const part of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+                if (!originSeen.has(part)) originSeen.set(part, formatOriginLabel(part));
+            }
+        }
+        const originOpts = [...originSeen.entries()]
+            .map(([value, label]) => ({
+                value,
+                label,
+                count: masterRowsForFilters.filter((row) => matchesOriginFilterSet(row, { origin: [value] })).length,
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+
+        const sections = [
+            { id: "stock", title: "Stock", options: stockOpts },
+            { id: "category", title: "Categories", options: categoryOpts },
+            { id: "condition", title: "Condition", options: conditionOpts },
+            { id: "origin", title: "Origin", options: originOpts },
+        ];
+
+        if (!isReceivedLogPage) {
+            sections.push({
+                id: "priceUnit",
+                title: "Price unit",
+                options: STOCK_DRAWER_PRICE_OPTIONS.map((opt) => ({
+                    ...opt,
+                    count: masterRowsForFilters.filter(
+                        (row) => matchesPriceUnitFilterSet(row, { priceUnit: [opt.value] }),
+                    ).length,
+                })),
+            });
+        }
+
+        return sections;
+    }, [categories, masterRowsForFilters, isReceivedLogPage, rows]);
 
     const hasDateInRangeFilter = Boolean(dateInFrom || dateInTo);
     const clearDateInRange = () => {
@@ -2427,18 +2559,21 @@ export default function AdminBarcodeQR() {
                             />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2">
-                            <select
-                                value={stockFilter}
-                                onChange={(e) => setStockFilter(e.target.value)}
-                                className={`h-10 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold outline-none transition-all duration-300 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 ${isDark ? "text-white" : "text-slate-700"}`}
-                            >
-                                <option value="all">All items</option>
-                                <option value="low">Low in stock</option>
-                                <option value="out">Out of stock</option>
-                            </select>
-                        </div>
+                        <AdminFilterToolbarButton
+                            activeCount={listFilters.activeCount}
+                            onClick={listFilters.openDrawer}
+                        />
                     </div>
+
+                    <AdminFilterDrawer
+                        open={listFilters.open}
+                        onClose={listFilters.closeDrawer}
+                        sections={stockFilterSections}
+                        selected={listFilters.draft}
+                        onToggle={listFilters.toggleDraft}
+                        onApply={listFilters.apply}
+                        onClearAll={listFilters.clearAll}
+                    />
 
                     <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-[#ECE8DD] bg-[#F4EFE8]/80 px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center dark:border-white/10 dark:bg-white/[0.04]">
                         <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-[#6b6b64] dark:text-slate-300">
@@ -2483,21 +2618,21 @@ export default function AdminBarcodeQR() {
                         </div>
                     </div>
 
-                    {(search || stockFilter !== "all" || hasDateInRangeFilter) && (
-                        <div className="mt-4 flex flex-wrap gap-2">
+                    {(search || listFilters.activeCount > 0 || hasDateInRangeFilter) && (
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
                             {search && (
                                 <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20">
                                     Search: {search}
                                 </span>
                             )}
-                            {stockFilter !== "all" && (
-                                <button type="button" onClick={() => setStockFilter("all")} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
-                                    Filter: {stockFilter} x
+                            {listFilters.activeCount > 0 && (
+                                <button type="button" onClick={listFilters.clearAll} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
+                                    Filters ({listFilters.activeCount}) ×
                                 </button>
                             )}
                             {hasDateInRangeFilter && (
                                 <button type="button" onClick={clearDateInRange} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
-                                    Date in: {dateInFrom ? formatDateIn(dateInFrom) : "…"} – {dateInTo ? formatDateIn(dateInTo) : "…"} x
+                                    Date in: {dateInFrom ? formatDateIn(dateInFrom) : "…"} – {dateInTo ? formatDateIn(dateInTo) : "…"} ×
                                 </button>
                             )}
                         </div>
@@ -2528,7 +2663,7 @@ export default function AdminBarcodeQR() {
                 ) : displayRows.length === 0 ? (
                     <div className="rounded-[30px] border border-white/80 bg-white p-12 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10">
                         <p className="text-lg font-black text-slate-950 dark:text-white">No items match this filter</p>
-                        <button type="button" onClick={() => setStockFilter("all")} className="mt-4 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white dark:text-slate-950">Show all</button>
+                        <button type="button" onClick={listFilters.clearAll} className="mt-4 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white dark:text-slate-950">Clear filters</button>
                     </div>
                 ) : (
                     <section className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
@@ -2821,54 +2956,6 @@ export default function AdminBarcodeQR() {
                                     placeholder="e.g. 500"
                                 />
                             </div>
-                            <div>
-                                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Condition</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                        { value: "new", label: "New" },
-                                        { value: "second_hand", label: "Second-hand" },
-                                    ].map((option) => (
-                                        <button
-                                            key={option.value}
-                                            type="button"
-                                            onClick={() => setQuickRestockForm((s) => ({
-                                                ...s,
-                                                product_condition: option.value,
-                                                second_hand_sale_type: option.value === "second_hand" ? (s.second_hand_sale_type || "single") : "single",
-                                            }))}
-                                            className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${quickRestockForm.product_condition === option.value
-                                                ? QUICK_RESTOCK_OPTION_SELECTED
-                                                : QUICK_RESTOCK_OPTION_IDLE
-                                                }`}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            {quickRestockForm.product_condition === "second_hand" ? (
-                                <div>
-                                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Sale type</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {[
-                                            { value: "single", label: "Single" },
-                                            { value: "average_bundle", label: "Average bundle" },
-                                        ].map((option) => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setQuickRestockForm((s) => ({ ...s, second_hand_sale_type: option.value }))}
-                                                className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${quickRestockForm.second_hand_sale_type === option.value
-                                                    ? QUICK_RESTOCK_OPTION_SELECTED
-                                                    : QUICK_RESTOCK_OPTION_IDLE
-                                                    }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : null}
                         </div>
                         <div className="flex flex-col-reverse gap-2 border-t border-slate-200/90 bg-slate-50/80 px-5 py-4 dark:border-slate-700/90 dark:bg-slate-950/50 sm:flex-row sm:justify-end sm:px-7">
                             <button
