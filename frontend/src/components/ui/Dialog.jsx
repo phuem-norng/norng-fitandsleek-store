@@ -74,26 +74,65 @@ const DialogPopup = React.forwardRef(
     const variants = animationVariants[from];
 
     const isCentered = position === "center";
-    const disableInternalScroll = String(className || "").includes("modal-no-scroll");
-    const contentBaseClass = disableInternalScroll
-      ? "relative w-[92vw] max-w-[600px] gap-4 !rounded-none border border-gray-200 bg-white p-6 shadow-lg dark:bg-slate-800 dark:border-slate-700"
+    const viewportScroll = String(className || "").includes("modal-no-scroll");
+    const contentBaseClass = viewportScroll
+      ? "relative min-w-0 w-full max-w-none gap-0 border-0 bg-transparent p-0 shadow-none"
       : "relative w-[92vw] max-w-[600px] gap-4 !rounded-none border border-gray-200 bg-white p-6 shadow-lg dark:bg-slate-800 dark:border-slate-700 overflow-y-auto max-h-[85vh] modal-scroll";
 
     return (
       <DialogPrimitive.Portal>
         <div className="dialog-portal-wrapper">
           <AnimatePresence mode="sync">
-            <motion.div
-              key="dialog-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className={`fixed inset-0 z-[9998] bg-black/60 backdrop-blur-md ${
-                isCentered ? "" : "flex justify-center items-start pt-10"
-              }`}
-            />
-            {isCentered ? (
+            {!viewportScroll && (
+              <motion.div
+                key="dialog-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className={`fixed inset-0 z-[9998] bg-black/60 backdrop-blur-md ${
+                  isCentered ? "" : "flex justify-center items-start pt-10"
+                }`}
+              />
+            )}
+            {isCentered && viewportScroll ? (
+              <DialogPrimitive.Content asChild {...props}>
+                <div
+                  ref={ref}
+                  className="dialog-viewport-scroll fixed inset-0 z-[9999] m-0 overflow-y-auto overscroll-y-contain p-0"
+                >
+                  <motion.div
+                    key="dialog-overlay-viewport"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="pointer-events-none fixed inset-0 z-0 bg-black/60 backdrop-blur-md"
+                    aria-hidden
+                  />
+                  <div className="relative z-10 flex min-h-full items-center justify-center px-3 py-8 sm:px-4 sm:py-10">
+                    <MotionDiv
+                      key="dialog-content-centered"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={defaultTransition}
+                      className="w-[min(100vw-1rem,38rem)] max-w-[95vw] min-w-0"
+                    >
+                      <div className={`min-w-0 ${contentBaseClass} ${className}`}>
+                        {children}
+                        {showCloseButton && (
+                          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full bg-white/10 backdrop-blur-md p-2 opacity-80 transition-all hover:opacity-100 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:pointer-events-none">
+                            <X className="h-5 w-5" />
+                            <span className="sr-only">Close</span>
+                          </DialogPrimitive.Close>
+                        )}
+                      </div>
+                    </MotionDiv>
+                  </div>
+                </div>
+              </DialogPrimitive.Content>
+            ) : isCentered ? (
               <DialogPrimitive.Content asChild {...props}>
                 <div
                   ref={ref}
@@ -106,7 +145,7 @@ const DialogPopup = React.forwardRef(
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.98 }}
                     transition={defaultTransition}
-                    className="w-[min(100vw-1rem,28rem)] max-w-[95vw] min-w-0"
+                    className="w-[min(100vw-1rem,38rem)] max-w-[95vw] min-w-0"
                   >
                     <div className={`min-w-0 ${contentBaseClass} ${className}`}>
                       {children}

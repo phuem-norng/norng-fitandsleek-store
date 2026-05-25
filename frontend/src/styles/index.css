@@ -53,6 +53,11 @@ html.admin-dashboard[data-admin-theme="dark"] .fs-skeleton-block {
   --fs-font-en: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   --fs-font-km: "Noto Sans Khmer", "Kantumruy Pro", "Battambang", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   --fs-font-base: var(--fs-font-km);
+  /* Thin blue scrollbars (Zandokh-style — fixed blue, not admin theme accent) */
+  --fs-scrollbar-size: 6px;
+  --fs-scrollbar-thumb: #4d9fff;
+  --fs-scrollbar-thumb-hover: #2563eb;
+  --fs-scrollbar-track: rgba(59, 130, 246, 0.12);
 }
 
 html,
@@ -73,6 +78,34 @@ body {
 main.fs-main-content {
   font-size: 1rem;
   line-height: 1.6;
+}
+
+/*
+  Global scrollbars: thin blue thumb, soft track (similar to zandokh.com).
+  Intentionally NOT tied to --admin-primary (avoids red/pink accent scrollbars).
+*/
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fs-scrollbar-thumb) var(--fs-scrollbar-track);
+}
+
+html::-webkit-scrollbar {
+  width: var(--fs-scrollbar-size);
+  height: var(--fs-scrollbar-size);
+}
+
+html::-webkit-scrollbar-track {
+  background: var(--fs-scrollbar-track);
+  border-radius: 9999px;
+}
+
+html::-webkit-scrollbar-thumb {
+  background-color: var(--fs-scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fs-scrollbar-thumb-hover);
 }
 
 * {
@@ -523,7 +556,8 @@ html.admin-dashboard[data-admin-theme="dark"] .admin-theme select:focus {
   box-shadow: 0 0 0 3px rgba(var(--admin-primary-rgb), 0.24) !important;
 }
 
-.admin-theme [class*="bg-white"],
+/* Match `bg-white` cards only — not `dark:bg-white` (substring false positive breaks active filter chips). */
+.admin-theme [class*="bg-white"]:not([class*="dark:bg-white"]),
 .admin-theme [class*="dark:bg-slate-800"],
 .admin-theme [class*="dark:bg-slate-900"] {
   background-color: var(--admin-card-bg) !important;
@@ -1222,56 +1256,157 @@ html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-th
 }
 
 /* Utility: hide scrollbar but keep scroll functionality */
-.scrollbar-hide {
+.scrollbar-hide,
+.fs-no-scrollbar,
+.no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.scrollbar-hide::-webkit-scrollbar {
+.scrollbar-hide::-webkit-scrollbar,
+.fs-no-scrollbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
+/* Scrollable panels: same thin blue bar as page (admin sidebar, modals, lists) */
+.fs-scrollbar,
 .scrollbar-hover {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.58) transparent;
+  scrollbar-color: var(--fs-scrollbar-thumb) var(--fs-scrollbar-track);
   -ms-overflow-style: auto;
 }
 
+.fs-scrollbar::-webkit-scrollbar,
 .scrollbar-hover::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: var(--fs-scrollbar-size);
+  height: var(--fs-scrollbar-size);
 }
 
+.fs-scrollbar::-webkit-scrollbar-track,
 .scrollbar-hover::-webkit-scrollbar-track {
-  background: rgba(148, 163, 184, 0.14);
+  background: var(--fs-scrollbar-track);
   border-radius: 9999px;
 }
 
+.fs-scrollbar::-webkit-scrollbar-thumb,
 .scrollbar-hover::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.58);
+  background-color: var(--fs-scrollbar-thumb);
   border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }
 
+.fs-scrollbar::-webkit-scrollbar-thumb:hover,
 .scrollbar-hover::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(var(--admin-primary-rgb), 0.5);
+  background-color: var(--fs-scrollbar-thumb-hover);
 }
 
-html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover {
-  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+/*
+  Login / register: standard international corner radii (modal > controls > tabs).
+  Uses --fs-radius-md (14px) for the shell, --fs-radius-sm (10px) for fields/buttons.
+*/
+.auth-dialog-shell {
+  border-radius: var(--fs-radius-md);
 }
 
-html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover::-webkit-scrollbar-track {
-  background: rgba(100, 116, 139, 0.2);
+.auth-dialog-shell .auth-dialog-control,
+.auth-dialog-shell input:not([type="checkbox"]):not([type="radio"]),
+.auth-dialog-shell select,
+.auth-dialog-shell textarea {
+  border-radius: var(--fs-radius-sm);
 }
 
-html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.52);
+.auth-dialog-shell .auth-dialog-tabs {
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  height: auto;
+  display: flex;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(var(--admin-primary-rgb), 0.55);
+.auth-dialog-shell .auth-dialog-tab {
+  border-radius: 0;
+  flex: 1;
+  padding: 0.875rem 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.45);
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.auth-dialog-shell .auth-dialog-tab:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.auth-dialog-shell .auth-dialog-tab[data-state="active"] {
+  color: #ffffff;
+  font-weight: 700;
+  border-bottom-color: #ffffff;
+  background: transparent !important;
+}
+
+.auth-dialog-shell .auth-dialog-notice {
+  border-radius: var(--fs-radius-sm);
+}
+
+/*
+  Login / register: scroll the full viewport (Zandokh-style thin blue bar at the
+  browser edge), not a scrollbar inside the white modal panel.
+*/
+.dialog-viewport-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fs-scrollbar-thumb) var(--fs-scrollbar-track);
+}
+
+.dialog-viewport-scroll::-webkit-scrollbar {
+  width: var(--fs-scrollbar-size);
+  height: var(--fs-scrollbar-size);
+}
+
+.dialog-viewport-scroll::-webkit-scrollbar-track {
+  background: var(--fs-scrollbar-track);
+  border-radius: 9999px;
+}
+
+.dialog-viewport-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--fs-scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+.dialog-viewport-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fs-scrollbar-thumb-hover);
+}
+
+html.admin-dashboard[data-admin-theme="dark"] .fs-scrollbar,
+html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover,
+html.admin-dashboard[data-admin-theme="dark"] .dialog-viewport-scroll {
+  scrollbar-color: #60a5fa rgba(59, 130, 246, 0.18);
+}
+
+html.admin-dashboard[data-admin-theme="dark"] .fs-scrollbar::-webkit-scrollbar-track,
+html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover::-webkit-scrollbar-track,
+html.admin-dashboard[data-admin-theme="dark"] .dialog-viewport-scroll::-webkit-scrollbar-track {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+html.admin-dashboard[data-admin-theme="dark"] .fs-scrollbar::-webkit-scrollbar-thumb,
+html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover::-webkit-scrollbar-thumb,
+html.admin-dashboard[data-admin-theme="dark"] .dialog-viewport-scroll::-webkit-scrollbar-thumb {
+  background-color: #60a5fa;
+}
+
+html.admin-dashboard[data-admin-theme="dark"] .fs-scrollbar::-webkit-scrollbar-thumb:hover,
+html.admin-dashboard[data-admin-theme="dark"] .scrollbar-hover::-webkit-scrollbar-thumb:hover,
+html.admin-dashboard[data-admin-theme="dark"] .dialog-viewport-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #3b82f6;
 }
 
 /* ─── Admin dashboard: clip-path ring loader (scoped — not used on storefront) ─── */
