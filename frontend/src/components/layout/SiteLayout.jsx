@@ -81,7 +81,7 @@ export default function SiteLayout() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="fs-site min-h-screen flex flex-col">
       <Topbar />
       <ApiDegradedBanner />
       <Header

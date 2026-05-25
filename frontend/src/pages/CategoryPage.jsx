@@ -65,7 +65,7 @@ export default function CategoryPage() {
     }, [page, searchParams, setSearchParams]);
 
     return (
-        <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 md:py-8">
+        <div className="container-safe max-w-[1600px] mx-auto py-6 md:py-8">
             <div className="mb-6 flex items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 capitalize">{categoryName || "Category"}</h1>

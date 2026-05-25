@@ -1,6 +1,7 @@
 ﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 const THEME_STORAGE_KEY = "fitandsleek_admin_theme";
+const STOREFRONT_THEME_KEY = "fitandsleek_storefront_theme";
 
 /** Brand sage — buttons, sidebar, menus, focus rings (`--admin-primary`). */
 export const ADMIN_BRAND_PRIMARY = "#6E8B7E";
@@ -230,6 +231,25 @@ const ThemeContext = createContext(null);
 export function ThemeProvider({ children }) {
   const [hydrated, setHydrated] = useState(false);
   const [mode, setMode] = useState(DEFAULT_THEME.mode);
+
+  const [storefrontMode, setStorefrontMode] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STOREFRONT_THEME_KEY);
+      if (stored === "dark" || stored === "light") return stored;
+      if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+        return "dark";
+      }
+    } catch { /* ignore */ }
+    return "light";
+  });
+
+  const toggleStorefrontMode = useCallback(() => {
+    setStorefrontMode((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      try { localStorage.setItem(STOREFRONT_THEME_KEY, next); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME.primaryColor);
   const [presetId, setPresetId] = useState(DEFAULT_THEME.presetId);
   const [scale, setScale] = useState(DEFAULT_THEME.scale);
@@ -362,6 +382,8 @@ export function ThemeProvider({ children }) {
       saveTheme,
       resetAdminAppearance,
       normalizeHexColor,
+      storefrontMode,
+      toggleStorefrontMode,
     }),
     [
       hydrated,
@@ -376,6 +398,8 @@ export function ThemeProvider({ children }) {
       setPreset,
       saveTheme,
       resetAdminAppearance,
+      storefrontMode,
+      toggleStorefrontMode,
     ]
   );
 

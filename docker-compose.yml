@@ -14,7 +14,7 @@
 #   Qdrant:              localhost:6333
 #
 # backend/.env (mounted into the PHP container) must use the Compose network for the DB, not localhost:
-#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=fitandsleek_v2
+#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=fitandsleek_db
 #
 # pgAdmin / local tools on the host (Windows/Mac): use backend/.env as-is (127.0.0.1 + published port 5433).
 #
@@ -34,14 +34,15 @@ services:
     container_name: fitandsleek_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_v2}
+      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_db}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-Norng@123}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
+    command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - ./docker/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -82,9 +83,9 @@ services:
       # Explicit DB credentials for the container runtime (from repo-root `.env`).
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v2}
+      DB_DATABASE: ${DB_DATABASE:-fitandsleek_db}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
+      DB_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
       DB_SSLMODE: disable
     # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
     command: ["web"]
@@ -118,9 +119,9 @@ services:
     environment:
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v2}
+      DB_DATABASE: ${DB_DATABASE:-fitandsleek_db}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
+      DB_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
       DB_SSLMODE: disable
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
@@ -152,9 +153,9 @@ services:
     environment:
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v2}
+      DB_DATABASE: ${DB_DATABASE:-fitandsleek_db}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
+      DB_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
       DB_SSLMODE: disable
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
@@ -291,9 +292,7 @@ services:
 volumes:
   postgres_data:
     name: fitandsleek_fullstack_postgres_data
-    external: true
   pgadmin_data:
     name: fitandsleek_fullstack_pgadmin_data
-    external: true
   qdrant_storage:
   ai_model_cache:
