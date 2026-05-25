@@ -7,7 +7,8 @@ import { useLanguage } from "../../lib/i18n.jsx";
 import { useHomepageSettings } from "../../state/homepageSettings.jsx";
 import api from "../../lib/api.js";
 import { resolveImageUrl } from "../../lib/images.js";
-import { Camera, X, Bell, Menu, Search, User, Heart, ShoppingBag } from "lucide-react";
+import { Camera, X, Bell, Menu, Search, User, Heart, ShoppingBag, Moon, Sun } from "lucide-react";
+import { useTheme } from "../../state/theme.jsx";
 import Logo from "../Logo.jsx";
 import LoginDialog from "../dialogs/LoginDialog.jsx";
 import RegisterDialog from "../dialogs/RegisterDialog.jsx";
@@ -23,17 +24,20 @@ function getInitials(label) {
   return text.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function Badge({ value }) {
+function Badge({ value, accent = false }) {
   if (!value) return null;
   return (
-    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-zinc-900 text-white text-xs leading-tight leading-[18px] text-center animate-pulse">
-      {value}
+    <span
+      key={value}
+      className={cn("fs-header-badge", accent && "fs-header-badge-accent")}
+    >
+      {value > 99 ? "99+" : value}
     </span>
   );
 }
 
 function Icon({ name }) {
-  const cls = "w-5 h-5 transition-transform duration-300 group-hover:scale-110";
+  const cls = "w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110";
   if (name === "search") return <Search className={cls} strokeWidth={2} />;
   if (name === "user") return <User className={cls} strokeWidth={2} />;
   if (name === "heart") return <Heart className={cls} strokeWidth={2} />;
@@ -71,10 +75,12 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
     <div className={cn("relative", className)} ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fs-iconbtn-header transition-transform duration-300 hover:scale-110"
+        className="fs-avatar-ring"
         aria-label={t("account")}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
-        <span className="w-9 h-9 rounded-full bg-zinc-900/10 text-zinc-900 flex items-center justify-center overflow-hidden">
+        <span className="fs-avatar-ring__inner">
           {avatarSrc && !avatarBroken ? (
             <img
               src={avatarSrc}
@@ -83,9 +89,10 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
               onError={() => setAvatarBroken(true)}
             />
           ) : (
-            <span className="text-xs font-bold">{initials || "U"}</span>
+            <span>{initials || "U"}</span>
           )}
         </span>
+        <span className="fs-avatar-ring__status" aria-hidden="true" />
       </button>
 
       {open && (
@@ -356,6 +363,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   const wishlist = useWishlist();
   const { t, language, toggleLanguage } = useLanguage();
   const { settings } = useHomepageSettings();
+  const { storefrontMode, toggleStorefrontMode } = useTheme();
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [showRegisterDialog, setShowRegisterDialog] = useState(false);
@@ -824,6 +832,20 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             </div>
           </button>
         )}
+
+        {/* Mobile dark mode toggle */}
+        <button
+          type="button"
+          onClick={toggleStorefrontMode}
+          className="shrink-0 fs-iconbtn-header group"
+          aria-label={storefrontMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
+        >
+          {storefrontMode === "dark"
+            ? <Sun className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" strokeWidth={2} />
+            : <Moon className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
+          }
+        </button>
       </div>
 
       {/* Desktop: full header */}
@@ -865,51 +887,67 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           <Logo className="h-16 lg:h-20 xl:h-24 w-auto" src={headerSettings.logo_url || "/logo.png"} />
         </Link>
 
-        <div className="absolute right-0 items-center gap-0.5 lg:gap-1 xl:gap-1.5 flex">
+        <div className="absolute right-0 items-center gap-1.5 lg:gap-2 flex">
           {headerSettings.language_enabled && (
             <div className="relative group flex">
               <button
                 onClick={toggleLanguage}
-                className="inline-flex items-center justify-center h-9 w-9 rounded-full border border-white/30 bg-white/10 text-white transition-all duration-200 hover:bg-white/20"
+                className="fs-lang-pill"
                 title={t('language')}
                 aria-label={t('language')}
               >
                 <img
                   src={language === "km" ? "https://flagcdn.com/kh.svg" : "https://flagcdn.com/gb.svg"}
-                  alt={language === "km" ? "Cambodia flag" : "UK flag"}
-                  className="w-5 h-5 rounded-full object-cover ring-1 ring-white/60 bg-white"
+                  alt=""
+                  className="fs-lang-pill__flag"
                   aria-hidden="true"
                 />
+                <span>{language === "km" ? "KM" : "EN"}</span>
               </button>
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 pointer-events-none">
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 pointer-events-none">
                 {language === "km" ? t('english') : t('khmer')}
               </div>
             </div>
           )}
 
+          {/* Desktop dark mode toggle */}
+          <button
+            onClick={toggleStorefrontMode}
+            className="fs-iconbtn-header group"
+            aria-label={storefrontMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
+          >
+            {storefrontMode === "dark"
+              ? <Sun className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" strokeWidth={2} />
+              : <Moon className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
+            }
+          </button>
+
+          <span className="fs-header-divider" aria-hidden="true" />
+
           <button
             onClick={onOpenNotifications}
-            className="fs-iconbtn-header transition-transform duration-300 hover:scale-110"
+            className="fs-iconbtn-header group"
             aria-label={t('notifications')}
           >
-            <Bell className="w-4 h-4" />
-            <Badge value={notificationsUnread} />
+            <Bell className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
+            <Badge value={notificationsUnread} accent />
           </button>
 
           {headerSettings.wishlist_enabled && (
             <Link
-              className="fs-iconbtn-header transition-transform duration-300 hover:scale-110"
+              className="fs-iconbtn-header group"
               to="/search?tab=wishlist"
               aria-label={t('wishlist')}
             >
               <Icon name="heart" />
-              <Badge value={wishlist.count} />
+              <Badge value={wishlist.count} accent />
             </Link>
           )}
 
           {headerSettings.cart_enabled && (
             <button
-              className="fs-iconbtn-header transition-transform duration-300 hover:scale-110"
+              className="fs-iconbtn-header group"
               onClick={onOpenCart}
               aria-label={t('cart')}
             >
@@ -918,10 +956,12 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             </button>
           )}
 
+          <span className="fs-header-divider" aria-hidden="true" />
+
           <ProfileMenu user={user} onLogout={logout} t={t} />
 
           {user ? null : (
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 ml-1">
               <button
                 onClick={() => setShowLoginDialog(true)}
                 className="fs-btn fs-btn-secondary fs-btn-sm"

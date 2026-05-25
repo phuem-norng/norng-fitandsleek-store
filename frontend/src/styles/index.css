@@ -289,12 +289,188 @@ select:focus {
 }
 
 .fs-iconbtn-header {
-  @apply relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/85 text-zinc-900 hover:bg-white;
+  @apply relative inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-900;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.82) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 20px -8px rgba(0, 0, 0, 0.18);
+  transition: transform .25s cubic-bezier(.4, 0, .2, 1),
+              box-shadow .25s cubic-bezier(.4, 0, .2, 1),
+              background .25s ease,
+              border-color .25s ease;
 }
 
 .fs-iconbtn-header:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .16);
+  transform: translateY(-2px);
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 10px 28px -10px rgba(0, 0, 0, 0.28),
+    0 4px 10px -4px rgba(0, 0, 0, 0.14);
+}
+
+.fs-iconbtn-header:active {
+  transform: translateY(-1px) scale(0.97);
+}
+
+.fs-iconbtn-header:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 0 4px rgba(16, 163, 127, 0.55);
+}
+
+@keyframes fsBadgePop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.fs-header-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: #fff;
+  background: linear-gradient(135deg, #18181b 0%, #3f3f46 100%);
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 4px 10px -2px rgba(0, 0, 0, 0.35);
+  animation: fsBadgePop .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.fs-header-badge-accent {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 4px 12px -2px rgba(244, 63, 94, 0.55);
+}
+
+.fs-lang-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px 0 6px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.82) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  color: #18181b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 20px -8px rgba(0, 0, 0, 0.18);
+  transition: transform .25s cubic-bezier(.4, 0, .2, 1),
+              box-shadow .25s cubic-bezier(.4, 0, .2, 1),
+              background .25s ease;
+}
+
+.fs-lang-pill:hover {
+  transform: translateY(-2px);
+  background: #ffffff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 10px 28px -10px rgba(0, 0, 0, 0.28),
+    0 4px 10px -4px rgba(0, 0, 0, 0.14);
+}
+
+.fs-lang-pill:active {
+  transform: translateY(-1px) scale(0.97);
+}
+
+.fs-lang-pill__flag {
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 1.5px #ffffff,
+    0 2px 6px rgba(0, 0, 0, 0.18);
+  background: #fff;
+}
+
+.fs-header-divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%);
+  border-radius: 9999px;
+}
+
+.fs-avatar-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  padding: 2px;
+  background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.55) 100%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 8px 20px -8px rgba(0, 0, 0, 0.22);
+  transition: transform .25s cubic-bezier(.4, 0, .2, 1),
+              box-shadow .25s cubic-bezier(.4, 0, .2, 1);
+}
+
+.fs-avatar-ring:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 28px -10px rgba(0, 0, 0, 0.28),
+    0 4px 10px -4px rgba(0, 0, 0, 0.14);
+}
+
+.fs-avatar-ring__inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #18181b 0%, #3f3f46 55%, #71717a 100%);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: 12px;
+}
+
+.fs-avatar-ring__status {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #10b981;
+  box-shadow: 0 0 0 2px #ffffff;
 }
 
 /* Button system */
@@ -1482,4 +1658,696 @@ html.admin-dashboard[data-admin-modal] .admin-sidebar {
   filter: blur(5px);
   opacity: 0.35;
   transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+/* ================================================================
+   STOREFRONT DARK MODE
+   Activated by: html[data-storefront-theme="dark"]
+   Layout scope: .fs-site (SiteLayout root wrapper)
+   Mirrors the GitHub-style dark palette used in the admin dashboard.
+   ================================================================ */
+
+/* -- 1. Root CSS variable overrides ------------------------------ */
+html[data-storefront-theme="dark"] {
+  --fs-bg: 13 17 23;
+  --fs-fg: 240 246 252;
+  --fs-muted: 139 148 158;
+  --fs-border: 48 54 61;
+  color-scheme: dark;
+}
+
+/* -- 2. Skeleton shimmer ----------------------------------------- */
+html[data-storefront-theme="dark"] .fs-skeleton-block {
+  background: linear-gradient(90deg, #1f2937 25%, #111827 50%, #1f2937 75%);
+  background-size: 200% 100%;
+}
+
+/* -- 3. Site canvas ------------------------------------------------ */
+html[data-storefront-theme="dark"] .fs-site {
+  background-color: rgb(13 17 23);
+  color: rgb(240 246 252);
+}
+
+/* -- 4. White backgrounds → dark card surface --------------------- */
+/* Match exact bg-white token only (not opacity variants like bg-white/95) */
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white"] {
+  background-color: #161b22 !important;
+}
+
+/* Responsive prefix variants */
+html[data-storefront-theme="dark"] .fs-site [class~="sm:bg-white"],
+html[data-storefront-theme="dark"] .fs-site [class~="md:bg-white"],
+html[data-storefront-theme="dark"] .fs-site [class~="lg:bg-white"] {
+  background-color: #161b22 !important;
+}
+
+/* hover:bg-white → dark elevated */
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white"]:hover {
+  background-color: #21262d !important;
+}
+
+/* -- 5. Light gray backgrounds ------------------------------------ */
+/* Use ~= (word) for exact -50 match AND *="bg-*-50/" for opacity variants.
+   This avoids matching -500, -50/80 → -500 false positive is prevented
+   because "bg-slate-50/" is NOT a substring of "bg-slate-500". */
+html[data-storefront-theme="dark"] .fs-site [class~="bg-slate-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-slate-50\/"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-gray-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gray-50\/"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-neutral-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-neutral-50\/"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-zinc-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-50\/"] {
+  background-color: #0d1117 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="bg-slate-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gray-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-100"] {
+  background-color: #21262d !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="bg-slate-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gray-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-200"] {
+  background-color: #30363d !important;
+}
+
+/* Hover light gray → subtle elevated */
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-zinc-50"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:bg-zinc-50\/"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-zinc-100"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-slate-50"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:bg-slate-50\/"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-slate-100"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-gray-50"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:bg-gray-50\/"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-gray-100"]:hover {
+  background-color: rgba(240, 246, 252, 0.06) !important;
+}
+
+/* group-hover variants */
+html[data-storefront-theme="dark"] .fs-site .group:hover [class~="group-hover:bg-zinc-50"],
+html[data-storefront-theme="dark"] .fs-site .group:hover [class*="group-hover:bg-zinc-50\/"],
+html[data-storefront-theme="dark"] .fs-site .group:hover [class~="group-hover:bg-zinc-100"],
+html[data-storefront-theme="dark"] .fs-site .group:hover [class~="group-hover:bg-slate-50"],
+html[data-storefront-theme="dark"] .fs-site .group:hover [class*="group-hover:bg-slate-50\/"] {
+  background-color: rgba(240, 246, 252, 0.06) !important;
+}
+
+/* -- 6. Mobile bottom nav gradient (from-white → from dark) ------- */
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient-to-t"][class*="from-white"] {
+  background-image: linear-gradient(to top, #0d1117, rgba(13, 17, 23, 0.96), rgba(13, 17, 23, 0.8)) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient-to-b"][class*="from-white"] {
+  background-image: linear-gradient(to bottom, #0d1117, rgba(13, 17, 23, 0.96), rgba(13, 17, 23, 0.8)) !important;
+}
+
+/* -- 7. Dark text colors → light ---------------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class~="text-black"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-slate-900"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-900"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-gray-900"] {
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="text-slate-800"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-800"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-gray-800"] {
+  color: #e6edf3 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="text-slate-700"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-700"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-gray-700"] {
+  color: #c9d1d9 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="text-slate-600"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-600"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-gray-600"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-slate-500"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-500"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-gray-500"] {
+  color: #8b949e !important;
+}
+
+/* hover:text overrides */
+html[data-storefront-theme="dark"] .fs-site [class*="hover:text-zinc-900"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:text-slate-900"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:text-black"]:hover {
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="hover:text-zinc-700"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:text-slate-700"]:hover {
+  color: #c9d1d9 !important;
+}
+
+/* group-hover text */
+html[data-storefront-theme="dark"] .fs-site .group:hover [class*="group-hover:text-zinc-900"],
+html[data-storefront-theme="dark"] .fs-site .group:hover [class*="group-hover:text-slate-900"] {
+  color: #f0f6fc !important;
+}
+
+/* -- 8. Borders ---------------------------------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="border-slate-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-slate-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-zinc-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-zinc-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-gray-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-gray-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-neutral-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-neutral-200"] {
+  border-color: #30363d !important;
+}
+
+/* -- 9. Shadows ---------------------------------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="shadow-2xl"],
+html[data-storefront-theme="dark"] .fs-site [class*="shadow-xl"] {
+  box-shadow: 0 12px 48px rgba(1, 4, 9, 0.6) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="shadow-lg"] {
+  box-shadow: 0 10px 36px rgba(1, 4, 9, 0.45) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="shadow-md"],
+html[data-storefront-theme="dark"] .fs-site [class*="shadow-sm"] {
+  box-shadow: 0 2px 10px rgba(1, 4, 9, 0.35) !important;
+}
+
+/* -- 10. Form inputs ----------------------------------------------- */
+html[data-storefront-theme="dark"] .fs-site input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-storefront-theme="dark"] .fs-site textarea,
+html[data-storefront-theme="dark"] .fs-site select {
+  background: #161b22 !important;
+  border-color: #30363d !important;
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site input::placeholder,
+html[data-storefront-theme="dark"] .fs-site textarea::placeholder {
+  color: #8b949e !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site input:focus,
+html[data-storefront-theme="dark"] .fs-site textarea:focus,
+html[data-storefront-theme="dark"] .fs-site select:focus {
+  border-color: #58a6ff !important;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15) !important;
+}
+
+/* -- 11. Custom fs-* components ----------------------------------- */
+html[data-storefront-theme="dark"] .fs-site .fs-input {
+  background: #161b22 !important;
+  border-color: #30363d !important;
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-input::placeholder {
+  color: #8b949e !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-input:focus {
+  border-color: #58a6ff !important;
+  box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.12) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-card {
+  background: #161b22 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-pill {
+  background: #21262d !important;
+  border-color: #30363d !important;
+  color: #c9d1d9 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-iconbtn {
+  background: #21262d !important;
+  border-color: #30363d !important;
+  color: #c9d1d9 !important;
+  box-shadow: 0 2px 8px rgba(1, 4, 9, 0.3) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-btn-secondary {
+  background: #21262d !important;
+  border-color: #30363d !important;
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-btn-outline {
+  border-color: #30363d !important;
+  color: #c9d1d9 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-btn-ghost {
+  color: #c9d1d9;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-btn-ghost:hover {
+  background: rgba(240, 246, 252, 0.06);
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-btn-icon {
+  background: #21262d !important;
+  border-color: #30363d !important;
+  color: #c9d1d9 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-menu-item {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-menu-item:hover {
+  color: #f0f6fc;
+  background: rgba(240, 246, 252, 0.06);
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-label {
+  color: #8b949e !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-helper {
+  color: #8b949e !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-error {
+  background: rgba(244, 63, 94, 0.1) !important;
+  border-color: rgba(244, 63, 94, 0.25) !important;
+  color: #f87171 !important;
+}
+
+/* -- 12. Badge ring – dark background ring instead of white ------- */
+html[data-storefront-theme="dark"] .fs-site .fs-header-badge {
+  box-shadow: 0 0 0 2px #161b22, 0 4px 10px -2px rgba(0, 0, 0, 0.5);
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-header-badge-accent {
+  box-shadow: 0 0 0 2px #161b22, 0 4px 12px -2px rgba(244, 63, 94, 0.55);
+}
+
+/* -- 13. Avatar status dot ring ------------------------------------ */
+html[data-storefront-theme="dark"] .fs-site .fs-avatar-ring__status {
+  box-shadow: 0 0 0 2px #0d1117;
+}
+
+/* -- 14. Mobile bottom nav active indicator ----------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-900"][class*="text-white"][class*="border-zinc-900"] {
+  background-color: #58a6ff !important;
+  border-color: #58a6ff !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-900"][class*="hover:text-zinc-900"] {
+  color: #f0f6fc !important;
+}
+
+/* -- 15. Divider lines -------------------------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="divide-slate-100"] > * + *,
+html[data-storefront-theme="dark"] .fs-site [class*="divide-slate-200"] > * + *,
+html[data-storefront-theme="dark"] .fs-site [class*="divide-zinc-100"] > * + *,
+html[data-storefront-theme="dark"] .fs-site [class*="divide-zinc-200"] > * + * {
+  border-color: #30363d !important;
+}
+
+/* -- 16. Topbar bar ------------------------------------------------ */
+html[data-storefront-theme="dark"] .fs-site .border-b.border-zinc-200.bg-white,
+html[data-storefront-theme="dark"] .fs-site .border-b.border-zinc-200 {
+  border-color: #30363d !important;
+}
+
+/* -- 17. Transition for smooth mode switch ------------------------- */
+html[data-storefront-theme="dark"] .fs-site,
+html[data-storefront-theme="dark"] .fs-site * {
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    color 180ms ease,
+    box-shadow 220ms ease !important;
+}
+
+/* Disable transition on images and SVGs (avoid color flash artifacts) */
+html[data-storefront-theme="dark"] .fs-site img,
+html[data-storefront-theme="dark"] .fs-site svg {
+  transition: none !important;
+}
+
+/* -- 18. Alert / toast colors ------------------------------------ */
+/* IMPORTANT: use ~= (exact word token) not *= (substring) to avoid
+   matching -500 variants — e.g. "bg-amber-50" is a substring of
+   "bg-amber-500", so *= would incorrectly wipe vivid badge colors. */
+html[data-storefront-theme="dark"] .fs-site [class~="bg-green-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-green-100"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-emerald-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-emerald-100"] {
+  background-color: rgba(16, 163, 127, 0.12) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class~="bg-red-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-red-100"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-rose-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-rose-100"] {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class~="bg-yellow-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-yellow-100"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-amber-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-amber-100"] {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class~="bg-blue-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-blue-100"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-indigo-50"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-indigo-100"] {
+  background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+/* -- 19. Smooth light ↔ dark transition on body ------------------- */
+html[data-storefront-theme="dark"] body,
+html:not([data-storefront-theme]) body {
+  transition: background-color 250ms ease, color 200ms ease;
+}
+
+/* -- 20. Page wrapper gradient backgrounds (min-h-screen) ----------
+   Most pages use `min-h-screen bg-gradient-to-br from-slate-50 to-slate-100`
+   as their outermost div. Eliminate the gradient and apply dark canvas. */
+html[data-storefront-theme="dark"] .fs-site [class*="min-h-screen"] {
+  background-color: rgb(13 17 23) !important;
+  background-image: none !important;
+}
+
+/* -- 21. Gradient from-* / to-* CSS variable overrides -------------
+   Covers inline gradient sections: card headers, search rows, filter bars. */
+html[data-storefront-theme="dark"] .fs-site [class*="from-slate-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-slate-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-gray-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-gray-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-zinc-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-zinc-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-neutral-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="from-neutral-100"] {
+  --tw-gradient-from: #161b22 !important;
+  --tw-gradient-to: rgb(22 27 34 / 0) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="to-slate-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-slate-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-gray-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-gray-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-zinc-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-zinc-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-neutral-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="to-neutral-100"] {
+  --tw-gradient-to: #0d1117 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site [class*="via-slate-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="via-slate-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="via-gray-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="via-gray-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="via-zinc-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="via-zinc-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="via-white\/"] {
+  --tw-gradient-stops: var(--tw-gradient-from), rgba(13, 17, 23, 0.92) var(--tw-gradient-via-position, 50%), var(--tw-gradient-to) !important;
+}
+
+/* -- 22. Medium gray borders (300-level) not covered above --------- */
+html[data-storefront-theme="dark"] .fs-site [class*="border-slate-300"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-zinc-300"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-gray-300"],
+html[data-storefront-theme="dark"] .fs-site [class*="border-neutral-300"] {
+  border-color: #30363d !important;
+}
+
+/* -- 23. Lighter muted text (400-level) ---------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="text-slate-400"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-zinc-400"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-gray-400"],
+html[data-storefront-theme="dark"] .fs-site [class*="text-neutral-400"] {
+  color: #6e7681 !important;
+}
+
+/* -- 24. Medium gray background (300-level) ----------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="bg-slate-300"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-300"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gray-300"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-neutral-300"] {
+  background-color: #30363d !important;
+}
+
+/* Hover 300-level */
+html[data-storefront-theme="dark"] .fs-site [class*="hover:bg-slate-300"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:bg-zinc-300"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class*="hover:bg-gray-300"]:hover {
+  background-color: #30363d !important;
+}
+
+/* -- 25. Dark-colored backgrounds that should stay dark ------------ */
+html[data-storefront-theme="dark"] .fs-site [class*="bg-slate-800"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-slate-900"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-800"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-zinc-900"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gray-800"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gray-900"] {
+  background-color: #21262d !important;
+}
+
+/* -- 26. Inline bg-gradient-to-* with white via stop -------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient"][class*="from-slate-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient"][class*="from-gray-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient"][class*="from-zinc-50"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient"][class*="from-slate-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient"][class*="from-gray-100"],
+html[data-storefront-theme="dark"] .fs-site [class*="bg-gradient"][class*="from-zinc-100"] {
+  background-color: #161b22 !important;
+  background-image: none !important;
+}
+
+/* -- 27. Divide (border between children) 300-level --------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="divide-slate-300"] > * + *,
+html[data-storefront-theme="dark"] .fs-site [class*="divide-zinc-300"] > * + *,
+html[data-storefront-theme="dark"] .fs-site [class*="divide-gray-300"] > * + * {
+  border-color: #30363d !important;
+}
+
+/* -- 28. Ring colors (focus/active ring) -------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="ring-slate-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="ring-zinc-200"],
+html[data-storefront-theme="dark"] .fs-site [class*="ring-gray-200"] {
+  --tw-ring-color: #30363d !important;
+}
+
+/* -- 29. Placeholder text color ----------------------------------- */
+html[data-storefront-theme="dark"] .fs-site [class*="placeholder-slate"],
+html[data-storefront-theme="dark"] .fs-site [class*="placeholder-zinc"],
+html[data-storefront-theme="dark"] .fs-site [class*="placeholder-gray"] {
+  color: #8b949e !important;
+}
+
+/* -- 28. Semantic status colors — alert banners & badges ----------
+   Tailwind dark: classes are scoped to admin-only (see tailwind.config.js).
+   Storefront must override semantic color shades via data-storefront-theme.
+   Only targeting storefront pages (non-admin prefix). */
+
+/* Amber / warning */
+html[data-storefront-theme="dark"] .fs-site [class~="text-amber-950"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-amber-900"] {
+  color: #fbbf24 !important; /* amber-400 */
+}
+html[data-storefront-theme="dark"] .fs-site [class~="text-amber-800"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-amber-700"] {
+  color: #f59e0b !important; /* amber-500 */
+}
+
+/* Emerald / success */
+html[data-storefront-theme="dark"] .fs-site [class~="text-emerald-900"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-emerald-800"] {
+  color: #6ee7b7 !important; /* emerald-300 */
+}
+
+/* Green / success */
+html[data-storefront-theme="dark"] .fs-site [class~="text-green-900"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-green-800"] {
+  color: #86efac !important; /* green-300 */
+}
+
+/* Red / error */
+html[data-storefront-theme="dark"] .fs-site [class~="text-red-900"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-red-800"] {
+  color: #fca5a5 !important; /* red-300 */
+}
+
+/* Blue / info */
+html[data-storefront-theme="dark"] .fs-site [class~="text-blue-900"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-blue-800"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-blue-700"] {
+  color: #93c5fd !important; /* blue-300 */
+}
+
+/* Emerald / green dark shades — add 700 */
+html[data-storefront-theme="dark"] .fs-site [class~="text-emerald-700"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-green-700"] {
+  color: #a7f3d0 !important; /* emerald/green-200 */
+}
+
+/* Red dark shades — add 700 */
+html[data-storefront-theme="dark"] .fs-site [class~="text-red-700"] {
+  color: #fca5a5 !important; /* red-300 */
+}
+
+/* Teal / brand accent used in storefront */
+html[data-storefront-theme="dark"] .fs-site [class~="text-teal-900"],
+html[data-storefront-theme="dark"] .fs-site [class~="text-teal-800"] {
+  color: #5eead4 !important; /* teal-300 */
+}
+
+/* -- 29. Semantic border colors for alert containers -------------- */
+html[data-storefront-theme="dark"] .fs-site [class~="border-emerald-200"],
+html[data-storefront-theme="dark"] .fs-site [class~="border-emerald-200\/80"],
+html[data-storefront-theme="dark"] .fs-site [class~="border-emerald-300"] {
+  border-color: rgba(52, 211, 153, 0.3) !important;
+}
+html[data-storefront-theme="dark"] .fs-site [class~="border-amber-200"],
+html[data-storefront-theme="dark"] .fs-site [class~="border-amber-200\/80"],
+html[data-storefront-theme="dark"] .fs-site [class~="border-amber-300"],
+html[data-storefront-theme="dark"] .fs-site [class~="border-amber-300\/80"] {
+  border-color: rgba(217, 119, 6, 0.4) !important;
+}
+
+/* -- 30. High-opacity white variants → dark card surface ----------
+   bg-white/95, /90, /80, /98 are used on product card hover buttons,
+   gallery arrows, search modal, promo slider nav — they must be dark.
+   Low-opacity variants (bg-white/10, /15, /20) are glass effects on
+   colored headers and must NOT be overridden. */
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/95"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/90"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/85"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/80"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/70"],
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/98"] {
+  background-color: rgba(22, 27, 34, 0.97) !important;
+}
+
+/* focus-within:bg-white — SmartSearchModal input wrapper flashes white on focus */
+html[data-storefront-theme="dark"] .fs-site [class~="focus-within:bg-white"]:focus-within {
+  background-color: #21262d !important;
+}
+
+/* focus:bg-white — any input/element that transitions to white on focus */
+html[data-storefront-theme="dark"] .fs-site [class~="focus:bg-white"]:focus {
+  background-color: #21262d !important;
+  color: #f0f6fc !important;
+}
+
+/* hover:bg-white/XX — high-opacity white hover states (e.g. promo slider arrows) */
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white\/98"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white\/95"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white\/90"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white\/85"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white\/80"]:hover,
+html[data-storefront-theme="dark"] .fs-site [class~="hover:bg-white\/70"]:hover {
+  background-color: rgba(33, 38, 45, 0.97) !important;
+}
+
+/* -- 31. Icon color for hover-reveal buttons ----------------------
+   Buttons that appear on hover (product card wishlist, gallery arrows)
+   inherit light text from .fs-site, which makes them visible on dark
+   card backgrounds — no extra rule needed. But ensure text-zinc-800
+   on these glass buttons becomes light. */
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/95"] *,
+html[data-storefront-theme="dark"] .fs-site [class~="bg-white\/90"] * {
+  color: inherit;
+}
+
+/* ================================================================
+   STOREFRONT DARK MODE — PORTAL / GLOBAL SCOPE
+   For elements rendered via createPortal (outside .fs-site):
+   zoom modals, sweetalert2 dialogs, etc.
+   Safe because data-storefront-theme is NEVER set on admin routes.
+   ================================================================ */
+
+html[data-storefront-theme="dark"] [class~="bg-white"] {
+  background-color: #161b22 !important;
+}
+
+/* High-opacity white variants in portal scope */
+html[data-storefront-theme="dark"] [class~="bg-white\/95"],
+html[data-storefront-theme="dark"] [class~="bg-white\/90"],
+html[data-storefront-theme="dark"] [class~="bg-white\/85"],
+html[data-storefront-theme="dark"] [class~="bg-white\/80"],
+html[data-storefront-theme="dark"] [class~="bg-white\/70"],
+html[data-storefront-theme="dark"] [class~="bg-white\/98"] {
+  background-color: rgba(22, 27, 34, 0.97) !important;
+}
+
+html[data-storefront-theme="dark"] [class~="focus-within:bg-white"]:focus-within {
+  background-color: #21262d !important;
+}
+
+html[data-storefront-theme="dark"] [class~="focus:bg-white"]:focus {
+  background-color: #21262d !important;
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] [class~="bg-slate-50"],
+html[data-storefront-theme="dark"] [class*="bg-slate-50\/"],
+html[data-storefront-theme="dark"] [class~="bg-gray-50"],
+html[data-storefront-theme="dark"] [class*="bg-gray-50\/"],
+html[data-storefront-theme="dark"] [class~="bg-zinc-50"],
+html[data-storefront-theme="dark"] [class*="bg-zinc-50\/"] {
+  background-color: #0d1117 !important;
+}
+
+html[data-storefront-theme="dark"] [class*="bg-slate-100"],
+html[data-storefront-theme="dark"] [class*="bg-gray-100"],
+html[data-storefront-theme="dark"] [class*="bg-zinc-100"] {
+  background-color: #21262d !important;
+}
+
+html[data-storefront-theme="dark"] [class*="text-slate-900"],
+html[data-storefront-theme="dark"] [class*="text-zinc-900"],
+html[data-storefront-theme="dark"] [class*="text-gray-900"] {
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] [class*="text-slate-800"],
+html[data-storefront-theme="dark"] [class*="text-zinc-800"],
+html[data-storefront-theme="dark"] [class*="text-gray-800"] {
+  color: #e6edf3 !important;
+}
+
+html[data-storefront-theme="dark"] [class*="text-slate-700"],
+html[data-storefront-theme="dark"] [class*="text-zinc-700"],
+html[data-storefront-theme="dark"] [class*="text-gray-700"] {
+  color: #c9d1d9 !important;
+}
+
+html[data-storefront-theme="dark"] [class*="text-slate-600"],
+html[data-storefront-theme="dark"] [class*="text-zinc-600"],
+html[data-storefront-theme="dark"] [class*="text-gray-600"],
+html[data-storefront-theme="dark"] [class*="text-slate-500"],
+html[data-storefront-theme="dark"] [class*="text-zinc-500"],
+html[data-storefront-theme="dark"] [class*="text-gray-500"] {
+  color: #8b949e !important;
+}
+
+html[data-storefront-theme="dark"] [class*="border-slate-100"],
+html[data-storefront-theme="dark"] [class*="border-slate-200"],
+html[data-storefront-theme="dark"] [class*="border-zinc-100"],
+html[data-storefront-theme="dark"] [class*="border-zinc-200"],
+html[data-storefront-theme="dark"] [class*="border-gray-100"],
+html[data-storefront-theme="dark"] [class*="border-gray-200"] {
+  border-color: #30363d !important;
+}
+
+/* Portal inputs */
+html[data-storefront-theme="dark"] [class*="shadow-2xl"][class~="bg-white"],
+html[data-storefront-theme="dark"] [class*="shadow-xl"][class~="bg-white"] {
+  background-color: #161b22 !important;
+  box-shadow: 0 12px 48px rgba(1, 4, 9, 0.6) !important;
 }

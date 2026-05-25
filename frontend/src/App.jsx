@@ -159,12 +159,32 @@ function AdminHtmlThemeSync() {
   return null;
 }
 
+/** Sets `data-storefront-theme="dark"` on `<html>` when on storefront routes and user has dark mode on.
+ *  Removed when navigating to admin so admin styles are never polluted. */
+function StorefrontHtmlThemeSync() {
+  const location = useLocation();
+  const { storefrontMode } = useTheme();
+
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const onAdmin = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+    if (!onAdmin && storefrontMode === "dark") {
+      root.setAttribute("data-storefront-theme", "dark");
+    } else {
+      root.removeAttribute("data-storefront-theme");
+    }
+  }, [location.pathname, storefrontMode]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <CatalogAvailabilityProvider>
       <HomepageSettingsProvider>
         <FontSettingsSync />
         <AdminHtmlThemeSync />
+        <StorefrontHtmlThemeSync />
         <CustomCursor />
         <Routes>
         <Route element={<SiteLayout />}>

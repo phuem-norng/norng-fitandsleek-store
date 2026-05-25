@@ -102,8 +102,8 @@ export default function DiscountCategory() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-8 px-4">
-        <div className="max-w-7xl mx-auto">
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-8">
+        <div className="container-safe max-w-[1600px] mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <button
               onClick={() => navigate('/discounts')}
@@ -119,7 +119,7 @@ export default function DiscountCategory() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="container-safe max-w-[1600px] mx-auto py-8">
         {/* Filters Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

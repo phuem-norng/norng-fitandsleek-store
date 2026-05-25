@@ -96,30 +96,30 @@ const DialogPopup = React.forwardRef(
               />
             )}
             {isCentered && viewportScroll ? (
-              <DialogPrimitive.Content asChild {...props}>
-                <div
-                  ref={ref}
-                  className="dialog-viewport-scroll fixed inset-0 z-[9999] m-0 overflow-y-auto overscroll-y-contain p-0"
-                >
-                  <motion.div
-                    key="dialog-overlay-viewport"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="pointer-events-none fixed inset-0 z-0 bg-black/60 backdrop-blur-md"
-                    aria-hidden
-                  />
-                  <div className="relative z-10 flex min-h-full items-center justify-center px-3 py-8 sm:px-4 sm:py-10">
-                    <MotionDiv
-                      key="dialog-content-centered"
-                      initial={{ opacity: 0, scale: 0.98 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.98 }}
-                      transition={defaultTransition}
-                      className="w-[min(100vw-1rem,38rem)] max-w-[95vw] min-w-0"
-                    >
-                      <div className={`min-w-0 ${contentBaseClass} ${className}`}>
+              <div className="dialog-viewport-scroll fixed inset-0 z-[9999] m-0 overflow-y-auto overscroll-y-contain p-0">
+                <motion.div
+                  key="dialog-overlay-viewport"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="pointer-events-none fixed inset-0 z-0 bg-black/60 backdrop-blur-md"
+                  aria-hidden
+                />
+                <div className="relative z-10 flex min-h-full items-center justify-center px-3 py-8 sm:px-4 sm:py-10">
+                  <MotionDiv
+                    key="dialog-content-centered"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={defaultTransition}
+                    className="w-[min(100vw-1rem,38rem)] max-w-[95vw] min-w-0"
+                  >
+                    <DialogPrimitive.Content asChild {...props}>
+                      <div
+                        ref={ref}
+                        className={`min-w-0 ${contentBaseClass} ${className}`}
+                      >
                         {children}
                         {showCloseButton && (
                           <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full bg-white/10 backdrop-blur-md p-2 opacity-80 transition-all hover:opacity-100 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:pointer-events-none">
@@ -128,10 +128,10 @@ const DialogPopup = React.forwardRef(
                           </DialogPrimitive.Close>
                         )}
                       </div>
-                    </MotionDiv>
-                  </div>
+                    </DialogPrimitive.Content>
+                  </MotionDiv>
                 </div>
-              </DialogPrimitive.Content>
+              </div>
             ) : isCentered ? (
               <DialogPrimitive.Content asChild {...props}>
                 <div

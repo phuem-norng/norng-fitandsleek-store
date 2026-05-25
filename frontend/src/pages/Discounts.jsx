@@ -88,14 +88,14 @@ export default function Discounts() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
-      <div className="bg-[#5F7F73] text-white py-8 px-4">
-        <div className="max-w-7xl mx-auto">
+      <div className="bg-[#5F7F73] text-white py-8">
+        <div className="container-safe max-w-[1600px] mx-auto">
           <h1 className="text-4xl font-bold mb-2">{t('discountsTitle')}</h1>
           <p className="text-[#DCE7E2]">{t('discountsSubtitle')}</p>
         </div>
       </div>
 
-      <div className="max-w-[1600px] mx-auto px-4 py-8">
+      <div className="container-safe max-w-[1600px] mx-auto py-8">
         {/* Filters Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">

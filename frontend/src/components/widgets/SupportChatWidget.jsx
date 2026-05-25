@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import api from "../../lib/api";
+import { useTheme } from "../../state/theme.jsx";
 
 const DEFAULTS = {
   enabled: true,
@@ -23,6 +24,9 @@ const PLATFORM_META = {
 
 
 export default function SupportChatWidget() {
+  const { storefrontMode } = useTheme();
+  const dark = storefrontMode === "dark";
+
   const getMinBottomOffset = () => {
     if (typeof window === "undefined") return 100;
     return window.innerWidth >= 768 ? 154 : 196;
@@ -177,7 +181,11 @@ export default function SupportChatWidget() {
     >
       <div
         ref={panelRef}
-        className={`mb-3 w-[calc(100vw-2rem)] max-w-[360px] sm:max-w-[400px] rounded-3xl bg-white/95 shadow-2xl border border-zinc-200/70 overflow-hidden backdrop-blur transition-all duration-200 origin-bottom-right ${
+        className={`mb-3 w-[calc(100vw-2rem)] max-w-[360px] sm:max-w-[400px] rounded-3xl shadow-2xl overflow-hidden backdrop-blur transition-all duration-200 origin-bottom-right ${
+          dark
+            ? "bg-[#161b22]/98 border border-[#30363d]"
+            : "bg-white/95 border border-zinc-200/70"
+        } ${
           open
             ? "pointer-events-auto opacity-100 translate-y-0 scale-100"
             : "pointer-events-none opacity-0 translate-y-2 scale-[0.98]"
@@ -211,7 +219,7 @@ export default function SupportChatWidget() {
           </div>
         </div>
 
-        <div className="p-4">
+        <div className={`p-4 ${dark ? "bg-[#161b22]" : "bg-white"}`}>
           <div ref={listRef} className="max-h-64 overflow-y-auto pr-1 space-y-3">
             {messages.map((m, i) => (
               <div
@@ -221,8 +229,8 @@ export default function SupportChatWidget() {
                 <div
                   className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed max-w-[85%] ${
                     m.role === "user"
-                      ? "bg-zinc-900 text-white"
-                      : "bg-zinc-100 text-zinc-900"
+                      ? dark ? "bg-[#58a6ff] text-white" : "bg-zinc-900 text-white"
+                      : dark ? "bg-[#21262d] text-[#c9d1d9]" : "bg-zinc-100 text-zinc-900"
                   }`}
                 >
                   {m.text}
@@ -231,12 +239,12 @@ export default function SupportChatWidget() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="px-3 py-2 rounded-2xl text-sm bg-zinc-100 text-zinc-500">Typing…</div>
+                <div className={`px-3 py-2 rounded-2xl text-sm ${dark ? "bg-[#21262d] text-[#8b949e]" : "bg-zinc-100 text-zinc-500"}`}>Typing…</div>
               </div>
             )}
           </div>
 
-          <div className="mt-3 flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-1">
+          <div className={`mt-3 flex items-center gap-2 rounded-full px-2 py-1 border ${dark ? "bg-[#0d1117] border-[#30363d]" : "bg-zinc-50 border-zinc-200"}`}>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -244,13 +252,13 @@ export default function SupportChatWidget() {
                 if (e.key === "Enter") sendMessage();
               }}
               placeholder="Ask about orders, shipping, size…"
-              className="flex-1 h-9 bg-transparent px-3 text-sm outline-none"
+              className={`flex-1 h-9 bg-transparent px-3 text-sm outline-none ${dark ? "text-[#f0f6fc] placeholder:text-[#8b949e]" : "text-zinc-900 placeholder:text-zinc-400"}`}
             />
             <button
               type="button"
               onClick={sendMessage}
               disabled={loading || !input.trim()}
-              className="h-9 px-4 rounded-full bg-zinc-900 text-white text-sm font-semibold disabled:opacity-50"
+              className={`h-9 px-4 rounded-full text-sm font-semibold disabled:opacity-50 ${dark ? "bg-[#58a6ff] text-white hover:bg-[#79b8ff]" : "bg-zinc-900 text-white hover:bg-zinc-700"}`}
             >
               Send
             </button>
@@ -264,12 +272,12 @@ export default function SupportChatWidget() {
                   href={item.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="group flex items-center gap-3 rounded-xl border border-zinc-200/70 px-3 py-2.5 hover:shadow-sm hover:-translate-y-0.5 transition-all"
+                  className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:-translate-y-0.5 transition-all border ${dark ? "border-[#30363d] hover:bg-[#21262d]" : "border-zinc-200/70 hover:shadow-sm"}`}
                 >
                   <span className={"h-9 w-9 rounded-full text-white flex items-center justify-center " + item.color}>
                     {item.icon}
                   </span>
-                  <span className="text-sm font-semibold text-zinc-900">{item.label}</span>
+                  <span className={`text-sm font-semibold ${dark ? "text-[#c9d1d9]" : "text-zinc-900"}`}>{item.label}</span>
                 </a>
               ))}
             </div>
@@ -288,11 +296,11 @@ export default function SupportChatWidget() {
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          className="relative pointer-events-auto h-14 w-14 rounded-full bg-zinc-900 text-white shadow-xl hover:shadow-2xl transition-all flex items-center justify-center"
+          className={`relative pointer-events-auto h-14 w-14 rounded-full text-white shadow-xl hover:shadow-2xl transition-all flex items-center justify-center ${dark ? "bg-[#58a6ff] hover:bg-[#79b8ff]" : "bg-zinc-900 hover:bg-zinc-700"}`}
           aria-label="Open support chat"
         >
           <MessageCircle className="w-6 h-6" />
-          <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white" />
+          <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ${dark ? "ring-[#0d1117]" : "ring-white"}`} />
         </button>
       )}
     </div>
