@@ -117,7 +117,7 @@ const DialogPopup = React.forwardRef(
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.98 }}
                       transition={defaultTransition}
-                      className="w-[min(100vw-1rem,28rem)] max-w-[95vw] min-w-0"
+                      className="w-[min(100vw-1rem,38rem)] max-w-[95vw] min-w-0"
                     >
                       <div className={`min-w-0 ${contentBaseClass} ${className}`}>
                         {children}
@@ -145,7 +145,7 @@ const DialogPopup = React.forwardRef(
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.98 }}
                     transition={defaultTransition}
-                    className="w-[min(100vw-1rem,28rem)] max-w-[95vw] min-w-0"
+                    className="w-[min(100vw-1rem,38rem)] max-w-[95vw] min-w-0"
                   >
                     <div className={`min-w-0 ${contentBaseClass} ${className}`}>
                       {children}

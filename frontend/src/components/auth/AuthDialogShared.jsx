@@ -8,18 +8,19 @@ import { Tabs, TabsList, TabsTrigger, TabsContents, TabsContent } from "../ui/Ta
 
 /** Shared corner radius — matches --fs-radius-* in styles/index.css */
 export const AUTH_SHELL_CLASS =
-  "auth-dialog-shell modal-no-scroll w-full min-w-0 max-w-[440px] overflow-hidden border border-slate-200/80 bg-white p-0 text-slate-900 shadow-[0_24px_80px_rgba(15,23,42,0.18)]";
+  "auth-dialog-shell modal-no-scroll w-full min-w-0 max-w-[560px] overflow-hidden border-0 bg-white p-0 text-slate-900 shadow-[0_32px_96px_rgba(15,23,42,0.28)]";
 
+/* Brand sage green: #6E8B7E — used consistently across all auth UI */
 export const AUTH_INPUT =
-  "auth-dialog-control h-11 w-full min-w-0 border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[#586F64] focus:ring-2 focus:ring-[#586F64]/20";
+  "auth-dialog-control h-14 w-full min-w-0 border border-slate-200 bg-slate-50/60 pl-11 pr-4 text-base text-slate-900 shadow-none outline-none transition placeholder:text-slate-400 focus:border-[#6E8B7E] focus:bg-white focus:ring-2 focus:ring-[#6E8B7E]/20";
 
-export const AUTH_LABEL = "mb-1.5 block text-sm font-medium text-slate-700";
+export const AUTH_LABEL = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500";
 
 export const AUTH_PRIMARY_BTN =
-  "auth-dialog-control flex h-11 w-full items-center justify-center bg-[#1a1f1c] text-sm font-semibold text-white shadow-sm transition hover:bg-[#2d3530] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#586F64] disabled:cursor-not-allowed disabled:opacity-60";
+  "auth-dialog-control flex h-14 w-full items-center justify-center bg-[#6E8B7E] text-base font-semibold text-white shadow-md shadow-[#6E8B7E]/30 transition hover:bg-[#5d7a6d] hover:shadow-lg hover:shadow-[#6E8B7E]/35 hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6E8B7E] disabled:cursor-not-allowed disabled:opacity-60 disabled:translate-y-0 disabled:shadow-none";
 
 export const AUTH_OUTLINE_BTN =
-  "auth-dialog-control flex h-11 w-full items-center justify-center gap-2.5 border border-slate-200 bg-white text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 active:scale-[0.99] disabled:opacity-60";
+  "auth-dialog-control flex h-14 w-full items-center justify-center gap-2.5 border border-slate-200 bg-white text-base font-medium text-slate-700 shadow-sm transition hover:bg-[#6E8B7E]/5 hover:border-[#6E8B7E]/40 active:scale-[0.99] disabled:opacity-60";
 
 export const PHONE_COUNTRY_CODES = [
   { code: "+855", label: "KH +855" },
@@ -70,55 +71,73 @@ export function AuthDialogShell({
 }) {
   return (
     <DialogPopup
-      className={`${AUTH_SHELL_CLASS} pb-[max(1rem,env(safe-area-inset-bottom,0px))]`}
+      className={`${AUTH_SHELL_CLASS} pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]`}
       from="top"
       position="center"
       showCloseButton={false}
     >
-      <DialogPrimitive.Close
-        onClick={onClose}
-        className="absolute right-4 top-4 z-10 rounded-full border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#586F64]"
-        aria-label="Close"
-      >
-        <X className="h-4 w-4" />
-      </DialogPrimitive.Close>
-      <div className="border-b border-slate-100 px-6 pb-4 pt-6">
-        <Link to="/" className="mx-auto flex w-fit items-center justify-center" onClick={onClose}>
-          <Logo className="h-11 w-auto max-w-[200px]" src={logoUrl || "/logo.png"} alt="Fit & Sleek" />
-        </Link>
-        {title ? (
-          <DialogTitle className="mt-5 text-center text-2xl font-semibold tracking-tight text-slate-900">
-            {title}
-          </DialogTitle>
-        ) : (
-          <DialogTitle className="sr-only">{activeTab === "register" ? "Register" : "Login"}</DialogTitle>
-        )}
-        {description ? (
-          <DialogDescription className="mt-1.5 text-center text-sm text-slate-500">
-            {description}
-          </DialogDescription>
-        ) : null}
-      </div>
+      <Tabs value={activeTab} onValueChange={onTabChange}>
+        {/* Dark branded header — makes logo clearly visible on any logo color */}
+        <div
+          className="relative flex flex-col items-center px-10 pb-8 pt-12"
+          style={{
+            background: "linear-gradient(150deg, #4a6b5e 0%, #38554a 55%, #2e4a3f 100%)",
+          }}
+        >
+          <DialogPrimitive.Close
+            onClick={onClose}
+            className="absolute right-4 top-4 z-10 rounded-full border border-white/15 bg-white/10 p-1.5 text-white/70 backdrop-blur-sm transition hover:bg-white/20 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </DialogPrimitive.Close>
 
-      <div className="px-6 pb-6 pt-4">
-        <Tabs value={activeTab} onValueChange={onTabChange}>
-          <TabsList className="auth-dialog-tabs grid w-full grid-cols-2 gap-1 bg-slate-100 p-1">
-            <TabsTrigger
-              value="login"
-              className="auth-dialog-tab py-2 text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
-            >
+          {/* Logo on dark background — always clearly visible */}
+          <Link
+            to="/"
+            className="mx-auto flex w-fit items-center justify-center transition-opacity hover:opacity-85"
+            onClick={onClose}
+          >
+            <Logo
+              className="h-[4.5rem] w-auto max-w-[260px] drop-shadow-lg brightness-0 invert"
+              src={logoUrl || "/logo.png"}
+              alt="Fit & Sleek"
+            />
+          </Link>
+
+          {title ? (
+            <DialogTitle className="mt-4 text-center text-xl font-semibold tracking-tight text-white">
+              {title}
+            </DialogTitle>
+          ) : (
+            <DialogTitle className="sr-only">{activeTab === "register" ? "Register" : "Login"}</DialogTitle>
+          )}
+          {description ? (
+            <DialogDescription className="mt-1.5 text-center text-sm text-white/60">
+              {description}
+            </DialogDescription>
+          ) : (
+            <DialogDescription className="sr-only">
+              {activeTab === "register" ? "Create a new account" : "Sign in to your account"}
+            </DialogDescription>
+          )}
+
+          {/* Tab switcher anchored to bottom of header */}
+          <TabsList className="auth-dialog-tabs mt-8 w-full">
+            <TabsTrigger value="login" className="auth-dialog-tab">
               Login
             </TabsTrigger>
-            <TabsTrigger
-              value="register"
-              className="auth-dialog-tab py-2 text-sm font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
-            >
+            <TabsTrigger value="register" className="auth-dialog-tab">
               Register
             </TabsTrigger>
           </TabsList>
+        </div>
+
+        {/* White form body */}
+        <div className="px-10 pb-10 pt-7">
           <TabsContents>{children}</TabsContents>
-        </Tabs>
-      </div>
+        </div>
+      </Tabs>
     </DialogPopup>
   );
 }
@@ -132,7 +151,7 @@ export function AuthField({ id, label, hint, icon: Icon, children, error }) {
       {hint ? <p className="mb-1.5 text-xs text-slate-500">{hint}</p> : null}
       <div className="relative">
         {Icon ? (
-          <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+          <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" aria-hidden />
         ) : null}
         {children}
       </div>
@@ -146,9 +165,10 @@ export function AuthError({ message }) {
   return (
     <div
       role="alert"
-      className="auth-dialog-notice mt-2 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      className="auth-dialog-notice mt-2 flex items-start gap-2 border border-red-200/80 bg-red-50 px-3 py-2.5 text-sm text-red-700"
     >
-      {message}
+      <span className="mt-px shrink-0 text-base leading-none">⚠</span>
+      <span>{message}</span>
     </div>
   );
 }
@@ -156,19 +176,20 @@ export function AuthError({ message }) {
 export function AuthNotice({ message }) {
   if (!message) return null;
   return (
-    <div className="auth-dialog-notice border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-      {message}
+    <div className="auth-dialog-notice flex items-start gap-2 border border-[#6E8B7E]/30 bg-[#6E8B7E]/10 px-3 py-2.5 text-sm text-[#38554a]">
+      <span className="mt-px shrink-0 text-base leading-none">✓</span>
+      <span>{message}</span>
     </div>
   );
 }
 
 export function AuthDivider() {
   return (
-    <div className="relative my-6">
+    <div className="relative my-5">
       <div className="absolute inset-0 flex items-center" aria-hidden>
         <div className="w-full border-t border-slate-200" />
       </div>
-      <div className="relative flex justify-center text-xs uppercase tracking-wide">
+      <div className="relative flex justify-center text-xs uppercase tracking-widest">
         <span className="bg-white px-3 text-slate-400">or continue with</span>
       </div>
     </div>
@@ -201,7 +222,7 @@ export function AuthPhoneField({ id, label, countryCode, onCountryCodeChange, va
           aria-label="Country code"
           value={countryCode}
           onChange={(e) => onCountryCodeChange(e.target.value)}
-          className="auth-dialog-control h-11 w-[108px] shrink-0 border border-slate-200 bg-slate-50 px-2 text-sm text-slate-800 outline-none focus:border-[#586F64] focus:ring-2 focus:ring-[#586F64]/20"
+          className="auth-dialog-control h-14 w-[120px] shrink-0 border border-slate-200 bg-slate-50 px-2 text-base text-slate-800 outline-none focus:border-[#6E8B7E] focus:ring-2 focus:ring-[#6E8B7E]/20"
         >
           {PHONE_COUNTRY_CODES.map((c) => (
             <option key={c.code} value={c.code}>
@@ -235,7 +256,7 @@ export function AuthTextButton({ children, onClick, className = "" }) {
     <button
       type="button"
       onClick={onClick}
-      className={`font-medium text-[#586F64] underline-offset-2 hover:underline ${className}`}
+      className={`font-semibold text-[#6E8B7E] underline-offset-2 hover:text-[#5d7a6d] hover:underline ${className}`}
     >
       {children}
     </button>

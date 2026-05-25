@@ -57,7 +57,7 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
         setError(result.message || "Invalid email or password");
         return;
       }
-      if (result?.otp_required) {
+      if (result?.otp_required || result?.verification_required) {
         setOtpMode(true);
         setOtpForm({ email: form.email, code: "", purpose: result.purpose || "login" });
         setOtpNotice(result.message || `We sent a verification code to ${form.email}`);
@@ -121,7 +121,7 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
         <TabsContent value="login">
           {!otpMode ? (
             <>
-              <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
+              <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-6">
                 <AuthField id="login-email" label="Email" icon={Mail}>
                   <input
                     id="login-email"
@@ -140,7 +140,6 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
                   id="login-password"
                   label="Password"
                   icon={Lock}
-                  hint="Leave blank if you prefer a one-time code sent to your email."
                 >
                   <input
                     id="login-password"
@@ -191,7 +190,7 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
               </AuthFooterLink>
             </>
           ) : (
-            <form onSubmit={handleVerifyOtp} className="mt-5 flex flex-col gap-4">
+            <form onSubmit={handleVerifyOtp} className="mt-7 flex flex-col gap-6">
               <AuthNotice message={otpNotice} />
               <AuthField id="login-otp-code" label="Verification code" icon={Lock}>
                 <input

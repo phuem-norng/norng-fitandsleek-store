@@ -79,7 +79,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
         password: form.password,
         password_confirmation: form.password_confirmation,
       });
-      if (result?.otp_required) {
+      if (result?.otp_required || result?.verification_required) {
         setOtpMode(true);
         setOtpForm({ email: form.email, code: "", purpose: result.purpose || "register" });
         return;
@@ -141,7 +141,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
         <TabsContent value="register">
           {!otpMode ? (
             <>
-              <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
+              <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-6">
                 <AuthField id="register-name" label="Full name" icon={User}>
                   <input
                     id="register-name"
@@ -235,7 +235,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
               </AuthFooterLink>
             </>
           ) : (
-            <form onSubmit={handleVerifyOtp} className="mt-5 flex flex-col gap-4">
+            <form onSubmit={handleVerifyOtp} className="mt-7 flex flex-col gap-6">
               <p className="text-sm text-slate-600">
                 Enter the verification code we sent to <strong className="text-slate-900">{otpForm.email}</strong>.
               </p>

@@ -1318,11 +1318,39 @@ html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-th
 }
 
 .auth-dialog-shell .auth-dialog-tabs {
-  border-radius: var(--fs-radius-sm);
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  height: auto;
+  display: flex;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .auth-dialog-shell .auth-dialog-tab {
-  border-radius: calc(var(--fs-radius-sm) - 2px);
+  border-radius: 0;
+  flex: 1;
+  padding: 0.875rem 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.45);
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.auth-dialog-shell .auth-dialog-tab:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.auth-dialog-shell .auth-dialog-tab[data-state="active"] {
+  color: #ffffff;
+  font-weight: 700;
+  border-bottom-color: #ffffff;
+  background: transparent !important;
 }
 
 .auth-dialog-shell .auth-dialog-notice {
