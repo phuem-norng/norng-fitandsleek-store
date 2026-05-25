@@ -3,6 +3,13 @@ set -e
 
 cd /var/www/html
 
+# Host-mounted composer.lock can be newer than vendor baked into the image (e.g. after git pull).
+if [ -f composer.lock ]; then
+  if [ ! -f vendor/composer/installed.json ] || [ composer.lock -nt vendor/composer/installed.json ]; then
+    composer install --no-interaction --prefer-dist --optimize-autoloader
+  fi
+fi
+
 # KHQR Node deps (shared by web + workers)
 if [ -d node-khqr ]; then
   cd node-khqr

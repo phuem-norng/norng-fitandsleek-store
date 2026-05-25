@@ -183,7 +183,7 @@ export default function InventoryIntegrity() {
                             onClick={() => setFilter(key)}
                             className={`rounded-full px-3 py-1 text-xs font-medium ring-1 transition ${
                                 filter === key
-                                    ? "bg-slate-900 text-white ring-slate-900 dark:bg-white dark:text-slate-900 dark:ring-white"
+                                    ? "bg-slate-900 text-white ring-slate-900 dark:bg-[#f0f6fc] dark:text-[#0f172a] dark:ring-[#f0f6fc]"
                                     : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-600"
                             }`}
                         >

@@ -59,16 +59,7 @@ a { color: inherit; text-decoration: none; }
   background: transparent;
 }
 
-/* Login / register centered dialogs: never show inner gutter (scroll still works). */
-.auth-dialog-shell {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.auth-dialog-shell::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  display: none !important;
-}
+/* Login / register: viewport scroll + thin blue bar (see styles/index.css) */
 
 body.modal-open,
 html.modal-open {

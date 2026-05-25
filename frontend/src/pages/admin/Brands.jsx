@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import { closeSwal, errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../../lib/swal";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
@@ -13,6 +14,13 @@ const emptyForm = {
   logo: null,
   logo_url: "",
 };
+
+/** Resolve API storage paths; leave blob/data previews unchanged. */
+function brandLogoSrc(url) {
+  if (!url) return null;
+  if (/^(blob:|data:)/i.test(url)) return url;
+  return resolveImageUrl(url);
+}
 
 export default function AdminBrands() {
   const { primaryColor, mode } = useTheme();
@@ -666,7 +674,7 @@ export default function AdminBrands() {
                   />
                   <div className="w-32 h-16 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                     {b.logo_url ? (
-                      <img src={b.logo_url} alt={b.name} className="h-10 w-auto object-contain" />
+                      <img src={brandLogoSrc(b.logo_url)} alt={b.name} className="h-10 w-auto object-contain" />
                     ) : (
                       <span className="text-slate-400 text-sm">No logo</span>
                     )}
@@ -820,7 +828,7 @@ export default function AdminBrands() {
                   {previewEdit ? (
                     <img src={previewEdit} alt="Preview" className="h-16 w-auto object-contain" />
                   ) : editing.logo_url ? (
-                    <img src={editing.logo_url} alt="Current" className="h-16 w-auto object-contain" />
+                    <img src={brandLogoSrc(editing.logo_url)} alt="Current" className="h-16 w-auto object-contain" />
                   ) : (
                     <span className="text-slate-400 text-sm">No logo</span>
                   )}
