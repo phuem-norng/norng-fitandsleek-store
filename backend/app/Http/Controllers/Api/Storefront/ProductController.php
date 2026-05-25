@@ -11,7 +11,9 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $q = Product::query()->with(['category', 'brand', 'activeDiscount']);
+        $q = Product::query()
+            ->with(['category', 'brand', 'activeDiscount'])
+            ->where('products.is_active', true);
 
         // Filter by specific product IDs (used by wishlist)
         if ($request->filled('ids')) {
@@ -22,17 +24,14 @@ class ProductController extends Controller
         }
 
         $this->applyParentCategoryFilter($q, $request);
-        $tabOrdered = $this->applyTabFilter($q, $request);
+        $this->applyMinMaxPriceFilter($q, $request);
+        $this->applyPriceFilter($q, $request);
 
         if ($request->filled('category')) {
             $categorySlug = (string) $request->input('category');
             $q->whereHas('category', function ($categoryQuery) use ($categorySlug) {
                 $categoryQuery->where('slug', $categorySlug);
             });
-        }
-
-        if ($request->filled('category_id')) {
-            $q->where('category_id', (int) $request->input('category_id'));
         }
 
         if ($request->filled('q')) {
@@ -57,18 +56,26 @@ class ProductController extends Controller
             });
         }
 
-        if ($request->filled('gender')) {
-            $gender = strtolower($request->string('gender')->toString());
-            $allowedGenders = ['men', 'women', 'boys', 'girls'];
+        $this->applyGenderFilter($q, $request);
+        $this->applySectionFilter($q, $request);
+        $this->applyColorFilter($q, $request);
+        $this->applySizeFilter($q, $request);
 
-            if (in_array($gender, $allowedGenders, true)) {
-                $q->whereHas('category', function ($categoryQuery) use ($gender) {
-                    $this->applyCategoryAudienceFilter($categoryQuery, $gender);
-                });
+        if ($request->filled('category_id') && str_contains((string) $request->input('category_id'), ',')) {
+            $ids = $this->parseCommaList($request->input('category_id'));
+            if (!empty($ids)) {
+                $q->whereIn('category_id', $ids);
             }
+        } elseif ($request->filled('category_id')) {
+            $q->where('category_id', (int) $request->input('category_id'));
         }
 
-        if ($request->filled('brand_id')) {
+        if ($request->filled('brand_id') && str_contains((string) $request->input('brand_id'), ',')) {
+            $ids = $this->parseCommaList($request->input('brand_id'));
+            if (!empty($ids)) {
+                $q->whereIn('brand_id', $ids);
+            }
+        } elseif ($request->filled('brand_id')) {
             $q->where('brand_id', (int) $request->input('brand_id'));
         }
 
@@ -79,12 +86,133 @@ class ProductController extends Controller
         }
 
         $perPage = min((int) $request->get('per_page', 12), 200);
-        if (!$tabOrdered) {
+        $sort = strtolower(trim((string) $request->input('sort', '')));
+        if ($sort !== '' && $sort !== 'recommend') {
+            $this->applySortFilter($q, $request);
+        } elseif (!$this->applyTabFilter($q, $request)) {
             $q->orderByDesc('products.id');
         }
         $products = $q->paginate($perPage);
 
         return response()->json($products);
+    }
+
+    /**
+     * Distinct filter option values for storefront attribute filters.
+     */
+    public function filterOptions()
+    {
+        $rows = Product::query()
+            ->where('is_active', true)
+            ->get(['colors', 'sizes', 'price']);
+
+        $colors = [];
+        $sizes = [];
+        foreach ($rows as $row) {
+            foreach ((array) ($row->colors ?? []) as $color) {
+                $c = trim((string) $color);
+                if ($c !== '') {
+                    $colors[$c] = true;
+                }
+            }
+            foreach ((array) ($row->sizes ?? []) as $size) {
+                $s = trim((string) $size);
+                if ($s !== '') {
+                    $sizes[$s] = true;
+                }
+            }
+        }
+
+        $priceBounds = Product::query()
+            ->where('is_active', true)
+            ->selectRaw('MIN(price) as price_min, MAX(price) as price_max')
+            ->first();
+
+        return response()->json([
+            'colors' => collect(array_keys($colors))->sort()->values()->all(),
+            'sizes' => $this->sortSizeList(array_keys($sizes)),
+            'price_min' => $priceBounds?->price_min !== null ? (float) $priceBounds->price_min : null,
+            'price_max' => $priceBounds?->price_max !== null ? (float) $priceBounds->price_max : null,
+        ]);
+    }
+
+    private function sortSizeList(array $sizes): array
+    {
+        usort($sizes, function ($a, $b) {
+            $na = is_numeric($a) ? (float) $a : null;
+            $nb = is_numeric($b) ? (float) $b : null;
+            if ($na !== null && $nb !== null) {
+                return $na <=> $nb;
+            }
+            if ($na !== null) {
+                return -1;
+            }
+            if ($nb !== null) {
+                return 1;
+            }
+
+            return strcasecmp((string) $a, (string) $b);
+        });
+
+        return array_values($sizes);
+    }
+
+    private function applySortFilter($query, Request $request): void
+    {
+        $sort = strtolower(trim((string) $request->input('sort', 'recommend')));
+
+        switch ($sort) {
+            case 'new':
+                $query->orderByDesc('products.created_at')->orderByDesc('products.id');
+                break;
+            case 'price_high':
+                $query->orderByDesc('products.price')->orderByDesc('products.id');
+                break;
+            case 'price_low':
+                $query->orderBy('products.price')->orderByDesc('products.id');
+                break;
+            case 'discount_high':
+                $this->applyDiscountSort($query, 'desc');
+                break;
+            case 'discount_low':
+                $this->applyDiscountSort($query, 'asc');
+                break;
+            case 'recommend':
+            default:
+                $query->orderByDesc('products.id');
+                break;
+        }
+    }
+
+    private function applyDiscountSort($query, string $direction): void
+    {
+        $dir = strtolower($direction) === 'asc' ? 'ASC' : 'DESC';
+
+        $query->leftJoin('discounts', function ($join) {
+            $join->on('products.id', '=', 'discounts.product_id')
+                ->where('discounts.is_active', true)
+                ->where('discounts.start_date', '<=', now())
+                ->where('discounts.end_date', '>=', now());
+        })
+            ->select('products.*')
+            ->orderByRaw(
+                "CASE
+                    WHEN discounts.discount_type = 'percentage' THEN discounts.discount_value
+                    WHEN products.price > 0 THEN (discounts.discount_value / products.price * 100)
+                    ELSE 0
+                END {$dir} NULLS LAST"
+            )
+            ->orderByDesc('products.id');
+    }
+
+    private function applyMinMaxPriceFilter($query, Request $request): void
+    {
+        if ($request->filled('min_price')) {
+            $query->where('products.price', '>=', (float) $request->input('min_price'));
+        }
+        if ($request->filled('max_price')) {
+            $query->where('products.price', '<=', (float) $request->input('max_price'));
+        }
     }
 
     /**
@@ -121,6 +249,130 @@ class ProductController extends Controller
             default:
                 return false;
         }
+    }
+
+    private function parseCommaList(mixed $raw): array
+    {
+        return array_values(array_filter(array_map('intval', explode(',', (string) $raw))));
+    }
+
+    private function parseStringList(mixed $raw): array
+    {
+        return array_values(array_filter(array_map(
+            fn ($v) => trim((string) $v),
+            explode(',', (string) $raw)
+        )));
+    }
+
+    private function applyGenderFilter($query, Request $request): void
+    {
+        if (!$request->filled('gender')) {
+            return;
+        }
+
+        $genders = array_values(array_filter(array_map(
+            fn ($g) => strtolower(trim((string) $g)),
+            $this->parseStringList($request->input('gender'))
+        )));
+        $allowed = ['men', 'women', 'boys', 'girls'];
+        $genders = array_values(array_intersect($genders, $allowed));
+        if ($genders === []) {
+            return;
+        }
+
+        $query->whereHas('category', function ($categoryQuery) use ($genders) {
+            $categoryQuery->where(function ($inner) use ($genders) {
+                foreach ($genders as $gender) {
+                    $inner->orWhere(function ($scoped) use ($gender) {
+                        $this->applyCategoryAudienceFilter($scoped, $gender);
+                    });
+                }
+            });
+        });
+    }
+
+    private function applySectionFilter($query, Request $request): void
+    {
+        if (!$request->filled('section')) {
+            return;
+        }
+
+        $sections = $this->parseStringList($request->input('section'));
+        if ($sections === []) {
+            return;
+        }
+
+        $query->whereHas('category', function ($categoryQuery) use ($sections) {
+            $categoryQuery->where(function ($inner) use ($sections) {
+                foreach ($sections as $key) {
+                    $token = strtolower($key);
+                    $inner->orWhereRaw('LOWER(COALESCE(name, \'\')) LIKE ?', ['%' . $token . '%'])
+                        ->orWhereRaw('LOWER(COALESCE(slug, \'\')) LIKE ?', ['%' . $token . '%']);
+                }
+            });
+        });
+    }
+
+    private function applyPriceFilter($query, Request $request): void
+    {
+        if (!$request->filled('price')) {
+            return;
+        }
+
+        $buckets = $this->parseStringList($request->input('price'));
+        if ($buckets === []) {
+            return;
+        }
+
+        $query->where(function ($outer) use ($buckets) {
+            foreach ($buckets as $bucket) {
+                $outer->orWhere(function ($inner) use ($bucket) {
+                    if ($bucket === 'under_25') {
+                        $inner->where('products.price', '<', 25);
+                    } elseif ($bucket === '25_100') {
+                        $inner->whereBetween('products.price', [25, 100]);
+                    } elseif ($bucket === 'over_100') {
+                        $inner->where('products.price', '>', 100);
+                    }
+                });
+            }
+        });
+    }
+
+    private function applyColorFilter($query, Request $request): void
+    {
+        if (!$request->filled('color')) {
+            return;
+        }
+
+        $colors = $this->parseStringList($request->input('color'));
+        if ($colors === []) {
+            return;
+        }
+
+        $query->where(function ($outer) use ($colors) {
+            foreach ($colors as $color) {
+                $outer->orWhereJsonContains('colors', $color);
+            }
+        });
+    }
+
+    private function applySizeFilter($query, Request $request): void
+    {
+        if (!$request->filled('size')) {
+            return;
+        }
+
+        $sizes = $this->parseStringList($request->input('size'));
+        if ($sizes === []) {
+            return;
+        }
+
+        $query->where(function ($outer) use ($sizes) {
+            foreach ($sizes as $size) {
+                $outer->orWhereJsonContains('sizes', $size);
+            }
+        });
     }
 
     private function applyParentCategoryFilter($query, Request $request): void

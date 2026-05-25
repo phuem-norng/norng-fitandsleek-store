@@ -28,7 +28,7 @@ const translations = {
     women: 'WOMEN',
     men: 'MEN',
     sale: 'SALE',
-    discounts: '🎉 Discounts',
+    discounts: 'Discounts',
     allDiscounts: 'All Discounts',
     clothes: 'Clothes',
     shoes: 'Shoes',
@@ -443,6 +443,8 @@ const translations = {
     // Discounts
     discountsTitle: '🎉 Special Discounts & Sales',
     discountsSubtitle: 'Find amazing deals on your favorite products',
+    showingAllResults: 'Showing all {count} results',
+    showingOneResult: 'Showing 1 result',
     searchDiscountsPlaceholder: 'Search discounts...',
     newest: 'Newest',
     priceLowHigh: 'Price: Low to High',
@@ -515,6 +517,7 @@ const translations = {
 
     // Footer
     footerDescription: 'Your fashion destination',
+    weAccept: 'We Accept',
     followUs: 'FOLLOW US',
     footerHelp: 'HELP',
     footerTracking: 'TRACKING',
@@ -593,7 +596,7 @@ const translations = {
     women: 'ស្ត្រី',
     men: 'បុរស',
     sale: 'លក់បញ្ចុះតម្លៃ',
-    discounts: '🎉 បញ្ចុះតម្លៃ',
+    discounts: 'បញ្ចុះតម្លៃ',
     allDiscounts: 'បញ្ចុះតម្លៃទាំងអស់',
     clothes: 'សម្លៀកបំពាក់',
     shoes: 'ស្បែកជើង',
@@ -1008,6 +1011,8 @@ const translations = {
     // Discounts
     discountsTitle: '🎉 បញ្ចុះតម្លៃពិសេស & លក់បញ្ចុះតម្លៃ',
     discountsSubtitle: 'ស្វែងរកការផ្តល់ជូនល្អៗលើផលិតផលដែលអ្នកចូលចិត្ត',
+    showingAllResults: 'បង្ហាញលទ្ធផលទាំងអស់ {count}',
+    showingOneResult: 'បង្ហាញលទ្ធផល 1',
     searchDiscountsPlaceholder: 'ស្វែងរកបញ្ចុះតម្លៃ...',
     newest: 'ថ្មីបំផុត',
     priceLowHigh: 'តម្លៃ: ទាបទៅខ្ពស់',
@@ -1080,6 +1085,7 @@ const translations = {
 
     // Footer
     footerDescription: 'គោលដៅម៉ូដសម្រាប់អ្នក',
+    weAccept: 'យើងទទួលយក',
     followUs: 'តាមដានពួកយើង',
     footerHelp: 'ជំនួយ',
     footerTracking: 'ការតាមដាន',

@@ -2,8 +2,21 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import ProductCard from "../components/shop/ProductCard.jsx";
+import StorefrontFilterDrawer, { StorefrontFilterToolbarButton } from "../components/shop/StorefrontFilterDrawer.jsx";
 import { useWishlist } from "../state/wishlist.jsx";
 import { useCart } from "../state/cart.jsx";
+import { useStorefrontFilterDrawer } from "../hooks/useStorefrontFilterDrawer.js";
+import { useStorefrontFilterSections } from "../hooks/useStorefrontFilterSections.js";
+import {
+  applyBrowseToSearchParams,
+  applyFiltersToSearchParams,
+  buildProductApiParams,
+  buildStorefrontFilterChips,
+  browseFromSearchParams,
+  countStorefrontFilters,
+  filtersFromSearchParams,
+} from "../lib/storefrontProductFilters.js";
+import { useStorefrontBrowseDraft } from "../hooks/useStorefrontBrowseDraft.js";
 import { Camera, Image as ImageIcon, Sparkles } from "lucide-react";
 import { useLanguage } from "../lib/i18n.jsx";
 import { resolveImageUrl } from "../lib/images";
@@ -20,7 +33,10 @@ export default function Shop() {
   const cart = useCart();
   const { t } = useLanguage();
 
-  const [categories, setCategories] = useState([]);
+  const { categories, brands, filterSections, priceBounds } = useStorefrontFilterSections();
+  const appliedFilters = useMemo(() => filtersFromSearchParams(qs), [qs]);
+  const listFilters = useStorefrontFilterDrawer(appliedFilters);
+  const browse = useStorefrontBrowseDraft(qs, appliedFilters, priceBounds);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(Number(qs.get("page") || 1));
   const [data, setData] = useState({ data: [], meta: null });
@@ -29,8 +45,6 @@ export default function Shop() {
   const [suggestions, setSuggestions] = useState([]);
 
   const q = qs.get("q") || "";
-  const gender = qs.get("gender") || "";
-  const categoryId = qs.get("category_id") || "";
   const parentCategory = qs.get("parent_category") || "";
   const tab = qs.get("tab") || "";
   const imageSearchParam = qs.get("image_search");
@@ -52,15 +66,8 @@ export default function Shop() {
   useEffect(() => setPage(Number(qs.get("page") || 1)), [qs]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await api.get("/categories");
-        setCategories(Array.isArray(data) ? data : []);
-      } catch {
-        setCategories([]);
-      }
-    })();
-  }, []);
+    listFilters.syncFromExternal(appliedFilters);
+  }, [appliedFilters]);
 
   // Load suggestions when image search is active
   useEffect(() => {
@@ -107,22 +114,22 @@ export default function Shop() {
     (async () => {
       setLoading(true);
       try {
-        const params = { page };
-        if (q) params.q = q;
-        if (gender && gender !== "sale") params.gender = gender;
-        if (categoryId) params.category_id = categoryId;
-        if (parentCategory) params.parent_category = parentCategory;
-        if (tab && tab !== "wishlist") params.tab = tab;
-        if (imageSearchResults?.colors) {
-          params.colors = JSON.stringify(imageSearchResults.colors);
-        }
+        const params = buildProductApiParams({
+          page,
+          q,
+          tab,
+          parentCategory,
+          applied: appliedFilters,
+          browse: browse.browseFromUrl,
+          imageColors: imageSearchResults?.colors || null,
+        });
         const res = await api.get("/products", { params });
         setData(res.data || { data: [] });
       } finally {
         setLoading(false);
       }
     })();
-  }, [q, gender, categoryId, parentCategory, tab, page, imageSearchResults]);
+  }, [q, parentCategory, tab, page, imageSearchResults, appliedFilters, browse.browseFromUrl]);
 
   const products = useMemo(() => {
     const list = data?.data || [];
@@ -146,6 +153,67 @@ export default function Shop() {
     n.delete("page");
     nav(`/shop?${n.toString()}`);
   };
+
+  const openFilterDrawer = () => {
+    listFilters.openDrawer();
+    browse.syncBrowseDraftFromUrl();
+  };
+
+  const applyDrawerFilters = () => {
+    const applied = listFilters.apply();
+    let n = applyFiltersToSearchParams(qs, applied);
+    n = applyBrowseToSearchParams(n, browse.browseDraft, priceBounds);
+    if (applied.gender?.length) n.delete("parent_category");
+    n.delete("image_search");
+    n.delete("colors");
+    setImageSearchResults(null);
+    setSuggestions([]);
+    nav(`/shop?${n.toString()}`);
+  };
+
+  const clearAllFilters = () => {
+    listFilters.clearAll();
+    browse.clearBrowseDraft();
+    const n = new URLSearchParams();
+    if (q) n.set("q", q);
+    if (tab && tab !== "wishlist") n.set("tab", tab);
+    if (parentCategory) n.set("parent_category", parentCategory);
+    nav(`/shop?${n.toString()}`);
+  };
+
+  const clearDrawerDraft = () => {
+    listFilters.clearDraft();
+    browse.clearBrowseDraft();
+  };
+
+  const totalActiveFilters = countStorefrontFilters(appliedFilters, browse.browseFromUrl, priceBounds);
+
+  const removeFilterValue = (sectionKey, value) => {
+    const next = {
+      ...appliedFilters,
+      [sectionKey]: (appliedFilters[sectionKey] || []).filter((v) => v !== value),
+    };
+    const n = applyFiltersToSearchParams(qs, next);
+    if (next.gender?.length) n.delete("parent_category");
+    n.delete("page");
+    listFilters.syncFromExternal(next);
+    nav(`/shop?${n.toString()}`);
+  };
+
+  const filterChipLabels = useMemo(
+    () =>
+      buildStorefrontFilterChips({
+        applied: appliedFilters,
+        browse: browse.browseFromUrl,
+        priceBounds,
+        filterSections,
+        categories,
+        brands,
+        removeFilterValue,
+        changeBrowseParams: change,
+      }),
+    [appliedFilters, categories, brands, filterSections, browse.browseFromUrl, priceBounds],
+  );
 
   const handleImageSearch = async ({ image, colors }) => {
     setImageSearchResults({ image, colors });
@@ -177,102 +245,71 @@ export default function Shop() {
 
   return (
     <div className={`container-safe py-8 ${cart.count > 0 ? "pb-28 sm:pb-32" : ""}`}>
-      <div className="flex flex-col md:flex-row md:items-end gap-4 justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-black tracking-tight truncate">
             {imageSearchResults ? t('similarItems') : t('shop')}
           </h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            {imageSearchResults 
-              ? t('itemsMatchingImageSearch')
-              : t('searchFilterProducts')}
-          </p>
           {parentCollectionLabel && (
-            <div className="mt-2 inline-flex items-center rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700 gap-2">
+            <span className="fs-filter-chip mt-2 text-xs">
               <span>🧩 {parentCollectionLabel}</span>
               <button
                 type="button"
                 onClick={clearCollectionChip}
-                className="hover:text-red-600"
                 aria-label="Clear collection"
                 title="Clear collection"
               >
                 ×
               </button>
-            </div>
+            </span>
           )}
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => {
-              change({ q: e.target.value }, { clearImageSearch: true });
-            }}
-            placeholder={t('searchProducts')}
-            className="h-10 w-64 max-w-full rounded-full border border-zinc-200 bg-white px-4 text-sm outline-none focus:border-zinc-300"
-          />
-
-          <select
-            value={gender}
-            onChange={(e) => {
-              const selected = e.target.value;
-              const parentMap = {
-                men: 'Men',
-                women: 'Women',
-                boys: 'Boys',
-                girls: 'Girls',
-              };
-
-              if (selected && parentMap[selected]) {
-                change({ parent_category: parentMap[selected], gender: '', category_id: '' }, { clearImageSearch: true });
-              } else {
-                change({ gender: selected, parent_category: '', category_id: '' }, { clearImageSearch: true });
-              }
-            }}
-            className="h-10 rounded-full border border-zinc-200 bg-white px-3 text-sm outline-none"
-          >
-            <option value="">{t('all')}</option>
-            <option value="women">{t('women')}</option>
-            <option value="men">{t('men')}</option>
-            <option value="boys">{t('boys')}</option>
-            <option value="girls">{t('girls')}</option>
-            <option value="sale">{t('sale')}</option>
-          </select>
-
-          <select
-            value={categoryId}
-            onChange={(e) => {
-              change({ category_id: e.target.value, parent_category: '' }, { clearImageSearch: true });
-            }}
-            className="h-10 rounded-full border border-zinc-200 bg-white px-3 text-sm outline-none"
-          >
-            <option value="">{t('allCategories')}</option>
-            {categories && Array.isArray(categories) && categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={() => change({ tab: tab === "wishlist" ? "" : "wishlist" })}
-            className={[
-              "h-10 sm:h-12 rounded-full border px-4 sm:px-6 text-sm sm:text-base font-semibold",
-              tab === "wishlist" ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-200 bg-white hover:bg-zinc-50",
-            ].join(" ")}
-          >
-            {t('wishlist')}
-          </button>
-
-          <Link
-            to="/cart"
-            className="h-10 sm:h-12 rounded-full border border-zinc-200 bg-white hover:bg-zinc-50 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center"
-          >
-            {t('cart')}
-          </Link>
-        </div>
+        <StorefrontFilterToolbarButton
+          activeCount={totalActiveFilters}
+          onClick={openFilterDrawer}
+          className="shrink-0"
+        />
       </div>
+
+      <StorefrontFilterDrawer
+        open={listFilters.open}
+        onClose={listFilters.closeDrawer}
+        sections={filterSections}
+        selected={listFilters.draft}
+        onToggle={listFilters.toggleDraft}
+        onApply={applyDrawerFilters}
+        onClearAll={clearDrawerDraft}
+        sortValue={browse.draftSort}
+        onSortChange={browse.setDraftSort}
+        priceBounds={priceBounds}
+        priceMin={browse.draftMinPrice}
+        priceMax={browse.draftMaxPrice}
+        onPriceMinChange={browse.setDraftMinPrice}
+        onPriceMaxChange={browse.setDraftMaxPrice}
+      />
+
+      {filterChipLabels.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-2 items-center text-xs">
+          <span className="text-zinc-600 font-medium">{t("activeFilters")}:</span>
+          {filterChipLabels.map((chip) => (
+            <span key={chip.key} className="fs-filter-chip">
+              {chip.label}
+              {chip.onClear ? (
+                <button type="button" onClick={chip.onClear} aria-label="Remove">×</button>
+              ) : null}
+            </span>
+          ))}
+          {totalActiveFilters > 0 && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="text-zinc-600 underline hover:text-zinc-900"
+            >
+              {t("resetFilters") || "Reset"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Image Search Results Info */}
       {imageSearchResults && (

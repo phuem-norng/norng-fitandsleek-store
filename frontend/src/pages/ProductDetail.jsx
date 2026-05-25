@@ -90,7 +90,7 @@ function AccordionRow({ title, open, onToggle, children }) {
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-3 bg-zinc-100 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200/80"
+        className="fs-product-accordion__trigger flex w-full items-center justify-between gap-3 bg-zinc-100 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200/80"
       >
         <span>{title}</span>
         <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${open ? "rotate-90" : ""}`} />
@@ -842,21 +842,21 @@ export default function ProductDetail() {
 
               <div>
                 <p className="mb-2 text-sm font-semibold text-zinc-900">{t("quantity")}</p>
-                <div className="inline-flex w-full max-w-[220px] items-stretch border border-zinc-200 bg-zinc-100 sm:max-w-xs">
+                <div className="fs-product-qty inline-flex w-full max-w-[220px] items-stretch border border-zinc-200 bg-zinc-100 sm:max-w-xs">
                   <button
                     type="button"
-                    className="flex flex-1 items-center justify-center py-3 transition hover:bg-zinc-200/80"
+                    className="fs-product-qty__btn flex flex-1 items-center justify-center py-3 transition hover:bg-zinc-200/80"
                     onClick={() => setQty((x) => Math.max(1, x - 1))}
                     aria-label="Decrease quantity"
                   >
                     <Minus className="h-5 w-5 text-zinc-800" strokeWidth={2} />
                   </button>
-                  <div className="flex min-w-[3rem] items-center justify-center border-x border-zinc-200 bg-white text-base font-semibold tabular-nums text-zinc-900">
+                  <div className="fs-product-qty__value flex min-w-[3rem] items-center justify-center border-x border-zinc-200 bg-white text-base font-semibold tabular-nums text-zinc-900">
                     {qty}
                   </div>
                   <button
                     type="button"
-                    className="flex flex-1 items-center justify-center py-3 transition hover:bg-zinc-200/80 disabled:opacity-40"
+                    className="fs-product-qty__btn flex flex-1 items-center justify-center py-3 transition hover:bg-zinc-200/80 disabled:opacity-40"
                     onClick={() => setQty((x) => Math.min(maxQty || 1, x + 1))}
                     disabled={maxQty === 0}
                     aria-label="Increase quantity"
@@ -910,7 +910,7 @@ export default function ProductDetail() {
             </div>
 
             {p.model_info || p.description || p.sku || p.category?.name ? (
-              <div className="overflow-hidden rounded-sm border border-zinc-200">
+              <div className="fs-product-accordion overflow-hidden rounded-sm border border-zinc-200">
                 {p.model_info ? (
                   <AccordionRow
                     title={t("modelInfo")}

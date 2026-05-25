@@ -486,6 +486,7 @@ export default function HomePageManager() {
  <option value="sidebar">Sidebar</option>
  <option value="popup">Popup</option>
  <option value="promo">Promo Slider</option>
+ <option value="discounts">Discounts page banner</option>
  </select>
  </div>
 

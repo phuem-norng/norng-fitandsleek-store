@@ -503,6 +503,737 @@ select:focus {
   box-shadow: 0 6px 14px rgba(243, 156, 18, .26);
 }
 
+/* Storefront filter toolbar + drawer (portal — not inside .fs-site) */
+.fs-storefront-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: var(--fs-radius-md, 0.75rem);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background-color: var(--admin-primary);
+  border: 1px solid var(--admin-primary);
+  box-shadow: 0 8px 22px -8px rgba(var(--admin-primary-rgb), 0.5);
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.fs-storefront-filter-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.fs-storefront-filter-btn:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.fs-storefront-filter-btn--contrast-dark {
+  color: #0b0b0f;
+}
+
+.fs-storefront-filter-btn__badge {
+  display: inline-flex;
+  min-width: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0.125rem 0.375rem;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--admin-primary);
+}
+
+.fs-storefront-filter-btn--contrast-dark .fs-storefront-filter-btn__badge {
+  background: #0b0b0f;
+  color: #fff;
+}
+
+.fs-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f4f4f5;
+  color: #27272a;
+  border: 1px solid #e4e4e7;
+}
+
+.fs-filter-chip button {
+  color: inherit;
+  opacity: 0.7;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.fs-filter-chip button:hover {
+  opacity: 1;
+  color: #dc2626;
+}
+
+/* Discounts page — spacing + toolbar */
+.fs-discounts-page {
+  padding-top: 1.5rem;
+  padding-bottom: 2.5rem;
+}
+
+.fs-discounts-page__header {
+  margin-bottom: 1.5rem;
+}
+
+.fs-discounts-page__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #18181b;
+}
+
+.fs-discounts-page__meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: #52525b;
+}
+
+.fs-discounts-page__banner {
+  margin-bottom: 2rem;
+}
+
+.fs-discounts-page__banner .fs-discounts-banner {
+  margin-bottom: 0;
+}
+
+.fs-discounts-page__products {
+  margin-top: 0;
+}
+
+.fs-discounts-page__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .fs-discounts-page {
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+  }
+
+  .fs-discounts-page__header {
+    margin-bottom: 1.75rem;
+  }
+
+  .fs-discounts-page__title {
+    font-size: 1.875rem;
+  }
+
+  .fs-discounts-page__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .fs-discounts-page__grid {
+    gap: 1rem;
+  }
+}
+
+.fs-discounts-page__empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.fs-discounts-page__empty-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.fs-discounts-page__empty-desc {
+  font-size: 0.875rem;
+  color: #52525b;
+}
+
+.fs-discounts-page__cta {
+  margin-top: 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--admin-primary);
+  padding: 0.625rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  transition: filter 0.2s ease;
+}
+
+.fs-discounts-page__cta:hover {
+  filter: brightness(1.08);
+}
+
+.fs-discounts-page__pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  margin-top: 2.5rem;
+}
+
+.fs-discounts-page__page-btn {
+  height: 2.75rem;
+  border-radius: 9999px;
+  border: 1px solid #e4e4e7;
+  padding: 0 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #3f3f46;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.fs-discounts-page__page-btn:hover:not(:disabled) {
+  background: #f4f4f5;
+}
+
+.fs-discounts-page__page-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.fs-discounts-page__page-meta {
+  padding: 0 0.5rem;
+  font-size: 0.875rem;
+  color: #52525b;
+}
+
+/* Toolbar — nav-style row, no fill on controls */
+.fs-discounts-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 2rem;
+  padding-bottom: 0.875rem;
+  background: transparent;
+  border-bottom: 1px solid #e5e5e5;
+  font-family: "Montserrat", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+.fs-discounts-toolbar__field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.875rem 1rem;
+  border: none;
+  background: transparent;
+}
+
+@media (min-width: 768px) {
+  .fs-discounts-toolbar__field {
+    padding: 0.875rem 1.25rem;
+  }
+}
+
+.fs-discounts-toolbar__field--search {
+  flex: 1.5 1 10rem;
+}
+
+.fs-discounts-toolbar__field--menu {
+  flex: 0 1 auto;
+  min-width: 8.5rem;
+}
+
+.fs-discounts-toolbar__field--price {
+  flex: 0 0 auto;
+  gap: 0.75rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.fs-discounts-toolbar__control,
+.fs-discounts-toolbar__select,
+.fs-discounts-toolbar__price-input {
+  width: 100%;
+  min-width: 0;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #18181b;
+  outline: none !important;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fs-discounts-toolbar__control:focus,
+.fs-discounts-toolbar__control:focus-visible,
+.fs-discounts-toolbar__select:focus,
+.fs-discounts-toolbar__select:focus-visible,
+.fs-discounts-toolbar__price-input:focus,
+.fs-discounts-toolbar__price-input:focus-visible,
+.fs-discounts-toolbar__reset:focus,
+.fs-discounts-toolbar__reset:focus-visible {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.fs-discounts-toolbar__control {
+  cursor: text;
+}
+
+.fs-discounts-toolbar__menu-btn {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #18181b;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fs-discounts-toolbar__menu-btn:focus,
+.fs-discounts-toolbar__menu-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.fs-discounts-toolbar__chevron-inline {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: #52525b;
+  transition: transform 0.2s ease;
+}
+
+.fs-discounts-toolbar__chevron-inline.is-open {
+  transform: rotate(180deg);
+}
+
+.fs-discounts-toolbar__menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 60;
+  min-width: 100%;
+  max-height: 14rem;
+  margin: 0;
+  padding: 0.375rem 0;
+  list-style: none;
+  overflow-y: auto;
+  border-radius: 0.5rem;
+  border: 1px solid #e4e4e7;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.fs-discounts-toolbar__menu button {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 1rem;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #27272a;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.fs-discounts-toolbar__menu button:hover {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.fs-discounts-toolbar__menu button.is-active {
+  background: rgba(var(--admin-primary-rgb), 0.1);
+  color: #18181b;
+}
+
+.fs-discounts-toolbar__control::placeholder {
+  color: #3f3f46;
+  font-weight: 500;
+}
+
+.fs-discounts-toolbar__price-input {
+  width: 3.25rem;
+  padding: 0.125rem 0;
+  text-align: center;
+  cursor: text;
+}
+
+.fs-discounts-toolbar__price-input::placeholder {
+  color: #71717a;
+  font-weight: 500;
+}
+
+.fs-discounts-toolbar__reset {
+  flex: 0 0 auto;
+  align-self: center;
+  border: none;
+  background: transparent;
+  padding: 0.875rem 1rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #18181b;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fs-discounts-toolbar__reset:hover {
+  color: #000;
+  background: transparent;
+}
+
+/* Discounts page — dark mode (GitHub-style palette, matches .fs-site) */
+html[data-storefront-theme="dark"] .fs-discounts-page__title {
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page__meta {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-banner {
+  border-color: #30363d;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar {
+  background: transparent;
+  border-bottom-color: #30363d;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__field {
+  background: transparent;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__control,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__select,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__price-input,
+html[data-storefront-theme="dark"] .fs-site .fs-discounts-toolbar input,
+html[data-storefront-theme="dark"] .fs-site .fs-discounts-toolbar select {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #e6edf3 !important;
+  color-scheme: dark;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__control::placeholder,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__price-input::placeholder,
+html[data-storefront-theme="dark"] .fs-site .fs-discounts-toolbar input::placeholder {
+  color: #8b949e !important;
+  opacity: 1;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__menu-btn {
+  color: #e6edf3;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__chevron-inline {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__menu {
+  border-color: #30363d;
+  background: #161b22;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__menu button {
+  color: #c9d1d9;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__menu button:hover {
+  background: rgba(240, 246, 252, 0.06);
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__menu button.is-active {
+  background: rgba(var(--admin-primary-rgb), 0.18);
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__reset {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__control:focus,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__control:focus-visible,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__select:focus,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__select:focus-visible,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__price-input:focus,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__price-input:focus-visible,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__reset:focus,
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__reset:focus-visible,
+html[data-storefront-theme="dark"] .fs-site .fs-discounts-toolbar input:focus,
+html[data-storefront-theme="dark"] .fs-site .fs-discounts-toolbar select:focus {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-toolbar__reset:hover {
+  color: #f0f6fc;
+  background: transparent;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page .fs-card {
+  border-color: #30363d;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page [class*="text-zinc-900"],
+html[data-storefront-theme="dark"] .fs-discounts-page [class*="text-slate-900"] {
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page [class*="text-zinc-600"],
+html[data-storefront-theme="dark"] .fs-discounts-page [class*="text-zinc-700"] {
+  color: #8b949e !important;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page [class*="border-zinc-200"] {
+  border-color: #30363d !important;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page [class*="hover:bg-zinc-50"]:hover {
+  background-color: rgba(240, 246, 252, 0.06) !important;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page__empty-title {
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page__empty-desc,
+html[data-storefront-theme="dark"] .fs-discounts-page__page-meta {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page__page-btn {
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page__page-btn:hover:not(:disabled) {
+  background: rgba(240, 246, 252, 0.06);
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-discounts-page__grid .bg-zinc-100 {
+  background-color: #21262d !important;
+}
+
+@media (max-width: 767px) {
+  .fs-discounts-toolbar {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .fs-discounts-toolbar__field,
+  .fs-discounts-toolbar__field--search,
+  .fs-discounts-toolbar__field--menu {
+    flex: 1 1 100%;
+    min-width: 100%;
+    padding: 0.75rem 0;
+  }
+
+  .fs-discounts-toolbar__reset {
+    width: 100%;
+    padding: 0.75rem 0;
+    text-align: left;
+  }
+
+  .fs-discounts-page__banner {
+    margin-bottom: 1.5rem;
+  }
+}
+
+.fs-filter-drawer__backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(1px);
+}
+
+.fs-filter-drawer__panel {
+  background: #ffffff;
+  border-left: 1px solid #e4e4e7;
+  color: #18181b;
+}
+
+.fs-filter-drawer__header,
+.fs-filter-drawer__footer {
+  border-color: #e4e4e7;
+}
+
+.fs-filter-drawer__header {
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.fs-filter-drawer__footer {
+  border-top: 1px solid #e4e4e7;
+}
+
+.fs-filter-drawer__title {
+  color: #18181b;
+}
+
+.fs-filter-drawer__close {
+  color: #71717a;
+}
+
+.fs-filter-drawer__close:hover {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.fs-filter-drawer__section-title {
+  color: #27272a;
+}
+
+.fs-filter-drawer__option {
+  color: #3f3f46;
+}
+
+.fs-filter-drawer__option:hover {
+  background: #f4f4f5;
+}
+
+.fs-filter-drawer__hint,
+.fs-filter-drawer__empty {
+  color: #71717a;
+}
+
+.fs-filter-drawer__price-value {
+  color: #18181b;
+}
+
+.fs-filter-drawer__control {
+  border-color: #d4d4d8;
+}
+
+.fs-filter-drawer__pill {
+  border-color: #e4e4e7;
+  background: #ffffff;
+  color: #27272a;
+}
+
+.fs-filter-drawer__pill:hover:not(.fs-filter-drawer__pill--active) {
+  border-color: #a1a1aa;
+}
+
+.fs-filter-drawer__clear {
+  color: #71717a;
+}
+
+.fs-filter-drawer__clear:hover {
+  color: #18181b;
+}
+
+.fs-filter-drawer__range {
+  height: 0.35rem;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-chip {
+  background: #21262d;
+  color: #e6edf3;
+  border-color: #30363d;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__panel {
+  background: #161b22;
+  border-left-color: #30363d;
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__header,
+html[data-storefront-theme="dark"] .fs-filter-drawer__footer {
+  border-color: #30363d;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__title,
+html[data-storefront-theme="dark"] .fs-filter-drawer__price-value {
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__section-title {
+  color: #e6edf3;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__option {
+  color: #c9d1d9;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__option:hover {
+  background: rgba(240, 246, 252, 0.06);
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__hint,
+html[data-storefront-theme="dark"] .fs-filter-drawer__empty,
+html[data-storefront-theme="dark"] .fs-filter-drawer__clear {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__clear:hover {
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__close {
+  color: #8b949e;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__close:hover {
+  background: #21262d;
+  color: #f0f6fc;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__control {
+  border-color: #484f58;
+  background-color: #0d1117;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__pill:not(.fs-filter-drawer__pill--active) {
+  background: #21262d;
+  border-color: #30363d;
+  color: #e6edf3;
+}
+
+html[data-storefront-theme="dark"] .fs-filter-drawer__pill:not(.fs-filter-drawer__pill--active):hover {
+  border-color: #484f58;
+  background: #30363d;
+}
+
 .fs-btn-secondary {
   color: #0f172a;
   background: #f5f5f5;
@@ -597,6 +1328,49 @@ select:focus {
 .fs-menu-item:hover {
   color: #0f172a;
   background: rgba(15, 23, 42, .06);
+}
+
+/* Product detail accordions — no rectangular focus ring on click */
+.fs-product-accordion__trigger:focus,
+.fs-product-accordion__trigger:focus-visible,
+.fs-product-accordion__trigger:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.fs-product-accordion__trigger:active {
+  transform: none;
+}
+
+html[data-storefront-theme="dark"] .fs-product-accordion {
+  border-color: #30363d !important;
+  border-radius: 0 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-product-accordion__trigger {
+  border-radius: 0 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-product-accordion__trigger:focus,
+html[data-storefront-theme="dark"] .fs-product-accordion__trigger:focus-visible,
+html[data-storefront-theme="dark"] .fs-product-accordion__trigger:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Product detail — square quantity controls in dark mode (no per-button radius) */
+html[data-storefront-theme="dark"] .fs-product-qty,
+html[data-storefront-theme="dark"] .fs-product-qty__btn,
+html[data-storefront-theme="dark"] .fs-product-qty__value {
+  border-radius: 0 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-product-qty__btn:focus,
+html[data-storefront-theme="dark"] .fs-product-qty__btn:focus-visible,
+html[data-storefront-theme="dark"] .fs-product-qty__btn:active {
+  outline: none !important;
+  box-shadow: none !important;
+  transform: none;
 }
 
 .fs-card {

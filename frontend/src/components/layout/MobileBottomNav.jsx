@@ -46,7 +46,7 @@ export default function MobileBottomNav({
   const items = useMemo(() => {
     const base = [
       { key: "home", label: "Home", to: "/", icon: Home, isLink: true },
-      { key: "shop", label: "Shop", to: "/search?tab=categories", icon: Store, isLink: true },
+      { key: "shop", label: "Shop", to: "/search", icon: Store, isLink: true },
       { key: "notifications", label: "Notifications", to: null, icon: Bell, isLink: false, badge: notificationsUnread, onClick: () => { setShowNotifications(true); onOpenNotifications(); } },
       { key: "cart", label: "Cart", to: "/cart", icon: ShoppingBag, isLink: true, badge: count },
     ];
@@ -61,7 +61,7 @@ export default function MobileBottomNav({
 
   const isActive = (key) => {
     if (key === "home") return pathname === "/";
-    if (key === "shop") return pathname === "/search" && tab === "categories";
+    if (key === "shop") return pathname === "/search" || pathname === "/shop";
     if (key === "notifications") return showNotifications;
     if (key === "cart") return pathname === "/cart";
     if (key === "wishlist") return pathname === "/search" && tab === "wishlist";

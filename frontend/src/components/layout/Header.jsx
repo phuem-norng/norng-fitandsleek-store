@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../state/auth.jsx";
 import { useCart } from "../../state/cart.jsx";
 import { useWishlist } from "../../state/wishlist.jsx";
@@ -16,6 +16,31 @@ import SmartSearchModal from "../search/SmartSearchModal.jsx";
 
 function cn(...xs) {
   return xs.filter(Boolean).join(" ");
+}
+
+/** Match nav item only when path + query params align (avoids every /search?… link active at once). */
+function isNavItemActive(location, to) {
+  const toStr = String(to || "");
+  const qIndex = toStr.indexOf("?");
+  const toPath = qIndex >= 0 ? toStr.slice(0, qIndex) : toStr;
+  const toSearch = qIndex >= 0 ? toStr.slice(qIndex + 1) : "";
+  const { pathname, search } = location;
+
+  if (!toSearch) {
+    if (toPath === "/discounts") {
+      return pathname === "/discounts" || pathname.startsWith("/discounts/");
+    }
+    return pathname === toPath && !search;
+  }
+
+  if (pathname !== toPath) return false;
+
+  const toParams = new URLSearchParams(toSearch);
+  const locParams = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  for (const [key, value] of toParams.entries()) {
+    if (locParams.get(key) !== value) return false;
+  }
+  return true;
 }
 
 function getInitials(label) {
@@ -256,25 +281,22 @@ function DropdownMenu({ items, children, hasSubtitle }) {
   );
 }
 
-// Animated Nav Link with full-width background bar
-function AnimatedNavLink({ to, label, hasDropdown, onHover, isHovered }) {
+// Animated Nav Link — one underline at a time (hover wins, else single active route)
+function AnimatedNavLink({ to, label, hasDropdown, onHover, index, hoveredIndex, isDropdownOpen }) {
+  const location = useLocation();
+  const isActive = isNavItemActive(location, to);
+  const showUnderline =
+    hoveredIndex === index ||
+    (hoveredIndex === null && (isActive || isDropdownOpen));
+
   return (
     <NavLink
       to={to}
-      className={({ isActive }) =>
-        cn(
-          "fs-nav-link",
-          isActive ? "fs-nav-link-active" : ""
-        )
-      }
+      className={cn("fs-nav-link", showUnderline && "fs-nav-link-active")}
       onMouseEnter={onHover}
     >
-      {({ isActive }) => (
-        <>
-          <span className="relative z-10">{label}</span>
-          <span className={cn("fs-nav-underline", (isActive || isHovered) && "is-on")} />
-        </>
-      )}
+      <span className="relative z-10">{label}</span>
+      <span className={cn("fs-nav-underline", showUnderline && "is-on")} />
     </NavLink>
   );
 }
@@ -307,8 +329,10 @@ function NavBar({ navItems }) {
                   to={item.to}
                   label={item.label}
                   hasDropdown
+                  index={index}
+                  hoveredIndex={hoveredIndex}
+                  isDropdownOpen={isOpen}
                   onHover={() => setHoveredIndex(index)}
-                  isHovered={hoveredIndex === index || isOpen}
                 />
               )}
             </DropdownMenu>
@@ -318,8 +342,9 @@ function NavBar({ navItems }) {
               to={item.to}
               label={item.label}
               hasDropdown={false}
+              index={index}
+              hoveredIndex={hoveredIndex}
               onHover={() => setHoveredIndex(index)}
-              isHovered={hoveredIndex === index}
             />
           );
         })}
@@ -665,7 +690,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       },
       {
         key: 'discounts',
-        label: '🎉 Discounts',
+        label: label('discounts', t('discounts')).replace(/^🎉\s*/, ''),
         to: "/discounts",
         items: [
           { label: 'All Discounts', to: '/discounts' },

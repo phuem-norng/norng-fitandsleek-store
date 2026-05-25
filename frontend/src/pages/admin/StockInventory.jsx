@@ -1298,7 +1298,7 @@ export default function AdminBarcodeQR() {
  `;
         win.document.open();
         win.document.write(
-            `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Stock &amp; Inventory Label</title><style>${printCss}</style></head><body class="bqr-print-body">${labelHtml}</body></html>`,
+            `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Stock & Inventory Label</title><style>${printCss}</style></head><body class="bqr-print-body">${labelHtml}</body></html>`,
         );
         win.document.close();
         win.focus();

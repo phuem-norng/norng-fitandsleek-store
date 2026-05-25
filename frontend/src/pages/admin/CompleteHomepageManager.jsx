@@ -4,6 +4,7 @@ import { resolveImageUrl } from '../../lib/images';
 import { AdminContentSkeleton } from '@/components/admin/AdminLoading';
 import { useTheme } from '../../state/theme.jsx';
 import { AdminConfirmDialog } from '../../components/admin/AdminModal.jsx';
+import { FOOTER_PAYMENT_METHODS } from '../../lib/footerPaymentMethods';
 
 const defaultLeftMenu = [
  {
@@ -137,6 +138,9 @@ export default function CompleteHomepageManager() {
  contact_enabled: true,
  copyright_text: '© 2026 FIT&SLEEK Pro. All rights reserved.',
  background_color: DEFAULT_CHROME_BACKGROUND,
+ payment_accept_enabled: true,
+ payment_accept_title: 'We Accept',
+ accepted_payment_methods: ['aba_pay', 'visa', 'mastercard', 'unionpay', 'jcb', 'wing', 'bank_transfer', 'cod'],
  });
 
  // Footer links sections
@@ -1275,6 +1279,61 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  >
  + Add Social Link
  </button>
+ </div>
+ </div>
+
+ {/* Accepted payment methods */}
+ <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 p-5 bg-white dark:bg-slate-900">
+ <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">We Accept (Payment Methods)</h3>
+ <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+ Choose which payment methods appear in the storefront footer. Only selected methods are shown.
+ </p>
+ <label className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+ <input
+ type="checkbox"
+ checked={footerSettings.payment_accept_enabled !== false}
+ onChange={(e) => handleFooterChange('payment_accept_enabled', e.target.checked)}
+ className="rounded border-slate-300 dark:border-slate-600 text-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.35)]"
+ />
+ Show &quot;We Accept&quot; section in footer
+ </label>
+ <div className="mb-4 max-w-md">
+ <label className="mb-2 block text-sm font-semibold text-slate-900 dark:text-slate-100">Section title</label>
+ <input
+ type="text"
+ value={footerSettings.payment_accept_title || 'We Accept'}
+ onChange={(e) => handleFooterChange('payment_accept_title', e.target.value)}
+ className="h-11 w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm focus:border-[var(--admin-primary)] focus:ring-0 outline-none bg-white dark:bg-slate-900/60 text-slate-900 dark:text-slate-100"
+ />
+ </div>
+ <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+ {FOOTER_PAYMENT_METHODS.map((method) => {
+ const selected = (footerSettings.accepted_payment_methods || []).includes(method.id);
+ return (
+ <label
+ key={method.id}
+ className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+ selected
+ ? 'border-[color:var(--admin-primary)] bg-[rgba(var(--admin-primary-rgb),0.08)] text-slate-900 dark:text-slate-100'
+ : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
+ }`}
+ >
+ <input
+ type="checkbox"
+ checked={selected}
+ onChange={() => {
+ const current = footerSettings.accepted_payment_methods || [];
+ const next = selected
+ ? current.filter((id) => id !== method.id)
+ : [...current, method.id];
+ handleFooterChange('accepted_payment_methods', next);
+ }}
+ className="rounded border-slate-300 dark:border-slate-600 text-[color:var(--admin-primary)]"
+ />
+ <span>{method.label}</span>
+ </label>
+ );
+ })}
  </div>
  </div>
 

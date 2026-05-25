@@ -1,3 +1,4 @@
+
 # Postgres only for local dev. Prefer the repo root stack:
 #   cd .. && docker compose up -d db
 #
@@ -10,9 +11,9 @@ services:
     container_name: fitandsleek_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_db}
-      POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5433:5432"
     volumes:

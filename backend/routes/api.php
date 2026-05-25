@@ -129,6 +129,7 @@ Route::get('/homepage', [HomepageAdminController::class, 'show']); // public hom
 
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/filter-options', [ProductController::class, 'filterOptions']);
 Route::get('/products/discounts', [ProductController::class, 'discounts']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
 

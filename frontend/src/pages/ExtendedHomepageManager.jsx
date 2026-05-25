@@ -17,7 +17,7 @@ export default function ExtendedHomepageManager() {
   // All Sections
   const [allSections, setAllSections] = useState({
     newIn: { title: 'NEW IN', icon: '📦', enabled: true, order: 1 },
-    discounts: { title: '🎉 Discounts', icon: '🎉', enabled: true, order: 2 },
+    discounts: { title: 'Discounts', icon: '', enabled: true, order: 2 },
     women: { title: 'WOMEN', icon: '👗', enabled: true, order: 3 },
     men: { title: 'MEN', icon: '👔', enabled: true, order: 4 },
     boys: { title: 'BOYS', icon: '👦', enabled: true, order: 5 },

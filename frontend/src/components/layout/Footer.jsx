@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { useHomepageSettings } from "../../state/homepageSettings.jsx";
 import Logo from "../Logo.jsx";
 import { useLanguage } from "../../lib/i18n.jsx";
+import FooterAcceptedPayments from "./FooterAcceptedPayments.jsx";
+import { resolveFooterAcceptedMethods } from "../../lib/footerPaymentMethods";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -72,6 +74,7 @@ export default function Footer() {
     },
   };
 
+  const acceptedPaymentMethods = resolveFooterAcceptedMethods(footerSettings);
 
   return (
     <footer className="hidden md:block border-t border-zinc-200" style={{ backgroundColor: footerSettings.background_color || '#6e8b7e' }}>
@@ -106,6 +109,14 @@ export default function Footer() {
               </div>
             </div>
           )}
+          {acceptedPaymentMethods.length > 0 ? (
+            <div className="mt-1">
+              <FooterAcceptedPayments
+                methodIds={acceptedPaymentMethods}
+                title={footerSettings.payment_accept_title || t('weAccept')}
+              />
+            </div>
+          ) : null}
         </div>
 
         {/* Support Section - Conditional */}

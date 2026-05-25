@@ -59,7 +59,7 @@ class HomepageSettingsController extends Controller
                 ],
                 'sections' => [
                     'newIn' => ['title' => 'NEW IN', 'icon' => '📦', 'enabled' => true, 'order' => 1],
-                    'discounts' => ['title' => '🎉 Discounts', 'icon' => '🎉', 'enabled' => true, 'order' => 2],
+                    'discounts' => ['title' => 'Discounts', 'icon' => '', 'enabled' => true, 'order' => 2],
                     'women' => ['title' => 'WOMEN', 'icon' => '👗', 'enabled' => true, 'order' => 3],
                     'men' => ['title' => 'MEN', 'icon' => '👔', 'enabled' => true, 'order' => 4],
                     'boys' => ['title' => 'BOYS', 'icon' => '👦', 'enabled' => true, 'order' => 5],
@@ -158,7 +158,7 @@ class HomepageSettingsController extends Controller
                         'newArrivals' => 'New Arrivals',
                         'trendingNow' => 'Trending Now',
                         'thisWeek' => 'This Week',
-                        'discounts' => '🎉 Discounts',
+                        'discounts' => 'Discounts',
                         'allDiscounts' => 'All Discounts',
                         'clothes' => 'Clothes',
                         'shoes' => 'Shoes',
@@ -212,6 +212,11 @@ class HomepageSettingsController extends Controller
                     'tracking_enabled' => true,
                     'privacy_enabled' => true,
                     'contact_enabled' => true,
+                    'payment_accept_enabled' => true,
+                    'payment_accept_title' => 'We Accept',
+                    'accepted_payment_methods' => [
+                        'aba_pay', 'visa', 'mastercard', 'unionpay', 'jcb', 'wing', 'bank_transfer', 'cod',
+                    ],
                 ],
                 'footer_socials' => [
                     ['platform' => 'facebook', 'url' => '#'],
