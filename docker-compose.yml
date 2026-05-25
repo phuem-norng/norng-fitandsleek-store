@@ -14,11 +14,7 @@
 #   Qdrant:              localhost:6333
 #
 # backend/.env (mounted into the PHP container) must use the Compose network for the DB, not localhost:
-<<<<<<< HEAD
-#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=fitandsleek6
-=======
-#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=fitandsleek_v2
->>>>>>> fe3fee1b34a88258cf14474db4167b949595c9c6
+#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=<same as repo-root .env / backend/.env>
 #
 # pgAdmin / local tools on the host (Windows/Mac): use backend/.env as-is (127.0.0.1 + published port 5433).
 #
@@ -83,21 +79,12 @@ services:
       # Use Compose DNS so indexing works without host port forwarding quirks.
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
-<<<<<<< HEAD
-      # Explicit DB credentials for the container runtime.
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: fitandsleek6
-      DB_USERNAME: postgres
-      DB_PASSWORD: Norng@123
-=======
       # Explicit DB credentials for the container runtime (from repo-root `.env`).
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_DATABASE: ${DB_DATABASE:-fitandsleek_v2}
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
->>>>>>> fe3fee1b34a88258cf14474db4167b949595c9c6
       DB_SSLMODE: disable
     # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
     command: ["web"]
@@ -129,19 +116,11 @@ services:
       ai-service:
         condition: service_started
     environment:
-<<<<<<< HEAD
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: fitandsleek6
-      DB_USERNAME: postgres
-      DB_PASSWORD: Norng@123
-=======
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_DATABASE: ${DB_DATABASE:-fitandsleek_v2}
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
->>>>>>> fe3fee1b34a88258cf14474db4167b949595c9c6
       DB_SSLMODE: disable
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
@@ -171,19 +150,11 @@ services:
       ai-service:
         condition: service_started
     environment:
-<<<<<<< HEAD
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: fitandsleek6
-      DB_USERNAME: postgres
-      DB_PASSWORD: Norng@123
-=======
       DB_HOST: ${DB_HOST:-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_DATABASE: ${DB_DATABASE:-fitandsleek_v2}
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
->>>>>>> fe3fee1b34a88258cf14474db4167b949595c9c6
       DB_SSLMODE: disable
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
