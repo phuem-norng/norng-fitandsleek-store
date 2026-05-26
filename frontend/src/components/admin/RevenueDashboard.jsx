@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import ChartResizeMenu from "./ChartResizeMenu.jsx";
 import api from "../../lib/api";
 import { formatCountryLabel } from "../../lib/countries.js";
 import { REPORT_CLUSTER } from "../../lib/reportChartTheme.js";
@@ -49,17 +50,18 @@ function truncateLabel(value, max = 26) {
   return `${s.slice(0, max - 1)}…`;
 }
 
-function RevenueVisualPanel({ title, variant, children, theme }) {
+function RevenueVisualPanel({ title, variant, children, theme, action, style }) {
   const accent = PANEL_HEADERS[variant] || PANEL_HEADERS.country;
   return (
     <div
       className="flex h-full min-h-[300px] flex-col overflow-hidden rounded-2xl border"
-      style={{ borderColor: theme.cardBorder, background: theme.panelBg }}
+      style={{ borderColor: theme.cardBorder, background: theme.panelBg, ...style }}
     >
-      <div className="px-4 py-2.5" style={{ background: accent.bg }}>
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ background: accent.bg }}>
         <h3 className="text-sm font-semibold" style={{ color: accent.title }}>
           {title}
         </h3>
+        {action}
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-4">{children}</div>
     </div>
@@ -99,6 +101,12 @@ export default function RevenueDashboard({ theme }) {
   const [productId, setProductId] = useState("");
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+
+  /* chart resize state */
+  const [lineSpan, setLineSpan] = useState(1);
+  const [columnSpan, setColumnSpan] = useState(1);
+  const [productSpan, setProductSpan] = useState(1);
+  const [countrySpan, setCountrySpan] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -207,7 +215,11 @@ export default function RevenueDashboard({ theme }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <RevenueVisualPanel title="Total Revenue by Month and Year" variant="line" theme={theme}>
+          <RevenueVisualPanel
+            title="Total Revenue by Month and Year" variant="line" theme={theme}
+            style={{ gridColumn: `span ${lineSpan}` }}
+            action={<ChartResizeMenu colSpan={lineSpan} maxCols={2} onChange={setLineSpan} />}
+          >
             {!hasMonthly ? (
               <ReportEmptyChart message="No revenue data for this year" theme={theme} />
             ) : (
@@ -263,7 +275,11 @@ export default function RevenueDashboard({ theme }) {
             )}
           </RevenueVisualPanel>
 
-          <RevenueVisualPanel title="Total Revenue by Month and Year" variant="column" theme={theme}>
+          <RevenueVisualPanel
+            title="Total Revenue by Month and Year" variant="column" theme={theme}
+            style={{ gridColumn: `span ${columnSpan}` }}
+            action={<ChartResizeMenu colSpan={columnSpan} maxCols={2} onChange={setColumnSpan} />}
+          >
             {!hasMonthly ? (
               <ReportEmptyChart message="No revenue data for this year" theme={theme} />
             ) : (
@@ -317,7 +333,11 @@ export default function RevenueDashboard({ theme }) {
             )}
           </RevenueVisualPanel>
 
-          <RevenueVisualPanel title="Product Revenue by product_name" variant="product" theme={theme}>
+          <RevenueVisualPanel
+            title="Product Revenue by product_name" variant="product" theme={theme}
+            style={{ gridColumn: `span ${productSpan}` }}
+            action={<ChartResizeMenu colSpan={productSpan} maxCols={2} onChange={setProductSpan} />}
+          >
             {productChartData.length === 0 ? (
               <ReportEmptyChart message="No product revenue for selected filters" theme={theme} />
             ) : (
@@ -366,7 +386,11 @@ export default function RevenueDashboard({ theme }) {
             )}
           </RevenueVisualPanel>
 
-          <RevenueVisualPanel title="Revenue by country" variant="country" theme={theme}>
+          <RevenueVisualPanel
+            title="Revenue by country" variant="country" theme={theme}
+            style={{ gridColumn: `span ${countrySpan}` }}
+            action={<ChartResizeMenu colSpan={countrySpan} maxCols={2} onChange={setCountrySpan} />}
+          >
             {countryChartData.length === 0 ? (
               <ReportEmptyChart message="No country data for selected filters" theme={theme} />
             ) : (

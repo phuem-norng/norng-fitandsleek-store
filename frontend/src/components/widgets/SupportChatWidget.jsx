@@ -296,11 +296,16 @@ export default function SupportChatWidget() {
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          className={`relative pointer-events-auto h-14 w-14 rounded-full text-white shadow-xl hover:shadow-2xl transition-all flex items-center justify-center ${dark ? "bg-[#58a6ff] hover:bg-[#79b8ff]" : "bg-zinc-900 hover:bg-zinc-700"}`}
+          className={`relative pointer-events-auto h-14 w-14 rounded-full shadow-xl hover:shadow-2xl transition-all flex items-center justify-center ${dark ? "hover:brightness-95" : "hover:bg-zinc-700"}`}
+          style={
+            dark
+              ? { backgroundColor: "#ffffff", color: "#000000" }
+              : { backgroundColor: "#18181b", color: "#ffffff" }
+          }
           aria-label="Open support chat"
         >
-          <MessageCircle className="w-6 h-6" />
-          <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ${dark ? "ring-[#0d1117]" : "ring-white"}`} />
+          <MessageCircle className="w-6 h-6" style={dark ? { color: "#000000" } : undefined} />
+          <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white" />
         </button>
       )}
     </div>

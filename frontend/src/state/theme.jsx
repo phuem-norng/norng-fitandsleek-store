@@ -54,7 +54,6 @@ const DEFAULT_THEME = {
   radius: "md",
   contentLayout: "full",
   sidebarMode: "default",
-  customCursor: true,
 };
 
 function normalizeHexColor(value) {
@@ -213,7 +212,6 @@ function normalizeStored(raw) {
   const radius = ["none", "sm", "md", "lg", "xl"].includes(raw.radius) ? raw.radius : "md";
   const contentLayout = raw.contentLayout === "centered" ? "centered" : "full";
   const sidebarMode = raw.sidebarMode === "icon" ? "icon" : "default";
-  const customCursor = raw.customCursor === false ? false : true;
   return {
     mode,
     primaryColor,
@@ -222,7 +220,6 @@ function normalizeStored(raw) {
     radius,
     contentLayout,
     sidebarMode,
-    customCursor,
   };
 }
 
@@ -256,7 +253,6 @@ export function ThemeProvider({ children }) {
   const [radius, setRadius] = useState(DEFAULT_THEME.radius);
   const [contentLayout, setContentLayout] = useState(DEFAULT_THEME.contentLayout);
   const [sidebarMode, setSidebarMode] = useState(DEFAULT_THEME.sidebarMode);
-  const [customCursor, setCustomCursor] = useState(DEFAULT_THEME.customCursor);
 
   const persist = useCallback((next) => {
     try {
@@ -283,7 +279,6 @@ export function ThemeProvider({ children }) {
       setRadius(parsed.radius);
       setContentLayout(parsed.contentLayout);
       setSidebarMode(parsed.sidebarMode);
-      setCustomCursor(parsed.customCursor);
       applyModeAndPrimary(parsed.mode, parsed.primaryColor, parsed.presetId);
       applyAdminAppearanceVars(parsed.scale, parsed.radius);
     } catch {
@@ -312,7 +307,6 @@ export function ThemeProvider({ children }) {
       radius,
       contentLayout,
       sidebarMode,
-      customCursor,
     });
   }, [
     hydrated,
@@ -323,7 +317,6 @@ export function ThemeProvider({ children }) {
     radius,
     contentLayout,
     sidebarMode,
-    customCursor,
     persist,
   ]);
 
@@ -350,7 +343,6 @@ export function ThemeProvider({ children }) {
     setRadius(DEFAULT_THEME.radius);
     setContentLayout(DEFAULT_THEME.contentLayout);
     setSidebarMode(DEFAULT_THEME.sidebarMode);
-    setCustomCursor(DEFAULT_THEME.customCursor);
     try {
       localStorage.removeItem(THEME_STORAGE_KEY);
     } catch {
@@ -370,7 +362,6 @@ export function ThemeProvider({ children }) {
       radius,
       contentLayout,
       sidebarMode,
-      customCursor,
       setMode,
       setPrimaryColor,
       setPreset,
@@ -378,7 +369,6 @@ export function ThemeProvider({ children }) {
       setRadius,
       setContentLayout,
       setSidebarMode,
-      setCustomCursor,
       saveTheme,
       resetAdminAppearance,
       normalizeHexColor,
@@ -394,7 +384,6 @@ export function ThemeProvider({ children }) {
       radius,
       contentLayout,
       sidebarMode,
-      customCursor,
       setPreset,
       saveTheme,
       resetAdminAppearance,

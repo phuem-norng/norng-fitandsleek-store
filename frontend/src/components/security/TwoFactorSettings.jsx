@@ -165,12 +165,10 @@ export default function TwoFactorSettings({ variant = "customer", className = ""
             Authenticator app (2FA)
           </h3>
           <p className={isAdmin ? "text-sm text-slate-600 dark:text-slate-300 mt-2 leading-relaxed" : "text-sm text-gray-600 mt-1"}>
-            {isAdmin
-              ? "ការពារបន្ថែម (ជម្រើស) — ពេល login / forgot password អាចរើស verify តាម Email ឬ Authenticator (ដូច Facebook)។"
-              : "Optional extra protection. When enabled, at login and forgot password you can choose email code or authenticator app."}
+            Optional extra protection. When enabled, at login and forgot password you can choose to verify via email code or authenticator app.
           </p>
           <p className={`mt-2 text-sm font-semibold ${status.enabled ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}>
-            Status: {status.enabled ? "Enabled / បើករួច" : "Disabled (optional) / មិនទាន់បើក"}
+            Status: {status.enabled ? "Enabled" : "Disabled"}
           </p>
         </div>
 
@@ -216,13 +214,8 @@ export default function TwoFactorSettings({ variant = "customer", className = ""
               disabled={busy}
               onClick={startSetup}
             >
-              {busy ? "Starting…" : isAdmin ? "បើក Authenticator 2FA / Enable" : "Enable authenticator 2FA"}
+              {busy ? "Starting…" : "Enable authenticator 2FA"}
             </button>
-            {isAdmin && (
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                ចុចប៊ូតុងខាងលើ → scan QR → បញ្ចូល code 6 ខ្ទង់
-              </p>
-            )}
           </div>
         )}
 

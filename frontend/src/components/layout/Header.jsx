@@ -882,7 +882,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           <div className="absolute left-0 items-center gap-1 lg:gap-1.5 xl:gap-2 flex">
             <button
               type="button"
-              className="fs-btn fs-btn-outline fs-btn-sm text-white border-white/40 bg-white/10 hover:bg-white/20 hidden xl:flex"
+              className="fs-btn fs-btn-sm text-white bg-transparent hover:bg-transparent hidden xl:flex border-0"
               onMouseEnter={() => setShowLeftMenu(true)}
             >
               <Menu className="w-4 h-4" />
@@ -894,13 +894,13 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
               className="transition-all duration-300 w-40 md:w-44 lg:w-48 xl:w-56 2xl:w-64 max-w-[300px]"
             >
               <div className="relative group">
-                <div className="w-full h-9 rounded-full border border-white/30 bg-white/20 pl-10 pr-10 text-xs text-white placeholder-white/60 outline-none focus:bg-white focus:border-white focus:text-zinc-900 focus:placeholder-zinc-400 transition-all duration-300 flex items-center">
-                  <span className="truncate">{searchPlaceholder}</span>
+                <div className="fs-header-search w-full h-9 rounded-full border border-white/50 bg-black/25 pl-10 pr-10 text-xs text-white outline-none transition-all duration-300 flex items-center">
+                  <span className="truncate text-white font-medium">{searchPlaceholder}</span>
                 </div>
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 transition-colors duration-300">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white transition-colors duration-300">
                   <Icon name="search" />
                 </span>
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70">
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-white">
                   <Camera className="w-3.5 h-3.5" />
                 </span>
               </div>

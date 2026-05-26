@@ -4,6 +4,7 @@ import { useAuth } from "../../state/auth";
 import { useTheme } from "../../state/theme.jsx";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import { resolveImageUrl } from "../../lib/images";
 import {
   buildAllColumnsVisibility,
   loadTableColumnVisibility,
@@ -474,7 +475,29 @@ export default function AdminDiscounts() {
               {filteredRows.map((discount) => (
                 <tr key={discount.id} className="border-t admin-border hover:bg-[rgba(var(--admin-primary-rgb),0.06)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.08)]">
                   {isColVisible("product") ? (
-                    <td className="px-4 py-2 text-slate-900 dark:text-slate-100">{discount.product?.name}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 font-semibold text-xs overflow-hidden shrink-0">
+                          {discount.product?.image_url ? (
+                            <img
+                              src={resolveImageUrl(discount.product.image_url)}
+                              alt={discount.product?.name || ""}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            discount.product?.name?.charAt(0)?.toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate max-w-[200px]">
+                            {discount.product?.name}
+                          </p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[200px]">
+                            {discount.product?.brand?.name || ""}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
                   ) : null}
                   {isColVisible("discount") ? (
                     <td className="px-4 py-2 text-slate-700 dark:text-slate-300">

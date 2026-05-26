@@ -48,13 +48,11 @@ export default function AdminAppearancePanel() {
     radius,
     contentLayout,
     sidebarMode,
-    customCursor,
     setPreset,
     setScale,
     setRadius,
     setContentLayout,
     setSidebarMode,
-    setCustomCursor,
     saveTheme,
     resetAdminAppearance,
   } = useTheme();
@@ -157,16 +155,6 @@ export default function AdminAppearancePanel() {
         options={[
           { value: "default", label: "Default", title: "Labels + icons" },
           { value: "icon", label: "Icon", title: "Icons only (narrow rail)" },
-        ]}
-      />
-
-      <Segmented
-        label="Mouse pointer"
-        value={customCursor ? "on" : "off"}
-        onChange={(next) => setCustomCursor(next === "on")}
-        options={[
-          { value: "on", label: "On", title: "Use custom dashboard cursor" },
-          { value: "off", label: "Off", title: "Use default system cursor" },
         ]}
       />
 

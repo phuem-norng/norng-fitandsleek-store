@@ -161,21 +161,24 @@ export function ReportSection({ id, title, subtitle, children, theme, className 
   );
 }
 
-export function ReportChartPanel({ title, subtitle, children, theme, className = "" }) {
+export function ReportChartPanel({ title, subtitle, children, theme, className = "", action, style }) {
   return (
     <div
       className={`rounded-2xl p-5 ${className}`}
-      style={{ background: theme.panelBg, border: `1px solid ${theme.cardBorder}` }}
+      style={{ background: theme.panelBg, border: `1px solid ${theme.cardBorder}`, ...style }}
     >
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold" style={{ color: theme.title }}>
-          {title}
-        </h3>
-        {subtitle ? (
-          <p className="mt-0.5 text-xs" style={{ color: theme.subtitle }}>
-            {subtitle}
-          </p>
-        ) : null}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold" style={{ color: theme.title }}>
+            {title}
+          </h3>
+          {subtitle ? (
+            <p className="mt-0.5 text-xs" style={{ color: theme.subtitle }}>
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       {children}
     </div>

@@ -34,7 +34,7 @@ class DiscountAdminController extends Controller
             });
         }
 
-        $discounts = $query->with('product')
+        $discounts = $query->with('product.brand')
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 15));
 
@@ -43,7 +43,7 @@ class DiscountAdminController extends Controller
 
     public function show($id)
     {
-        $discount = Discount::with('product')->findOrFail($id);
+        $discount = Discount::with('product.brand')->findOrFail($id);
 
         return response()->json($discount);
     }
@@ -74,7 +74,7 @@ class DiscountAdminController extends Controller
 
         return response()->json([
             'message' => 'Discount created successfully',
-            'data' => $discount->load('product'),
+            'data' => $discount->load('product.brand'),
         ], 201);
     }
 
@@ -111,7 +111,7 @@ class DiscountAdminController extends Controller
 
         return response()->json([
             'message' => 'Discount updated successfully',
-            'data' => $discount->load('product'),
+            'data' => $discount->load('product.brand'),
         ]);
     }
 
@@ -130,7 +130,7 @@ class DiscountAdminController extends Controller
         $discounts = Discount::where('is_active', true)
             ->where('start_date', '<=', now())
             ->where('end_date', '>=', now())
-            ->with('product')
+            ->with('product.brand')
             ->get();
 
         return response()->json($discounts);

@@ -7,7 +7,6 @@ import MobileBottomNav from "./MobileBottomNav.jsx";
 import SupportChatWidget from "../widgets/SupportChatWidget.jsx";
 import CartDrawer from "../shop/CartDrawer.jsx";
 import NotificationDrawer from "./NotificationDrawer.jsx";
-import ScrollToTop from "../ScrollToTop.jsx";
 import ApiDegradedBanner from "./ApiDegradedBanner.jsx";
 import api from "../../lib/api.js";
 import { useAuth } from "../../state/auth.jsx";
@@ -115,7 +114,6 @@ export default function SiteLayout() {
         user={user}
         formatTime={formatNotifTime}
       />
-      <ScrollToTop />
     </div>
   );
 }

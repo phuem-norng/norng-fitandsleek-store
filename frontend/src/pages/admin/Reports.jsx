@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import ChartResizeMenu from "../../components/admin/ChartResizeMenu.jsx";
 import api from "../../lib/api";
 import { errorAlert, toastSuccess } from "../../lib/swal";
 import { useAdminAccents } from "../../lib/adminAccents.js";
@@ -34,7 +35,6 @@ import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import RevenueDashboard from "../../components/admin/RevenueDashboard.jsx";
 import StockDashboard from "../../components/admin/StockDashboard.jsx";
 import PlanDashboard from "../../components/admin/PlanDashboard.jsx";
-import ReportFormulasSection from "../../components/admin/ReportFormulasSection.jsx";
 import AdminReportExportMenu from "../../components/admin/AdminReportExportMenu.jsx";
 import { downloadBlobResponse, parseBlobErrorMessage } from "../../lib/adminReportDownload.js";
 
@@ -279,6 +279,15 @@ export default function Reports() {
  });
  const [period, setPeriod] = useState("28d");
  const [loading, setLoading] = useState(true);
+
+ /* ── Chart resize state (xl col-span, max 2 inside xl:grid-cols-2 grids) ── */
+ const [prodByCatSpan, setProdByCatSpan] = useState(1);
+ const [prodByCountrySpan, setProdByCountrySpan] = useState(1);
+ const [top10Span, setTop10Span] = useState(1);
+ const [catRevenueSpan, setCatRevenueSpan] = useState(1);
+ const [topCatSpan, setTopCatSpan] = useState(1);
+ const [orderStatusSpan, setOrderStatusSpan] = useState(1);
+ const [orderCatSpan, setOrderCatSpan] = useState(1);
 
  // custom date range for the Sales Overview chart
  const [chartFrom, setChartFrom] = useState("");
@@ -696,45 +705,49 @@ export default function Reports() {
  subtitle={`${catalogueTotal} products in catalogue · sales for ${periodLabel(period)}`}
  theme={reportTheme}
  >
- <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
- <ReportChartPanel
- className="report-chart-panel"
- title="Products by category"
- subtitle="Share of catalogue per storefront category"
- theme={reportTheme}
- >
- {categoryDonutData.length === 0 ? (
- <ReportEmptyChart message="No products in catalogue yet" theme={reportTheme} />
- ) : (
- <ReportDonutChart
- data={categoryDonutData}
- dataKey="count"
- centerTitle="Products"
- centerValue={catalogueTotal}
- theme={reportTheme}
- legendRows={categoryDonutData}
- formatLegendValue={(row) => `${row.count} (${row.percentage}%)`}
- tooltipContent={(props) => (
- <ReportChartTooltip
- {...props}
- theme={reportTheme}
- formatLine={(e) =>
- e.dataKey === "count"
- ? `${e.payload?.count ?? e.value} (${e.payload?.percentage ?? 0}%)`
- : e.value
- }
- />
- )}
- />
- )}
- </ReportChartPanel>
+           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Products by category"
+           subtitle="Share of catalogue per storefront category"
+           theme={reportTheme}
+           style={{ gridColumn: `span ${prodByCatSpan}` }}
+           action={<ChartResizeMenu colSpan={prodByCatSpan} maxCols={2} onChange={setProdByCatSpan} />}
+           >
+           {categoryDonutData.length === 0 ? (
+           <ReportEmptyChart message="No products in catalogue yet" theme={reportTheme} />
+           ) : (
+           <ReportDonutChart
+           data={categoryDonutData}
+           dataKey="count"
+           centerTitle="Products"
+           centerValue={catalogueTotal}
+           theme={reportTheme}
+           legendRows={categoryDonutData}
+           formatLegendValue={(row) => `${row.count} (${row.percentage}%)`}
+           tooltipContent={(props) => (
+           <ReportChartTooltip
+           {...props}
+           theme={reportTheme}
+           formatLine={(e) =>
+           e.dataKey === "count"
+           ? `${e.payload?.count ?? e.value} (${e.payload?.percentage ?? 0}%)`
+           : e.value
+           }
+           />
+           )}
+           />
+           )}
+           </ReportChartPanel>
 
- <ReportChartPanel
- className="report-chart-panel"
- title="Products by country"
- subtitle="Based on stock label origin (inventory source)"
- theme={reportTheme}
- >
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Products by country"
+           subtitle="Based on stock label origin (inventory source)"
+           theme={reportTheme}
+           style={{ gridColumn: `span ${prodByCountrySpan}` }}
+           action={<ChartResizeMenu colSpan={prodByCountrySpan} maxCols={2} onChange={setProdByCountrySpan} />}
+           >
  {countryBarData.length === 0 ? (
  <ReportEmptyChart message="No country data yet" theme={reportTheme} />
  ) : (
@@ -767,12 +780,15 @@ export default function Reports() {
  </ReportChartPanel>
  </div>
 
- <ReportChartPanel
- className="report-chart-panel mt-6"
- title="Top 10 selling products"
- subtitle={`Units sold · ${periodLabel(period)}`}
- theme={reportTheme}
- >
+           <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Top 10 selling products"
+           subtitle={`Units sold · ${periodLabel(period)}`}
+           theme={reportTheme}
+           style={{ gridColumn: `span ${top10Span}` }}
+           action={<ChartResizeMenu colSpan={top10Span} maxCols={2} onChange={setTop10Span} />}
+           >
  {topSellingChartData.length === 0 ? (
  <ReportEmptyChart message="No products sold in this period" theme={reportTheme} />
  ) : (
@@ -810,40 +826,55 @@ export default function Reports() {
  formatValue={(row) => `${row.unitsSold} · ${fullUsd.format(row.revenue)}`}
  />
  </>
- )}
- </ReportChartPanel>
- </ReportSection>
+           )}
+           </ReportChartPanel>
+           </div>
+           </ReportSection>
 
- <ReportSection
- title="Category analysis"
+           <ReportSection
+           title="Category analysis"
  subtitle={`${fullUsd.format(categorySales.total_revenue || 0)} revenue · ${categorySales.total_units || 0} units · ${periodLabel(period)}`}
  theme={reportTheme}
  >
- <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
- <ReportChartPanel className="report-chart-panel" title="Categories revenue" subtitle="Revenue share by storefront category" theme={reportTheme}>
- {categoryRevenueDonutData.length === 0 ? (
- <ReportEmptyChart message="No category sales in this period" theme={reportTheme} />
- ) : (
- <ReportDonutChart
- data={categoryRevenueDonutData}
- dataKey="revenue"
- centerTitle="Revenue"
- centerValue={fullUsd.format(categorySales.total_revenue || 0)}
- theme={reportTheme}
- legendRows={categoryRevenueDonutData}
- formatLegendValue={(row) => `${fullUsd.format(row.revenue)} (${row.percentage}%)`}
- tooltipContent={(props) => (
- <ReportChartTooltip
- {...props}
- theme={reportTheme}
- formatLine={(e) => `${fullUsd.format(Number(e.payload?.revenue ?? e.value) || 0)} (${e.payload?.percentage ?? 0}%)`}
- />
- )}
- />
- )}
- </ReportChartPanel>
+           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Categories revenue"
+           subtitle="Revenue share by storefront category"
+           theme={reportTheme}
+           style={{ gridColumn: `span ${catRevenueSpan}` }}
+           action={<ChartResizeMenu colSpan={catRevenueSpan} maxCols={2} onChange={setCatRevenueSpan} />}
+           >
+           {categoryRevenueDonutData.length === 0 ? (
+           <ReportEmptyChart message="No category sales in this period" theme={reportTheme} />
+           ) : (
+           <ReportDonutChart
+           data={categoryRevenueDonutData}
+           dataKey="revenue"
+           centerTitle="Revenue"
+           centerValue={fullUsd.format(categorySales.total_revenue || 0)}
+           theme={reportTheme}
+           legendRows={categoryRevenueDonutData}
+           formatLegendValue={(row) => `${fullUsd.format(row.revenue)} (${row.percentage}%)`}
+           tooltipContent={(props) => (
+           <ReportChartTooltip
+           {...props}
+           theme={reportTheme}
+           formatLine={(e) => `${fullUsd.format(Number(e.payload?.revenue ?? e.value) || 0)} (${e.payload?.percentage ?? 0}%)`}
+           />
+           )}
+           />
+           )}
+           </ReportChartPanel>
 
- <ReportChartPanel className="report-chart-panel" title="Top sale categories" subtitle="Units sold vs revenue (clustered)" theme={reportTheme}>
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Top sale categories"
+           subtitle="Units sold vs revenue (clustered)"
+           theme={reportTheme}
+           style={{ gridColumn: `span ${topCatSpan}` }}
+           action={<ChartResizeMenu colSpan={topCatSpan} maxCols={2} onChange={setTopCatSpan} />}
+           >
  {topCategoryClusterData.length === 0 ? (
  <ReportEmptyChart message="No category sales in this period" theme={reportTheme} />
  ) : (
@@ -892,41 +923,45 @@ export default function Reports() {
  subtitle={`${orderTotal} orders · ${periodLabel(period)}`}
  theme={reportTheme}
  >
- <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
- <ReportChartPanel
- className="report-chart-panel"
- title="Order status"
- subtitle="Share of orders by lifecycle status"
- theme={reportTheme}
- >
- {orderStatusDonutData.length === 0 ? (
- <ReportEmptyChart message="No orders in this period" theme={reportTheme} />
- ) : (
- <ReportDonutChart
- data={orderStatusDonutData}
- dataKey="count"
- centerTitle="Orders"
- centerValue={orderTotal}
- theme={reportTheme}
- legendRows={orderStatusDonutData}
- formatLegendValue={(row) => `${row.count} (${row.percentage}%)`}
- tooltipContent={(props) => (
- <ReportChartTooltip
- {...props}
- theme={reportTheme}
- formatLine={(e) => `${e.payload?.count ?? e.value} (${e.payload?.percentage ?? 0}%)`}
- />
- )}
- />
- )}
- </ReportChartPanel>
+           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Order status"
+           subtitle="Share of orders by lifecycle status"
+           theme={reportTheme}
+           style={{ gridColumn: `span ${orderStatusSpan}` }}
+           action={<ChartResizeMenu colSpan={orderStatusSpan} maxCols={2} onChange={setOrderStatusSpan} />}
+           >
+           {orderStatusDonutData.length === 0 ? (
+           <ReportEmptyChart message="No orders in this period" theme={reportTheme} />
+           ) : (
+           <ReportDonutChart
+           data={orderStatusDonutData}
+           dataKey="count"
+           centerTitle="Orders"
+           centerValue={orderTotal}
+           theme={reportTheme}
+           legendRows={orderStatusDonutData}
+           formatLegendValue={(row) => `${row.count} (${row.percentage}%)`}
+           tooltipContent={(props) => (
+           <ReportChartTooltip
+           {...props}
+           theme={reportTheme}
+           formatLine={(e) => `${e.payload?.count ?? e.value} (${e.payload?.percentage ?? 0}%)`}
+           />
+           )}
+           />
+           )}
+           </ReportChartPanel>
 
- <ReportChartPanel
- className="report-chart-panel"
- title="Orders by category"
- subtitle="Distinct orders with products in each category (non-cancelled)"
- theme={reportTheme}
- >
+           <ReportChartPanel
+           className="report-chart-panel"
+           title="Orders by category"
+           subtitle="Distinct orders with products in each category (non-cancelled)"
+           theme={reportTheme}
+           style={{ gridColumn: `span ${orderCatSpan}` }}
+           action={<ChartResizeMenu colSpan={orderCatSpan} maxCols={2} onChange={setOrderCatSpan} />}
+           >
  {orderCategoryDonutData.length === 0 ? (
  <ReportEmptyChart message="No orders with category data in this period" theme={reportTheme} />
  ) : (
@@ -990,8 +1025,6 @@ export default function Reports() {
  </div>
  )}
  </ReportSection>
-
- <ReportFormulasSection theme={reportTheme} />
 
  <ReportSection title="Generate report" subtitle="Export dashboard or sales summary" theme={reportTheme} className="mt-0">
  <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-4 gap-4">

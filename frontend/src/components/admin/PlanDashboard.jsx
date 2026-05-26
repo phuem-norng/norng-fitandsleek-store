@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ChartResizeMenu from "./ChartResizeMenu.jsx";
 import api from "../../lib/api";
 import { toastSuccess } from "../../lib/swal";
 import { REPORT_CLUSTER } from "../../lib/reportChartTheme.js";
@@ -183,6 +184,10 @@ export default function PlanDashboard({ theme }) {
     formDirtyRef.current = true;
   };
 
+  /* chart resize state */
+  const [progressSpan, setProgressSpan] = useState(1);
+  const [setPlanSpan, setSetPlanSpan] = useState(1);
+
   const target = Number(data?.target) || 0;
   const current = Number(data?.current_revenue) || 0;
   const planLabel = data?.plan_period?.label || "—";
@@ -237,7 +242,7 @@ export default function PlanDashboard({ theme }) {
       }
       theme={theme}
     >
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ReportChartPanel
           className="report-chart-panel"
           title="Target progress"
@@ -245,6 +250,8 @@ export default function PlanDashboard({ theme }) {
             target > 0 ? `${fullUsd.format(target)} goal for plan period` : "Configure your plan and save to see progress"
           }
           theme={theme}
+          style={{ gridColumn: `span ${progressSpan}` }}
+          action={<ChartResizeMenu colSpan={progressSpan} maxCols={2} onChange={setProgressSpan} />}
         >
           {loading ? (
             <div className="grid min-h-[320px] place-items-center text-sm" style={{ color: theme.subtitle }}>
@@ -295,6 +302,8 @@ export default function PlanDashboard({ theme }) {
           title="Set plan"
           subtitle="Plan period and revenue goal (current sums from plan start)"
           theme={theme}
+          style={{ gridColumn: `span ${setPlanSpan}` }}
+          action={<ChartResizeMenu colSpan={setPlanSpan} maxCols={2} onChange={setSetPlanSpan} />}
         >
           <form onSubmit={handleSave} className="flex flex-col gap-5">
             <MonthYearRow

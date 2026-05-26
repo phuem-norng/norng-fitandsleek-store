@@ -720,11 +720,17 @@ export default function ProductDetail() {
               <h1 className="text-2xl font-bold tracking-tight text-zinc-900 md:text-3xl">{p.name}</h1>
 
               <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-2xl font-bold tabular-nums text-red-600 md:text-[1.75rem]">
+                <span
+                  className={`text-2xl font-bold tabular-nums md:text-[1.75rem] ${
+                    pricing.compare != null ? "text-rose-700" : "text-zinc-900"
+                  }`}
+                >
                   <Money value={pricing.sale} />
                 </span>
                 {pricing.pctLabel ? (
-                  <span className="text-sm font-semibold text-zinc-900">{pricing.pctLabel}</span>
+                  <span className="rounded-sm bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-700">
+                    {pricing.pctLabel}
+                  </span>
                 ) : null}
                 {pricing.compare != null ? (
                   <span className="text-sm text-zinc-400 line-through tabular-nums">
@@ -871,7 +877,7 @@ export default function ProductDetail() {
                   type="button"
                   onClick={add}
                   disabled={maxQty === 0}
-                  className="min-h-[48px] flex-1 border border-black bg-black py-3 text-center text-sm font-semibold text-white transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-[48px] flex-1 border border-zinc-900 bg-zinc-900 py-3 text-center text-sm font-semibold tracking-wide text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t("addToCart")}
                 </button>

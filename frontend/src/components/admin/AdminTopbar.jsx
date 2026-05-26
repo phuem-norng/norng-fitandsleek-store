@@ -4,6 +4,7 @@ import { useAuth } from "../../state/auth";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
+import { useLanguage } from "../../lib/i18n.jsx";
 import AdminAppearancePanel from "./AdminAppearancePanel.jsx";
 import AdminCommandPalette from "./AdminCommandPalette.jsx";
 import AdminAiAssistant, { AdminAiAssistantButton } from "./AdminAiAssistant.jsx";
@@ -48,6 +49,7 @@ export default function AdminTopbar({
  const onPinToggle = typeof onTogglePinned === "function" ? onTogglePinned : onToggleSidebar;
  const { user, logout } = useAuth();
  const { primaryColor, mode, saveTheme } = useTheme();
+ const { language, toggleLanguage } = useLanguage();
  const navigate = useNavigate();
  const location = useLocation();
 
@@ -255,6 +257,22 @@ export default function AdminTopbar({
  </div>
  )}
  </div>
+
+ {/* Language toggle */}
+ <button
+ onClick={toggleLanguage}
+ title={language === "en" ? "Switch to Khmer" : "Switch to English"}
+ className="h-8 w-8 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center overflow-hidden"
+ >
+ <span className="w-5 h-5 rounded-full overflow-hidden inline-flex items-center justify-center">
+   <img
+     src={language === "en" ? "https://flagcdn.com/gb.svg" : "https://flagcdn.com/kh.svg"}
+     alt={language === "en" ? "English" : "Khmer"}
+     className="w-full h-full object-cover"
+     style={{ clipPath: "circle(50%)" }}
+   />
+ </span>
+ </button>
 
  {/* Theme toggle */}
  <button

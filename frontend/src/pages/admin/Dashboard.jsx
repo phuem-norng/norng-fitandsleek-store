@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import api from "../../lib/api";
 import { useAdminAccents } from "../../lib/adminAccents.js";
 import { useTheme } from "../../state/theme.jsx";
+import { useLanguage } from "../../lib/i18n.jsx";
+import ChartResizeMenu from "../../components/admin/ChartResizeMenu.jsx";
 import {
   Area,
   AreaChart,
@@ -261,9 +263,15 @@ function PeriodTabs({ days, value, onChange }) {
 export default function AdminDashboard() {
   const { primaryColor, mode } = useTheme();
   const { isSpectrum, iconBoxStyle, barFill } = useAdminAccents();
+  const { t } = useLanguage();
   const gid = useId().replace(/:/g, "");
 
   const [periodDays, setPeriodDays] = useState(30);
+
+  /* ── Chart resize state (xl col-span, max 3 in the 3-col grid) ── */
+  const [revenueSpan, setRevenueSpan] = useState(2);
+  const [statusSpan, setStatusSpan] = useState(1);
+
   const [stats, setStats] = useState({
     revenue: { total: 0, month: 0, today: 0 },
     ordersHead: { total: 0, pending: 0, processing: 0, completed: 0 },
@@ -368,30 +376,30 @@ export default function AdminDashboard() {
   const statCards = [
     {
       id: "kpi-revenue",
-      title: `Revenue (${periodDays}d)`,
+      title: `${t('dashboardRevenue')} (${periodDays}d)`,
       value: <AnimatedNumber value={stats.revenue.total || 0} prefix="$" decimals={2} />,
-      sub: <>Today · <AnimatedNumber value={stats.revenue.today || 0} prefix="$" decimals={2} /></>,
+      sub: <>{t('dashboardToday')} · <AnimatedNumber value={stats.revenue.today || 0} prefix="$" decimals={2} /></>,
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
     },
     {
       id: "kpi-mtd",
-      title: "Month to date",
+      title: t('dashboardMonthToDate'),
       value: <AnimatedNumber value={stats.revenue.month || 0} prefix="$" decimals={2} />,
-      sub: <>New customers ({periodDays}d): <AnimatedNumber value={stats.customers.new_this_month ?? 0} /></>,
+      sub: <>{t('dashboardNewCustomers')} ({periodDays}d): <AnimatedNumber value={stats.customers.new_this_month ?? 0} /></>,
       icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
     },
     {
       id: "kpi-orders",
-      title: `Orders (${periodDays}d)`,
+      title: `${t('dashboardOrders')} (${periodDays}d)`,
       value: <AnimatedNumber value={stats.ordersHead.total || 0} />,
-      sub: <><AnimatedNumber value={stats.ordersHead.pending ?? 0} /> pending · <AnimatedNumber value={stats.ordersHead.completed ?? 0} /> completed</>,
+      sub: <><AnimatedNumber value={stats.ordersHead.pending ?? 0} /> {t('dashboardPending')} · <AnimatedNumber value={stats.ordersHead.completed ?? 0} /> {t('dashboardCompleted')}</>,
       icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
     },
     {
       id: "kpi-customers",
-      title: "Customers (total)",
+      title: t('dashboardCustomersTotal'),
       value: <AnimatedNumber value={stats.customers.total || 0} />,
-      sub: pctActive !== null ? <>Catalog · <AnimatedNumber value={pctActive} suffix="%" /> products active</> : "Registered accounts",
+      sub: pctActive !== null ? <>{t('dashboardCatalog')} · <AnimatedNumber value={pctActive} suffix="%" /> {t('dashboardProductsActive')}</> : t('dashboardRegisteredAccounts'),
       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
     },
   ];
@@ -417,12 +425,15 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Charts — 2fr + 1fr at xl; revenue must span 2 cols or a whole column stays empty */}
+      {/* Charts — dynamic col-spans controlled by resize menus */}
       <div className="grid w-full min-w-0 grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="min-w-0 xl:col-span-2">
+        <div
+          className="min-w-0"
+          style={{ gridColumn: `span ${revenueSpan}` }}
+        >
           <CardChrome
-            title="Daily revenue trend"
-            description={`Net settled sales · last ${periodDays} days`}
+            title={t('dashboardDailyRevenueTrend')}
+            description={`${t('dashboardNetSettledSales')} · ${t('dashboardLast')} ${periodDays} ${t('dashboardDays')}`}
             animationDelay={300}
             action={
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -431,8 +442,9 @@ export default function AdminDashboard() {
                   to="/admin/reports"
                   className="rounded-lg border admin-border px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:text-slate-300 dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)]"
                 >
-                  Full reports
+                  {t('dashboardFullReports')}
                 </Link>
+                <ChartResizeMenu colSpan={revenueSpan} maxCols={3} onChange={setRevenueSpan} />
               </div>
             }
           >
@@ -489,12 +501,16 @@ export default function AdminDashboard() {
           </CardChrome>
         </div>
 
-        {/* Side column */}
-        <div className="flex min-w-0 flex-col gap-4 xl:col-span-1">
+        {/* Orders by status */}
+        <div
+          className="flex min-w-0 flex-col gap-4"
+          style={{ gridColumn: `span ${statusSpan}` }}
+        >
           <CardChrome
-            title="Orders by status"
-            description="Count of orders placed in selected period"
+            title={t('dashboardOrdersByStatus')}
+            description={t('dashboardOrdersPlacedInPeriod')}
             animationDelay={360}
+            action={<ChartResizeMenu colSpan={statusSpan} maxCols={3} onChange={setStatusSpan} />}
           >
             <div className="h-[min(22rem,calc(100vw-6rem))] min-h-[240px] w-full px-2 pb-2 pt-1 md:px-4 [&_.recharts-surface]:outline-none">
               {statusBars.length === 0 ? (
@@ -555,22 +571,22 @@ export default function AdminDashboard() {
       </div>
 
       {/* Recent Orders */}
-      <CardChrome title="Recent orders" description="Latest activity · quick review" animationDelay={460}>
+      <CardChrome title={t('dashboardRecentOrders')} description={t('dashboardRecentActivity')} animationDelay={460}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b admin-border">
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Order
+                  {t('dashboardOrder')}
                 </th>
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Customer
+                  {t('dashboardCustomer')}
                 </th>
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Amount
+                  {t('dashboardAmount')}
                 </th>
                 <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Status
+                  {t('dashboardStatus')}
                 </th>
               </tr>
             </thead>
@@ -578,7 +594,7 @@ export default function AdminDashboard() {
               {recentOrders.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-5 py-10 text-center text-slate-400 dark:text-slate-500">
-                    No recent orders
+                    {t('dashboardNoRecentOrders')}
                   </td>
                 </tr>
               )}
@@ -588,7 +604,7 @@ export default function AdminDashboard() {
                   className="border-b admin-border transition-colors hover:bg-[rgba(var(--admin-primary-rgb),0.06)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.08)]"
                 >
                   <td className="px-5 py-3 font-medium text-slate-900 dark:text-slate-100">#{order.order_number}</td>
-                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{order.user_name || "Guest"}</td>
+                  <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{order.user_name || t('guest')}</td>
                   <td className="px-5 py-3 tabular-nums text-slate-900 dark:text-slate-100">
                     ${Number(order.total || 0).toFixed(2)}
                   </td>
@@ -605,7 +621,7 @@ export default function AdminDashboard() {
             to="/admin/orders"
             className="text-xs font-semibold text-[color:var(--admin-primary)] hover:brightness-125"
           >
-            View all orders →
+            {t('dashboardViewAllOrders')} →
           </Link>
         </div>
       </CardChrome>

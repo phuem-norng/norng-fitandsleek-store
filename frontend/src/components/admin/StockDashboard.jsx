@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import ChartResizeMenu from "./ChartResizeMenu.jsx";
 import api from "../../lib/api";
 import { reportChartColor } from "../../lib/reportChartTheme.js";
 import {
@@ -61,6 +62,10 @@ export default function StockDashboard({ theme }) {
   const [toYear, setToYear] = useState(String(currentYear));
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+
+  /* chart resize state */
+  const [labelSpan, setLabelSpan] = useState(1);
+  const [monthSpan, setMonthSpan] = useState(1);
 
   const yearOptions = useMemo(() => {
     const years = [];
@@ -151,6 +156,8 @@ export default function StockDashboard({ theme }) {
             title="Stock by label"
             subtitle="Current on-hand units per inventory label"
             theme={theme}
+            style={{ gridColumn: `span ${labelSpan}` }}
+            action={<ChartResizeMenu colSpan={labelSpan} maxCols={2} onChange={setLabelSpan} />}
           >
             {labelDonutData.length === 0 ? (
               <ReportEmptyChart message="No inventory labels with stock" theme={theme} />
@@ -181,6 +188,8 @@ export default function StockDashboard({ theme }) {
             title="Stock in by month"
             subtitle={`Units received · ${rangeLabel}`}
             theme={theme}
+            style={{ gridColumn: `span ${monthSpan}` }}
+            action={<ChartResizeMenu colSpan={monthSpan} maxCols={2} onChange={setMonthSpan} />}
           >
             <div className="mb-4 flex flex-wrap items-end gap-3">
               <FilterYearSelect
