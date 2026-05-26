@@ -300,6 +300,15 @@ export default function Reports() {
  const [generating, setGenerating] = useState(false);
  const [exportBusy, setExportBusy] = useState(false);
  const [generated, setGenerated] = useState(null);
+ const [genOpen, setGenOpen] = useState(false);
+ const genRef = useRef(null);
+
+ // Close the "Generate report" popover when clicking outside the panel.
+ useEffect(() => {
+   const handler = (e) => { if (genRef.current && !genRef.current.contains(e.target)) setGenOpen(false); };
+   document.addEventListener("mousedown", handler);
+   return () => document.removeEventListener("mousedown", handler);
+ }, []);
 
  const load = async () => {
  setLoading(true);
@@ -575,8 +584,137 @@ export default function Reports() {
  </h1>
  <p className="text-slate-500 dark:text-slate-400 text-base md:text-lg">Track your store performance and metrics</p>
  </div>
+ {/* Top-right controls: Generate report popover + global period selector */}
+ <div className="flex flex-wrap items-start gap-3 mt-1">
+
+ {/* ── Generate report (button + popover) ────────────────────────────── */}
+ <div className="relative" ref={genRef}>
+ <button
+ type="button"
+ onClick={() => setGenOpen((p) => !p)}
+ className="flex items-center gap-2 h-10 px-4 rounded-xl text-sm font-semibold text-white transition-all shadow-md"
+ style={{
+ backgroundColor: REPORT_CLUSTER.primary,
+ border: `1px solid ${REPORT_CLUSTER.primary}`,
+ boxShadow: "0 10px 24px rgba(43, 127, 255, 0.25)",
+ }}
+ >
+ <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4l1.4 3.6 3.6 1.4-3.6 1.4L12 14l-1.4-3.6L7 9l3.6-1.4z" />
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 16.5l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8L3.4 19l1.8-.8z" />
+ </svg>
+ <span>Generate report</span>
+ <svg
+ className={`w-4 h-4 opacity-80 transition-transform ${genOpen ? "rotate-180" : ""}`}
+ fill="none" stroke="currentColor" viewBox="0 0 24 24"
+ >
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+ </svg>
+ </button>
+
+ {genOpen && (
+ <div
+ className="absolute right-0 z-40 mt-2 w-[min(92vw,420px)] rounded-2xl border p-5 shadow-2xl"
+ style={{
+ background: mode === "dark" ? "#1e2330" : "#ffffff",
+ borderColor: mode === "dark" ? "rgba(255,255,255,0.08)" : "#e2e8f0",
+ }}
+ >
+ <div className="mb-4">
+ <div className="text-sm font-semibold text-slate-800 dark:text-white">Generate report</div>
+ <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Export dashboard or sales summary</div>
+ </div>
+
+ <form onSubmit={handleGenerate} className="space-y-3">
+ <div>
+ <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Report Type</label>
+ <select
+ value={reportType}
+ onChange={(e) => setReportType(e.target.value)}
+ className="w-full h-10 rounded-xl border-2 border-slate-200 dark:border-slate-600 px-4 text-sm outline-none bg-white dark:bg-slate-700 text-slate-800 dark:text-white dark:[color-scheme:dark]"
+ >
+ <option value="dashboard">Dashboard Summary</option>
+ <option value="sales">Sales Report</option>
+ </select>
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <div>
+ <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Date From</label>
+ <input
+ type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+ className="w-full h-10 rounded-xl border-2 border-slate-200 dark:border-slate-600 px-3 text-sm outline-none bg-white dark:bg-slate-700 text-slate-800 dark:text-white dark:[color-scheme:dark]"
+ />
+ </div>
+ <div>
+ <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">Date To</label>
+ <input
+ type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+ className="w-full h-10 rounded-xl border-2 border-slate-200 dark:border-slate-600 px-3 text-sm outline-none bg-white dark:bg-slate-700 text-slate-800 dark:text-white dark:[color-scheme:dark]"
+ />
+ </div>
+ </div>
+
+ <div className="flex items-center gap-2 pt-1">
+ <button
+ type="submit"
+ disabled={generating}
+ className="h-10 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold text-white transition disabled:opacity-60 disabled:cursor-not-allowed flex-1"
+ style={{
+ backgroundColor: REPORT_CLUSTER.primary,
+ border: `1px solid ${REPORT_CLUSTER.primary}`,
+ boxShadow: "0 8px 18px rgba(43, 127, 255, 0.28)",
+ }}
+ >
+ {generating ? "Generating..." : (
+ <>
+ <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4l1.4 3.6 3.6 1.4-3.6 1.4L12 14l-1.4-3.6L7 9l3.6-1.4z" />
+ </svg>
+ <span>Generate</span>
+ </>
+ )}
+ </button>
+ <AdminReportExportMenu
+ onExportPdf={handleDownloadPdf}
+ onExportExcel={handleDownloadExcel}
+ busy={exportBusy}
+ accentColor={accentColor}
+ mode={mode}
+ />
+ </div>
+ </form>
+
+ {generated && (
+ <div
+ className="mt-4 p-3 rounded-xl text-xs"
+ style={{
+ backgroundColor: mode === "dark" ? "rgba(255,255,255,0.06)" : "rgba(var(--admin-primary-rgb),0.08)",
+ border: mode === "dark" ? `1px solid ${accentColor}` : "1px solid rgba(var(--admin-primary-rgb),0.22)",
+ }}
+ >
+ <div className="text-xs font-semibold" style={{ color: accentColor }}>Generated</div>
+ <div className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+ {generated.type === "dashboard" && (
+ <>
+ Dashboard Summary from {generated.from} to {generated.to}.{" "}
+ Revenue: ${Number(generated.revenue?.total || 0).toFixed(2)} · Orders: {generated.orders?.total || 0} ({generated.orders?.pending || 0} pending) · Products: {generated.products?.total || 0} · Customers: {generated.customers?.total || 0}.
+ </>
+ )}
+ {generated.type === "sales" && (
+ <>
+ Sales Report from {generated.from} to {generated.to}.{" "}
+ Orders: {generated.summary?.total_orders}, Revenue: ${Number(generated.summary?.total_revenue || 0).toFixed(2)}.
+ </>
+ )}
+ </div>
+ </div>
+ )}
+ </div>
+ )}
+ </div>
+
  {/* Global period selector — controls ALL sections */}
- <div className="flex flex-col items-end gap-2 mt-1">
+ <div className="flex flex-col items-end gap-2">
  <PeriodDropdown value={period} onChange={setPeriod} mode={mode} />
  {period === "custom" && (
  <div className="flex flex-wrap items-center gap-2">
@@ -595,6 +733,7 @@ export default function Reports() {
  />
  </div>
  )}
+ </div>
  </div>
  </div>
 
@@ -1026,94 +1165,6 @@ export default function Reports() {
  )}
  </ReportSection>
 
- <ReportSection title="Generate report" subtitle="Export dashboard or sales summary" theme={reportTheme} className="mt-0">
- <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-4 gap-4">
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Report Type</label>
- <select
- value={reportType}
- onChange={(e) => setReportType(e.target.value)}
- className="w-full h-10 rounded-xl border-2 border-slate-200 dark:border-slate-600 px-4 text-sm outline-none bg-white dark:bg-slate-700 text-slate-800 dark:text-white dark:[color-scheme:dark]"
- >
- <option value="dashboard">Dashboard Summary</option>
- <option value="sales">Sales Report</option>
- </select>
- </div>
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Date From</label>
- <input
- type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
- className="w-full h-10 rounded-xl border-2 border-slate-200 dark:border-slate-600 px-4 text-sm outline-none bg-white dark:bg-slate-700 text-slate-800 dark:text-white dark:[color-scheme:dark]"
- />
- </div>
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Date To</label>
- <input
- type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
- className="w-full h-10 rounded-xl border-2 border-slate-200 dark:border-slate-600 px-4 text-sm outline-none bg-white dark:bg-slate-700 text-slate-800 dark:text-white dark:[color-scheme:dark]"
- />
- </div>
- <div className="flex items-end gap-2">
- <button
- type="submit"
- disabled={generating}
- className="h-11 px-5 rounded-full flex items-center justify-center gap-2 text-sm font-semibold text-white transition disabled:opacity-60 disabled:cursor-not-allowed"
- style={{
- backgroundColor: REPORT_CLUSTER.primary,
- color: "#ffffff",
- border: `1px solid ${REPORT_CLUSTER.primary}`,
- boxShadow: "0 10px 24px rgba(43, 127, 255, 0.35)",
- }}
- >
- {generating ? "Generating..." : (
- <>
- <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4l1.4 3.6 3.6 1.4-3.6 1.4L12 14l-1.4-3.6L7 9l3.6-1.4z" />
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 16.5l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8L3.4 19l1.8-.8zM17 16.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z" />
- </svg>
- <span>Generate</span>
- </>
- )}
- </button>
- <AdminReportExportMenu
- onExportPdf={handleDownloadPdf}
- onExportExcel={handleDownloadExcel}
- busy={exportBusy}
- accentColor={accentColor}
- mode={mode}
- />
- </div>
- </form>
-
- {generated && (
- <div
- className="mt-6 p-4 rounded-xl"
- style={{
- backgroundColor: mode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(var(--admin-primary-rgb),0.10)",
- border: mode === "dark" ? `1px solid ${accentColor}` : "1px solid rgba(var(--admin-primary-rgb),0.25)",
- }}
- >
- <div className="text-sm font-semibold" style={{ color: accentColor }}>Generated</div>
- <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">
- {generated.type === "dashboard" && (
- <>
- Dashboard Summary from {generated.from} to {generated.to}.{" "}
- Revenue in range: ${Number(generated.revenue?.total || 0).toFixed(2)}.{" "}
- Total Orders in range: {generated.orders?.total || 0} ({generated.orders?.pending || 0} pending).{" "}
- Products: {generated.products?.total || 0} ({generated.products?.active || 0} active, {generated.products?.low_stock || 0} low stock).{" "}
- Customers: {generated.customers?.total || 0} ({generated.customers?.new_this_month || 0} new in range).
- </>
- )}
- {generated.type === "sales" && (
- <>
- Sales Report from {generated.from} to {generated.to}.{" "}
- Total Orders: {generated.summary?.total_orders}, Total Revenue: ${Number(generated.summary?.total_revenue || 0).toFixed(2)}
- </>
- )}
- </div>
- </div>
- )}
- </ReportSection>
  </>
  )}
  </div>

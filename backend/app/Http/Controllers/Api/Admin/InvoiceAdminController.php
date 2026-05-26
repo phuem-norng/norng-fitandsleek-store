@@ -35,7 +35,11 @@ class InvoiceAdminController extends Controller
             'invoices' => [$invoice],
             'isBulk' => false,
         ])
-            ->setOption('isRemoteEnabled', true)
+            ->setOptions([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'defaultFont' => 'DejaVu Sans',
+            ])
             ->setHttpContext(stream_context_create([
                 'ssl' => [
                     'verify_peer' => true,
@@ -82,7 +86,11 @@ class InvoiceAdminController extends Controller
             'invoices' => $invoices,
             'isBulk' => true,
         ])
-            ->setOption('isRemoteEnabled', true)
+            ->setOptions([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'defaultFont' => 'DejaVu Sans',
+            ])
             ->setHttpContext(stream_context_create([
                 'ssl' => [
                     'verify_peer' => true,

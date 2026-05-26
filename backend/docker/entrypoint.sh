@@ -19,14 +19,24 @@ if [ -d node-khqr ]; then
   cd /var/www/html
 fi
 
+# Laravel writable dirs: .dockerignore intentionally excludes runtime caches,
+# so re-create them on every boot before any artisan command needs them.
+mkdir -p \
+  storage/framework/cache/data \
+  storage/framework/sessions \
+  storage/framework/views \
+  storage/framework/testing \
+  storage/logs \
+  bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+chmod -R ug+rwx storage bootstrap/cache 2>/dev/null || true
+
 case "$1" in
   web)
     rm -rf public/storage
     php artisan storage:link --relative --force
     php artisan config:clear
     php artisan migrate --force
-    chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
-    chmod -R ug+rwx storage bootstrap/cache 2>/dev/null || true
     php-fpm -D
     exec nginx -g 'daemon off;'
     ;;

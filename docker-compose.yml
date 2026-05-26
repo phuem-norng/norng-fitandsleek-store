@@ -21,10 +21,9 @@
 # Frontend image is built for the browser on your machine: default VITE_BACKEND_ORIGIN=http://localhost:8001
 # so the open tab calls the API on host port 8001. Rebuild after changing: docker compose build frontend
 #
-# Compose loads a repo-root `.env` for ${DB_*} substitution on the `db` service. Keep there:
-#   COMPOSE_PROJECT_NAME=fitandsleek_ai
-#   DB_DATABASE / DB_USERNAME / DB_PASSWORD (same as backend/.env), or run: pwsh scripts/docker-up.ps1
-# Do NOT inject DB_* into the backend container: that overrides mounted backend/.env.
+# Compose loads a repo-root `.env` for ${DB_*} on the `db` service (see `.env.example`).
+#   DB_DATABASE / DB_USERNAME / DB_PASSWORD must match backend/.env (e.g. fitandsleek_v4 / postgres / Norng@123).
+# PHP containers use DB_HOST=db and DB_PORT=5432; host tools use backend/.env (127.0.0.1:5433).
 
 name: fitandsleek_ai
 
@@ -34,9 +33,9 @@ services:
     container_name: fitandsleek_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_db}
+      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_v4}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Norng@123}
     command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     ports:
       - "5433:5432"
@@ -80,12 +79,13 @@ services:
       # Use Compose DNS so indexing works without host port forwarding quirks.
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
-      # Explicit DB credentials for the container runtime (from repo-root `.env`).
-      DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_db}
+      # Same DB name/user/password as backend/.env; host/port are the Compose network (not 127.0.0.1:5433).
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v4}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
+      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
     # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
     command: ["web"]
@@ -117,11 +117,12 @@ services:
       ai-service:
         condition: service_started
     environment:
-      DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_db}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v4}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
+      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
@@ -151,11 +152,12 @@ services:
       ai-service:
         condition: service_started
     environment:
-      DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_db}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v4}
       DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-fitandsleek123}
+      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
       IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333

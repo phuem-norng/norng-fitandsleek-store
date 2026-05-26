@@ -336,14 +336,6 @@ export default function AdminLayout() {
     };
   }, [railGroupFlyout]);
 
-  if (settingsLoading) {
-    return (
-      <div className="flex min-h-[100dvh] w-full flex-col p-6">
-        <AdminContentSkeleton lines={2} imageHeight={160} className="mx-auto w-full max-w-4xl flex-1" />
-      </div>
-    );
-  }
-
   const dashboardItems = useMemo(
     () => [
       {
@@ -614,6 +606,16 @@ export default function AdminLayout() {
       </li>
     );
   };
+
+  // Loading state must render AFTER all hooks above so React's hook count is
+  // stable across renders (React error #310 fires otherwise).
+  if (settingsLoading) {
+    return (
+      <div className="flex min-h-[100dvh] w-full flex-col p-6">
+        <AdminContentSkeleton lines={2} imageHeight={160} className="mx-auto w-full max-w-4xl flex-1" />
+      </div>
+    );
+  }
 
   return (
     <div className="admin-theme admin-root admin-gemini-shell flex min-h-screen font-sans text-slate-800 dark:text-slate-100 admin-soft">

@@ -192,10 +192,21 @@ class ReportController extends Controller
         try {
             $logoDataUri = $this->resolveLogoDataUri();
 
+            // Match the Stock & Inventory PDF: DomPDF must fetch the banner image
+            // and Fontsource TTFs over HTTPS, and HTML5 mode is needed for the
+            // <table>-based header layout.
+            $pdfOptions = [
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'defaultFont' => 'DejaVu Sans',
+            ];
+
             if ($validated['type'] === 'dashboard') {
                 $data = $this->buildDashboardReport($from, $to);
                 $data['logo'] = $logoDataUri;
-                $pdf = Pdf::loadView('reports.dashboard', $data)->setPaper('A4', 'portrait');
+                $pdf = Pdf::setOptions($pdfOptions)
+                    ->loadView('reports.dashboard', $data)
+                    ->setPaper('A4', 'portrait');
                 $filename = 'dashboard-report-' . $from->format('Ymd') . '-to-' . $to->format('Ymd') . '.pdf';
                 $content = $pdf->output();
                 return response($content, 200, [
@@ -207,7 +218,9 @@ class ReportController extends Controller
             $data = $this->buildSalesReport($from, $to);
             $data['logo'] = $logoDataUri;
 
-            $pdf = Pdf::loadView('reports.sales', $data)->setPaper('A4', 'portrait');
+            $pdf = Pdf::setOptions($pdfOptions)
+                ->loadView('reports.sales', $data)
+                ->setPaper('A4', 'portrait');
             $filename = 'sales-report-' . $from->format('Ymd') . '-to-' . $to->format('Ymd') . '.pdf';
             $content = $pdf->output();
             return response($content, 200, [

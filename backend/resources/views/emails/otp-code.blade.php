@@ -4,7 +4,7 @@
 			<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background-color:#ffffff;border:1px solid #dbe4f0;border-radius:12px;">
 				<tr>
 					<td align="center" style="padding:28px 20px 14px 20px;">
-						<img src="https://i.ibb.co/nFLGYCy/logo.png" alt="Fitandsleek" width="160" style="display:block;width:100%;max-width:160px;height:auto;border:0;outline:none;text-decoration:none;" />
+						<img src="https://pub-93085525881746c1a7b523e463cbfb35.r2.dev/uploads/Fitandsleek/2026-01-30%2003.05.05.jpg" alt="Fit and Sleek" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;outline:none;text-decoration:none;border-radius:10px;" />
 					</td>
 				</tr>
 				<tr>

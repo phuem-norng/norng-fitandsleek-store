@@ -59,6 +59,9 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "src"),
       },
     },
+    build: {
+      sourcemap: true,
+    },
     preview: {
       // `vite preview` does not inherit `server.*`; set proxy + allowedHosts here too.
       proxy: apiProxy,

@@ -21,7 +21,12 @@ import {
 export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
   const { settings } = useHomepageSettings();
   const [form, setForm] = useState({ email: "", password: "" });
-  const [otpForm, setOtpForm] = useState({ email: "", code: "", purpose: "login" });
+  const [otpForm, setOtpForm] = useState({
+    email: "",
+    code: "",
+    purpose: "login",
+    challengeToken: "",
+  });
   const [otpMode, setOtpMode] = useState(false);
   const [otpNotice, setOtpNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -59,7 +64,12 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
       }
       if (result?.otp_required || result?.verification_required) {
         setOtpMode(true);
-        setOtpForm({ email: form.email, code: "", purpose: result.purpose || "login" });
+        setOtpForm({
+          email: form.email,
+          code: "",
+          purpose: result.purpose || "login",
+          challengeToken: result.challenge_token || "",
+        });
         setOtpNotice(result.message || `We sent a verification code to ${form.email}`);
         return;
       }
@@ -80,9 +90,27 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
         email: otpForm.email,
         code: otpForm.code,
         purpose: otpForm.purpose,
+        challengeToken: otpForm.challengeToken,
       });
+
+      // Backend asks for an additional authenticator step when 2FA is on and
+      // the email OTP wasn't tied to a challenge token. Surface a clear error
+      // instead of silently dropping the user back to the login form.
+      if (data?.two_factor_required) {
+        setError(
+          data?.message ||
+            "This account has 2FA enabled. Open the authenticator app to finish signing in.",
+        );
+        return;
+      }
+
+      if (!data?.token) {
+        setError(data?.message || "Verification failed. Check the code and try again.");
+        return;
+      }
+
       setOtpMode(false);
-      setOtpForm({ email: "", code: "", purpose: "login" });
+      setOtpForm({ email: "", code: "", purpose: "login", challengeToken: "" });
       setOtpNotice("");
       finishLogin(data?.user);
     } catch (err) {
@@ -96,7 +124,11 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
     setError("");
     setLoading(true);
     try {
-      await resendOtp({ email: otpForm.email, purpose: otpForm.purpose });
+      await resendOtp({
+        email: otpForm.email,
+        purpose: otpForm.purpose,
+        challengeToken: otpForm.challengeToken,
+      });
       setOtpNotice(`A new code was sent to ${otpForm.email}`);
     } catch (err) {
       setError(err?.response?.data?.message || "Could not resend code");

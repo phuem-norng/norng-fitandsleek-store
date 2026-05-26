@@ -11,9 +11,9 @@ services:
     container_name: fitandsleek_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE:-fitandsleek_v4}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Norng@123}
     ports:
       - "5433:5432"
     volumes:

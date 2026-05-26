@@ -42,7 +42,12 @@ class TableExportController extends Controller
                 );
             }
 
-            $pdf = Pdf::loadView('exports.table', [
+            $pdf = Pdf::setOptions([
+                // Required for the brand banner image (hosted on Cloudflare R2) to render.
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'defaultFont' => 'DejaVu Sans',
+            ])->loadView('exports.table', [
                 'title' => $validated['title'],
                 'subtitle' => $validated['subtitle'] ?? null,
                 'headers' => $headers,
