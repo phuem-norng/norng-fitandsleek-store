@@ -24,7 +24,7 @@ export default function Settings() {
  social_instagram: "",
  social_twitter: "",
  font_en: "Inter",
- font_km: "Noto Sans Khmer",
+ font_km: "Kantumruy Pro",
  admin_theme_mode: "light",
  admin_primary_color: ADMIN_BRAND_PRIMARY,
  privacy_content: "",
@@ -282,11 +282,11 @@ export default function Settings() {
  <div>
  <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Khmer Font</label>
  <input list="font-km-options" value={form.font_km} onChange={(e) => handleChange("font_km", e.target.value)} className={inputClass} placeholder="Noto Sans Khmer" />
- <datalist id="font-km-options">
- <option value="Noto Sans Khmer" />
- <option value="Kantumruy Pro" />
- <option value="Battambang" />
- <option value="System" />
+                <datalist id="font-km-options">
+                <option value="Kantumruy Pro" />
+                <option value="Noto Sans Khmer" />
+                <option value="Battambang" />
+                <option value="System" />
  </datalist>
  </div>
  <p className="text-xs text-slate-500 dark:text-slate-400 md:col-span-2">Tip: Fonts must be loaded in the frontend. Use the provided options for best results.</p>

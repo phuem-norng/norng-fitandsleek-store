@@ -62,7 +62,7 @@ function Badge({ value, accent = false }) {
 }
 
 function Icon({ name }) {
-  const cls = "w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110";
+  const cls = "w-[18px] h-[18px]";
   if (name === "search") return <Search className={cls} strokeWidth={2} />;
   if (name === "user") return <User className={cls} strokeWidth={2} />;
   if (name === "heart") return <Heart className={cls} strokeWidth={2} />;
@@ -867,8 +867,8 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
         >
           {storefrontMode === "dark"
-            ? <Sun className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" strokeWidth={2} />
-            : <Moon className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
+            ? <Sun className="w-[18px] h-[18px]" strokeWidth={2} />
+            : <Moon className="w-[18px] h-[18px]" strokeWidth={2} />
           }
         </button>
       </div>
@@ -942,10 +942,10 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             aria-label={storefrontMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
           >
-            {storefrontMode === "dark"
-              ? <Sun className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" strokeWidth={2} />
-              : <Moon className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
-            }
+          {storefrontMode === "dark"
+            ? <Sun className="w-[18px] h-[18px]" strokeWidth={2} />
+            : <Moon className="w-[18px] h-[18px]" strokeWidth={2} />
+          }
           </button>
 
           <span className="fs-header-divider" aria-hidden="true" />
@@ -955,7 +955,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             className="fs-iconbtn-header group"
             aria-label={t('notifications')}
           >
-            <Bell className="w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110" strokeWidth={2} />
+            <Bell className="w-[18px] h-[18px]" strokeWidth={2} />
             <Badge value={notificationsUnread} accent />
           </button>
 

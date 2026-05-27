@@ -309,10 +309,10 @@ function FontSettingsSync() {
   React.useEffect(() => {
     const root = document.documentElement;
     const fontEn = settings?.fonts?.english || "Inter";
-    const fontKm = settings?.fonts?.khmer || "Noto Sans Khmer";
+    const fontKm = settings?.fonts?.khmer || "Kantumruy Pro";
 
-    const baseFallback = "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, \"Apple Color Emoji\", \"Segoe UI Emoji\"";
-    const kmFallback = "\"Noto Sans Khmer\", \"Kantumruy Pro\", \"Battambang\", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, \"Apple Color Emoji\", \"Segoe UI Emoji\"";
+    const baseFallback = "\"Kantumruy Pro\", \"Noto Sans Khmer\", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, \"Apple Color Emoji\", \"Segoe UI Emoji\"";
+    const kmFallback = "\"Kantumruy Pro\", \"Noto Sans Khmer\", \"Battambang\", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, \"Apple Color Emoji\", \"Segoe UI Emoji\"";
 
     const normalizeStack = (font, fallback) => {
       if (!font || String(font).toLowerCase() === "system") {

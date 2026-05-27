@@ -28,7 +28,7 @@ export function StorefrontFilterToolbarButton({ activeCount = 0, onClick, classN
         className,
       ].join(" ")}
     >
-      <SlidersHorizontal className="h-4 w-4 opacity-90" aria-hidden />
+      <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
       Filter
       {activeCount > 0 ? (
         <span className="fs-storefront-filter-btn__badge">{activeCount}</span>

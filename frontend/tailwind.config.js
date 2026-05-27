@@ -26,7 +26,7 @@ export default {
     },
   	extend: {
 			fontFamily: {
-				sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],
+				sans: ["Inter", "Kantumruy Pro", "Noto Sans Khmer", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],
         khmer: ["Kantumruy Pro", "Noto Sans Khmer", "Battambang", "sans-serif"],
 			},
 			

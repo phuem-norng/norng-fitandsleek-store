@@ -50,7 +50,7 @@ class HomepageSettingsController extends Controller
             $defaults = [
                 'fonts' => [
                     'english' => 'Inter',
-                    'khmer' => 'Noto Sans Khmer',
+                    'khmer' => 'Kantumruy Pro',
                 ],
                 'hero' => [
                     'message' => '🚚 Free delivery on orders above $40',
