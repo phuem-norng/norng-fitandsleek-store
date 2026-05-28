@@ -15,6 +15,14 @@ const emptyForm = {
   logo_url: "",
 };
 
+function slugifyName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 /** Resolve API storage paths; leave blob/data previews unchanged. */
 function brandLogoSrc(url) {
   if (!url) return null;
@@ -125,7 +133,7 @@ export default function AdminBrands() {
     try {
       const fd = new FormData();
       fd.append("name", form.name);
-      if (form.slug) fd.append("slug", form.slug);
+      fd.append("slug", (form.slug || slugifyName(form.name)).trim());
       fd.append("sort_order", String(form.sort_order ?? 0));
       fd.append("is_active", form.is_active ? "1" : "0");
       if (form.logo_source === "url") {
@@ -136,9 +144,7 @@ export default function AdminBrands() {
         fd.append("logo", form.logo);
       }
 
-      const response = await api.post("/admin/brands", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await api.post("/admin/brands", fd);
 
       if (![200, 201].includes(response?.status)) {
         throw new Error("Create failed.");
@@ -191,7 +197,7 @@ export default function AdminBrands() {
     try {
       const fd = new FormData();
       fd.append("name", editing.name);
-      if (editing.slug) fd.append("slug", editing.slug);
+      fd.append("slug", (editing.slug || slugifyName(editing.name)).trim());
       fd.append("sort_order", String(editing.sort_order ?? 0));
       fd.append("is_active", editing.is_active ? "1" : "0");
       if (editing.logo_source === "url") {
@@ -203,9 +209,7 @@ export default function AdminBrands() {
       // Laravel apiResource uses PUT/PATCH. We use POST + _method for multipart.
       fd.append("_method", "PATCH");
 
-      await api.post(`/admin/brands/${editing.id}`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post(`/admin/brands/${editing.id}`, fd);
 
       setEditing(null);
       showSuccess("Brand updated");
