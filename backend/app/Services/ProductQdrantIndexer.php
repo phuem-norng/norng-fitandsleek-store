@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Support\Media;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -88,15 +89,20 @@ class ProductQdrantIndexer
             $mime = $response->header('Content-Type');
         } else {
             $filename = basename(parse_url($imageUrl, PHP_URL_PATH) ?: 'image.jpg');
+            $content = Media::readBytes($imageUrl);
 
-            $localPath = $this->resolveLocalPath($imageUrl);
-            if (! $localPath || ! file_exists($localPath)) {
-                throw new \RuntimeException('Image file not found: '.$imageUrl);
+            if ($content === null) {
+                $localPath = Media::resolveLocalPath($imageUrl);
+                if (! $localPath || ! file_exists($localPath)) {
+                    throw new \RuntimeException('Image file not found: '.$imageUrl);
+                }
+
+                $content = file_get_contents($localPath);
+                $mime = mime_content_type($localPath) ?: 'image/jpeg';
+                $filename = basename($localPath);
+            } else {
+                $mime = 'image/jpeg';
             }
-
-            $content = file_get_contents($localPath);
-            $mime = mime_content_type($localPath) ?: 'image/jpeg';
-            $filename = basename($localPath);
         }
 
         if ($content === false || $content === null) {
@@ -121,41 +127,6 @@ class ProductQdrantIndexer
             new UploadedFile($tempPath, $filename, $mime ?: 'image/jpeg', null, true),
             $tempPath,
         ];
-    }
-
-    private function resolveLocalPath(string $imageUrl): ?string
-    {
-        $path = trim($imageUrl);
-
-        if ($path === '') {
-            return null;
-        }
-
-        if (str_starts_with($path, '/storage/')) {
-            return storage_path('app/public/'.ltrim(substr($path, 8), '/'));
-        }
-
-        if (str_starts_with($path, 'storage/')) {
-            return storage_path('app/public/'.ltrim(substr($path, 8), '/'));
-        }
-
-        if (str_starts_with($path, '/')) {
-            $publicPath = public_path(ltrim($path, '/'));
-            if (file_exists($publicPath)) {
-                return $publicPath;
-            }
-        }
-
-        $diskPath = Storage::disk('public')->path($path);
-        if (file_exists($diskPath)) {
-            return $diskPath;
-        }
-
-        if (file_exists($path)) {
-            return $path;
-        }
-
-        return null;
     }
 
     private function extensionFromMime(string $mime): string

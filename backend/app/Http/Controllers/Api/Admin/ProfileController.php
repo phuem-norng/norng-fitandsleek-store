@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\Media;
 use Cloudinary\Cloudinary as CloudinarySdk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -110,36 +110,24 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
-        $profileDisk = (string) env('ADMIN_PROFILE_IMAGE_DISK', 'cloudinary');
-        $fallbackToPublic = filter_var(
-            env('ADMIN_PROFILE_IMAGE_FALLBACK_TO_PUBLIC', env('APP_ENV') !== 'production'),
-            FILTER_VALIDATE_BOOL
-        );
+        $profileDisk = (string) env('ADMIN_PROFILE_IMAGE_DISK', Media::disk());
+        $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
 
-        if (!is_array(config("filesystems.disks.{$profileDisk}"))) {
-            $profileDisk = (string) config('filesystems.default', 'public');
+        if (! is_array(config("filesystems.disks.{$profileDisk}"))) {
+            $profileDisk = Media::disk();
         }
 
-        // Delete old image if exists
         if ($user->profile_image_path) {
-            foreach (array_unique([$profileDisk, 'cloudinary', 'public']) as $disk) {
-                try {
-                    Storage::disk($disk)->delete($user->profile_image_path);
-                } catch (\Throwable) {
-                    // Best-effort cleanup for legacy paths from other disks.
-                }
-            }
+            Media::delete($user->profile_image_path);
         }
 
-        // Store new image with safe fallback when preferred disk is unavailable.
         $file = $request->file('profile_image');
-        $filename = 'admin_profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $filename = 'admin_profile_'.$user->id.'_'.time().'.'.$file->getClientOriginalExtension();
         try {
-            if ($profileDisk === 'cloudinary') {
+            if ($profileDisk === 'cloudinary' && $preset !== '') {
                 $cloudName = trim((string) env('CLOUDINARY_CLOUD_NAME', ''));
                 $apiKey = trim((string) env('CLOUDINARY_API_KEY', ''));
                 $apiSecret = trim((string) env('CLOUDINARY_API_SECRET', ''));
-                $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
                 $cloudinaryUrl = trim((string) env('CLOUDINARY_URL', ''));
 
                 if ($cloudName === '' || $apiKey === '' || ($apiSecret === '' && $preset === '')) {
@@ -179,22 +167,22 @@ class ProfileController extends Controller
                     throw new RuntimeException('Cloudinary upload did not return secure_url.');
                 }
             } else {
-                $path = $file->storeAs('profile_images', $filename, $profileDisk);
+                $path = Media::storeUploadedAs($file, 'profile_images', $filename, $profileDisk);
             }
         } catch (\Throwable $e) {
             $errorContext = [
                 'admin_id' => $user->id,
                 'preferred_disk' => $profileDisk,
-                'fallback_to_public' => $fallbackToPublic,
+                'fallback_to_public' => Media::fallbackToPublic(),
                 'exception' => get_class($e),
                 'error' => $e->getMessage(),
             ];
             Log::error('Admin profile image upload failed on preferred disk.', $errorContext);
-            // Ensure the same error appears in container stdout/stderr (Render live logs).
             Log::channel('stderr')->error('Admin profile image upload failed on preferred disk.', $errorContext);
 
-            if (! $fallbackToPublic) {
+            if (! Media::fallbackToPublic()) {
                 $debugEnabled = filter_var(env('ADMIN_PROFILE_IMAGE_DEBUG', false), FILTER_VALIDATE_BOOL);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Image upload storage is unavailable. Please retry shortly.',
@@ -202,7 +190,7 @@ class ProfileController extends Controller
                 ], 503);
             }
 
-            $path = $file->storeAs('profile_images', $filename, 'public');
+            $path = Media::storeUploadedAs($file, 'profile_images', $filename, 'public');
         }
         
         // Update user

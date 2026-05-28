@@ -11,7 +11,7 @@ class AdminMessageController extends Controller
 {
     private function mediaDisk(): string
     {
-        return (string) config('filesystems.default', 'public');
+        return Media::disk();
     }
 
     /**
@@ -132,8 +132,8 @@ class AdminMessageController extends Controller
         ]);
 
         $file = $request->file('media');
-        $path = $file->store('messages', $this->mediaDisk());
-        $url = Media::url($path);
+        $path = Media::storeUploaded($file, 'messages', $this->mediaDisk());
+        $url = Media::isExternalUrl($path) ? $path : (Media::url($path) ?? $path);
         $mime = $file->getMimeType();
         $type = str_starts_with($mime, 'video/') ? 'video' : 'image';
 

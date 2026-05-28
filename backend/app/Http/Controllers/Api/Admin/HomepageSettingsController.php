@@ -12,7 +12,7 @@ class HomepageSettingsController extends Controller
 {
     private function mediaDisk(): string
     {
-        return (string) config('filesystems.default', 'public');
+        return Media::disk();
     }
 
     private function resolveAppLogoUrl(): string
@@ -657,7 +657,7 @@ class HomepageSettingsController extends Controller
             'logo' => 'required|file|mimes:jpg,jpeg,png,webp,svg,avif|max:5120',
         ]);
 
-        $path = $request->file('logo')->store('logos', $this->mediaDisk());
+        $path = Media::storeUploaded($request->file('logo'), 'logos', $this->mediaDisk());
         $url = Media::url($path);
 
         $current = Setting::where('key', 'header')->where('group', 'homepage')->first();
@@ -684,7 +684,7 @@ class HomepageSettingsController extends Controller
             'image' => 'required|file|mimes:jpg,jpeg,png,webp,svg,avif|max:5120',
         ]);
 
-        $path = $request->file('image')->store('menu-images', $this->mediaDisk());
+        $path = Media::storeUploaded($request->file('image'), 'menu-images', $this->mediaDisk());
         $url = Media::url($path);
 
         return response()->json([

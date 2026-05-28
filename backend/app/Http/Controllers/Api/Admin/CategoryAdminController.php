@@ -64,9 +64,8 @@ class CategoryAdminController extends BaseAdminController
         }
 
         $filename = trim($folder, '/') . '/' . $category->id . '-' . Str::random(8) . '.' . $ext;
-        Storage::disk($this->mediaDisk())->put($filename, $content);
 
-        return $filename;
+        return Media::put($filename, $content, $this->mediaDisk());
     }
 
     /** Convert inline `image_url` to `image_path` when labels were saved as base64. */

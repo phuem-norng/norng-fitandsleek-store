@@ -141,56 +141,13 @@ class User extends Authenticatable
     /**
      * Get the profile image URL
      */
-    public function getProfileImageUrlAttribute()
+    public function getProfileImageUrlAttribute(): ?string
     {
-        $rawPath = trim((string) $this->profile_image_path);
-        if ($rawPath === '') {
-            return null;
-        }
-
-        // Legacy rows may store full URLs (including localhost/127.0.0.1). Normalize
-        // storage URLs to relative paths to avoid mixed-content on HTTPS storefronts.
-        if (filter_var($rawPath, FILTER_VALIDATE_URL)) {
-            $parsedPath = (string) (parse_url($rawPath, PHP_URL_PATH) ?? '');
-            $storagePos = strpos($parsedPath, '/storage/');
-            if ($storagePos !== false) {
-                return substr($parsedPath, $storagePos);
-            }
-
-            // Keep external URLs as-is (e.g., Cloudinary CDN URLs).
-            return $rawPath;
-        }
-
-        $normalizedPath = ltrim($rawPath, '/');
-        if ($normalizedPath === '') {
-            return null;
-        }
-
-        if (str_starts_with($normalizedPath, 'storage/')) {
-            return '/' . $normalizedPath;
-        }
-
-        $defaultDisk = (string) config('filesystems.default', 'public');
-
-        if ($defaultDisk !== 'public') {
-            try {
-                if (Storage::disk($defaultDisk)->exists($normalizedPath)) {
-                    return Storage::disk($defaultDisk)->url($normalizedPath);
-                }
-            } catch (\Throwable) {
-                // Do not fail /api/me when cloud storage is temporarily unavailable.
-            }
-        }
-
         try {
-            if (Storage::disk('public')->exists($normalizedPath)) {
-                return '/storage/' . $normalizedPath;
-            }
+            return \App\Support\Media::url($this->profile_image_path);
         } catch (\Throwable) {
-            // Ignore and fall through to null.
+            return null;
         }
-
-        return null;
     }
 
     /**

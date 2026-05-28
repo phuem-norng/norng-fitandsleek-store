@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Media;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -14,7 +15,7 @@ class ProductGalleryImageProcessor
 
     private function mediaDisk(): string
     {
-        return (string) config('filesystems.default', 'public');
+        return Media::disk();
     }
 
     /**
@@ -73,9 +74,7 @@ class ProductGalleryImageProcessor
             return $file->store('product-gallery', $disk);
         }
 
-        Storage::disk($disk)->put($relative, $bytes);
-
-        return $relative;
+        return Media::put($relative, $bytes, $disk);
     }
 
     private function canProcessWithGd(string $mime, UploadedFile $file): bool
