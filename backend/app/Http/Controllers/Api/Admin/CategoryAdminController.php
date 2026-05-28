@@ -44,7 +44,7 @@ class CategoryAdminController extends BaseAdminController
     }
 
     /** Save a camera/base64 upload to media disk so list views can use a small URL. */
-    private function persistInlineImageUrl(Category $category, string $dataUrl): ?string
+    private function persistInlineImageUrl(Category $category, string $dataUrl, string $folder = 'categories'): ?string
     {
         if (! preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
             return null;
@@ -63,7 +63,7 @@ class CategoryAdminController extends BaseAdminController
             return null;
         }
 
-        $filename = 'categories/' . $category->id . '-' . Str::random(8) . '.' . $ext;
+        $filename = trim($folder, '/') . '/' . $category->id . '-' . Str::random(8) . '.' . $ext;
         Storage::disk($this->mediaDisk())->put($filename, $content);
 
         return $filename;
@@ -93,10 +93,56 @@ class CategoryAdminController extends BaseAdminController
         return Media::url($path);
     }
 
+    /** Upload gallery lines stored as base64 data URLs (Stock Inventory form) to the media disk. */
+    private function materializeGallery(Category $category): void
+    {
+        $gallery = $category->gallery;
+        if ($gallery === null || trim($gallery) === '') {
+            return;
+        }
+
+        $out = [];
+        foreach (preg_split('/\r\n|\r|\n/', $gallery) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+
+            if ($this->isInlineDataUrl($line)) {
+                $path = $this->persistInlineImageUrl($category, $line, 'categories/gallery');
+                $url = $path ? Media::url($path) : null;
+                if ($url) {
+                    $out[] = $url;
+                }
+
+                continue;
+            }
+
+            $out[] = $line;
+        }
+
+        if ($out !== []) {
+            $category->gallery = implode("\n", $out);
+        }
+    }
+
     private function normalizeCategoryImages(Category $category): void
     {
+        $changed = false;
+
         if ($this->isInlineDataUrl($category->image_url)) {
             $this->materializeInlineImage($category);
+            $changed = true;
+        }
+
+        $beforeGallery = $category->gallery;
+        $this->materializeGallery($category);
+        if ($category->gallery !== $beforeGallery) {
+            $changed = true;
+        }
+
+        if ($changed) {
+            $category->saveQuietly();
         }
     }
 

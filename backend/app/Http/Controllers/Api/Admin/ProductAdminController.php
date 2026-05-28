@@ -183,9 +183,8 @@ class ProductAdminController extends Controller
         ]);
 
         $path = app(ProductGalleryImageProcessor::class)->storeNormalized($request->file('image'));
-        // Same-origin path so clients never receive Docker-internal APP_URL (e.g. http://localhost:8001/...).
         $normalizedPath = str_replace('\\', '/', $path);
-        $url = '/storage/'.$normalizedPath;
+        $url = \App\Support\Media::url($normalizedPath) ?? '/storage/'.$normalizedPath;
 
         return response()->json([
             'message' => 'Image uploaded',

@@ -12,27 +12,33 @@ class ProductGalleryImageProcessor
 
     public const HEIGHT = 1620;
 
+    private function mediaDisk(): string
+    {
+        return (string) config('filesystems.default', 'public');
+    }
+
     /**
-     * Center-crop and resize to {@see WIDTH}×{@see HEIGHT}, store on the public disk.
+     * Center-crop and resize to {@see WIDTH}×{@see HEIGHT}, store on the configured media disk.
      * Non-raster types (e.g. SVG) are stored unchanged.
      */
     public function storeNormalized(UploadedFile $file): string
     {
+        $disk = $this->mediaDisk();
         $mime = strtolower((string) $file->getMimeType());
         if (! $this->canProcessWithGd($mime, $file)) {
-            return $file->store('product-gallery', 'public');
+            return $file->store('product-gallery', $disk);
         }
 
         $src = $this->loadImage($file->getRealPath(), $mime, $file);
         if ($src === null) {
-            return $file->store('product-gallery', 'public');
+            return $file->store('product-gallery', $disk);
         }
 
         $dest = imagecreatetruecolor(self::WIDTH, self::HEIGHT);
         if ($dest === false) {
             imagedestroy($src);
 
-            return $file->store('product-gallery', 'public');
+            return $file->store('product-gallery', $disk);
         }
 
         $this->fillBackground($dest);
@@ -40,18 +46,34 @@ class ProductGalleryImageProcessor
         imagedestroy($src);
 
         $relative = 'product-gallery/'.Str::uuid().'.jpg';
-        $absolute = Storage::disk('public')->path($relative);
-        $dir = dirname($absolute);
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
+
+        if ($disk === 'public') {
+            $absolute = Storage::disk('public')->path($relative);
+            $dir = dirname($absolute);
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $ok = imagejpeg($dest, $absolute, 90);
+            imagedestroy($dest);
+
+            if (! $ok) {
+                return $file->store('product-gallery', $disk);
+            }
+
+            return $relative;
         }
 
-        $ok = imagejpeg($dest, $absolute, 90);
+        ob_start();
+        $ok = imagejpeg($dest, null, 90);
         imagedestroy($dest);
+        $bytes = $ok ? ob_get_clean() : ob_end_clean();
 
-        if (! $ok) {
-            return $file->store('product-gallery', 'public');
+        if (! $ok || $bytes === false || $bytes === '') {
+            return $file->store('product-gallery', $disk);
         }
+
+        Storage::disk($disk)->put($relative, $bytes);
 
         return $relative;
     }
