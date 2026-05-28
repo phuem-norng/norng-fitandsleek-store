@@ -19,9 +19,12 @@ function storageServingOrigin() {
   if (typeof window !== "undefined" && import.meta.env.DEV && devSpaUsesViteProxy()) {
     return window.location.origin;
   }
-  const raw = (import.meta.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001")
-    .trim()
-    .replace(/\/$/, "");
+  // In production, never fall back to Vite dev proxy target (often localhost/127.0.0.1).
+  if (import.meta.env.PROD) {
+    return resolveBackendOrigin();
+  }
+
+  const raw = (import.meta.env.VITE_PROXY_TARGET || "http://127.0.0.1:8001").trim().replace(/\/$/, "");
   if (raw && !raw.startsWith("/")) {
     try {
       return new URL(raw).origin;
