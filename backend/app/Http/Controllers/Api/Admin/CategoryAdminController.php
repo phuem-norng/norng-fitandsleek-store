@@ -113,6 +113,20 @@ class CategoryAdminController extends BaseAdminController
             return Media::url($c->image_path);
         }
 
+        // Stock/received child rows often inherit product visuals from the parent label row.
+        if ($c->parent_id) {
+            $parent = $c->relationLoaded('parent') ? $c->parent : $c->parent()->first();
+            if ($parent instanceof Category) {
+                $parentUrl = trim((string) ($parent->image_url ?? ''));
+                if ($parentUrl !== '' && ! $this->isInlineDataUrl($parentUrl)) {
+                    return $parentUrl;
+                }
+                if ($parent->image_path) {
+                    return Media::url($parent->image_path);
+                }
+            }
+        }
+
         $gallery = $this->galleryForList($c->gallery);
         if ($gallery !== null) {
             $first = trim(explode("\n", $gallery, 2)[0]);
@@ -200,6 +214,7 @@ class CategoryAdminController extends BaseAdminController
     public function index(Request $request)
     {
         $query = Category::query()
+            ->with(['parent:id,image_url,image_path'])
             ->orderBy('sort_order')
             ->orderBy('name');
 
