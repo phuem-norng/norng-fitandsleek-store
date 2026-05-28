@@ -6,9 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Banner;
 use App\Support\Media;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
-class BannerAdminController extends Controller
+class BannerAdminController extends BaseAdminController
 {
     public function index()
     {
@@ -51,7 +50,7 @@ class BannerAdminController extends Controller
 
         $path = null;
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('banners', 'public');
+            $path = $this->storeImage($request, 'image', 'banners');
         } elseif (!empty($validated['media_url'])) {
             $path = $validated['media_url'];
         }
@@ -117,9 +116,9 @@ class BannerAdminController extends Controller
 
         if ($request->hasFile('image')) {
             if ($banner->image_url && !preg_match('#^https?://#i', $banner->image_url)) {
-                Storage::disk('public')->delete($banner->image_url);
+                $this->deleteMediaPath($banner->image_url);
             }
-            $banner->image_url = $request->file('image')->store('banners', 'public');
+            $banner->image_url = $this->storeImage($request, 'image', 'banners');
         } elseif (!empty($validated['media_url'])) {
             $banner->image_url = $validated['media_url'];
         }
@@ -151,7 +150,7 @@ class BannerAdminController extends Controller
 
     public function destroy(Banner $banner)
     {
-        if ($banner->image_url) Storage::disk('public')->delete($banner->image_url);
+        $this->deleteMediaPath($banner->image_url);
         $banner->delete();
         return response()->json(['ok' => true]);
     }

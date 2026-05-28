@@ -4,6 +4,11 @@ namespace App\Support;
 
 class Media
 {
+    private static function mediaDisk(): string
+    {
+        return (string) config('filesystems.default', 'public');
+    }
+
     private static function isPrivateHost(string $host): bool
     {
         $host = strtolower($host);
@@ -51,13 +56,26 @@ class Media
             $normalized = ltrim(substr($normalized, 8), '/');
         }
 
-        // If the backing file is missing, always return a safe placeholder.
-        if (!\Storage::disk('public')->exists($normalized)) {
-            return \asset('placeholder.svg');
+        $disk = self::mediaDisk();
+
+        if ($disk !== 'public') {
+            try {
+                return \Storage::disk($disk)->url($normalized);
+            } catch (\Throwable) {
+                // Continue to local fallback for legacy paths.
+            }
         }
 
-        // storage:link -> /storage
-        return '/storage/' . $normalized;
+        try {
+            if (\Storage::disk('public')->exists($normalized)) {
+                // storage:link -> /storage
+                return '/storage/' . $normalized;
+            }
+        } catch (\Throwable) {
+            // ignore and return placeholder below
+        }
+
+        return \asset('placeholder.svg');
     }
 
     // Backward-compatible alias (so both calls work)

@@ -4,11 +4,16 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Message;
+use App\Support\Media;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class AdminMessageController extends Controller
 {
+    private function mediaDisk(): string
+    {
+        return (string) config('filesystems.default', 'public');
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -127,8 +132,8 @@ class AdminMessageController extends Controller
         ]);
 
         $file = $request->file('media');
-        $path = $file->store('messages', 'public');
-        $url = Storage::disk('public')->url($path);
+        $path = $file->store('messages', $this->mediaDisk());
+        $url = Media::url($path);
         $mime = $file->getMimeType();
         $type = str_starts_with($mime, 'video/') ? 'video' : 'image';
 

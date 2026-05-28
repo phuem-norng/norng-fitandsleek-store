@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
-class CategoryAdminController extends Controller
+class CategoryAdminController extends BaseAdminController
 {
     /** @return list<int> */
     private function normalizeCategoryIds(?array $categoryIds, ?int $categoryId, ?Category $existing = null): array
@@ -43,7 +43,7 @@ class CategoryAdminController extends Controller
         return str_starts_with(strtolower(trim((string) $value)), 'data:');
     }
 
-    /** Save a camera/base64 upload to the public disk so list views can use a small URL. */
+    /** Save a camera/base64 upload to media disk so list views can use a small URL. */
     private function persistInlineImageUrl(Category $category, string $dataUrl): ?string
     {
         if (! preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
@@ -64,7 +64,7 @@ class CategoryAdminController extends Controller
         }
 
         $filename = 'categories/' . $category->id . '-' . Str::random(8) . '.' . $ext;
-        Storage::disk('public')->put($filename, $content);
+        Storage::disk($this->mediaDisk())->put($filename, $content);
 
         return $filename;
     }
@@ -285,7 +285,7 @@ class CategoryAdminController extends Controller
 
         $path = null;
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('categories', 'public');
+            $path = $this->storeImage($request, 'image', 'categories');
         }
 
         $c = Category::create([
@@ -392,9 +392,8 @@ class CategoryAdminController extends Controller
             && (int) $recalcSnapshot['inventory']->id === (int) $category->id;
 
         if ($request->hasFile('image')) {
-            if ($category->image_path)
-                Storage::disk('public')->delete($category->image_path);
-            $category->image_path = $request->file('image')->store('categories', 'public');
+            $this->deleteMediaPath($category->image_path);
+            $category->image_path = $this->storeImage($request, 'image', 'categories');
         }
 
         $category->fill([
@@ -455,7 +454,7 @@ class CategoryAdminController extends Controller
             $recalcSnapshot = $stockReceive->inventoryRecalcSnapshotForReceiveChange($category);
 
             if ($category->image_path) {
-                Storage::disk('public')->delete($category->image_path);
+                $this->deleteMediaPath($category->image_path);
             }
 
             $category->delete();

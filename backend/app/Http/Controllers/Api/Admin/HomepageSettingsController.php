@@ -4,11 +4,17 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class HomepageSettingsController extends Controller
 {
+    private function mediaDisk(): string
+    {
+        return (string) config('filesystems.default', 'public');
+    }
+
     private function resolveAppLogoUrl(): string
     {
         $configured = (string) config('app.logo_url', '/logo.png');
@@ -651,8 +657,8 @@ class HomepageSettingsController extends Controller
             'logo' => 'required|file|mimes:jpg,jpeg,png,webp,svg,avif|max:5120',
         ]);
 
-        $path = $request->file('logo')->store('logos', 'public');
-        $url = Storage::disk('public')->url($path);
+        $path = $request->file('logo')->store('logos', $this->mediaDisk());
+        $url = Media::url($path);
 
         $current = Setting::where('key', 'header')->where('group', 'homepage')->first();
         $header = $current ? (array) $current->value : [];
@@ -678,8 +684,8 @@ class HomepageSettingsController extends Controller
             'image' => 'required|file|mimes:jpg,jpeg,png,webp,svg,avif|max:5120',
         ]);
 
-        $path = $request->file('image')->store('menu-images', 'public');
-        $url = Storage::disk('public')->url($path);
+        $path = $request->file('image')->store('menu-images', $this->mediaDisk());
+        $url = Media::url($path);
 
         return response()->json([
             'message' => 'Image uploaded',

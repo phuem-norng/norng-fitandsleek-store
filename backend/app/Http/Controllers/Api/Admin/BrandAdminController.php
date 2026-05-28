@@ -6,9 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Support\Media;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
-class BrandAdminController extends Controller
+class BrandAdminController extends BaseAdminController
 {
     private function isExternalUrl(?string $value): bool
     {
@@ -52,7 +51,7 @@ class BrandAdminController extends Controller
         }
 
         $path = $request->hasFile('logo')
-            ? $request->file('logo')->store('brands', 'public')
+            ? $this->storeImage($request, 'logo', 'brands')
             : $validated['logo_url'];
 
         $b = Brand::create([
@@ -89,14 +88,14 @@ class BrandAdminController extends Controller
 
         if ($request->hasFile('logo')) {
             if ($brand->logo_path && !$this->isExternalUrl($brand->logo_path)) {
-                Storage::disk('public')->delete($brand->logo_path);
+                $this->deleteMediaPath($brand->logo_path);
             }
-            $brand->logo_path = $request->file('logo')->store('brands', 'public');
+            $brand->logo_path = $this->storeImage($request, 'logo', 'brands');
         }
 
         if (array_key_exists('logo_url', $validated) && !empty($validated['logo_url'])) {
             if ($brand->logo_path && !$this->isExternalUrl($brand->logo_path)) {
-                Storage::disk('public')->delete($brand->logo_path);
+                $this->deleteMediaPath($brand->logo_path);
             }
             $brand->logo_path = $validated['logo_url'];
         }
@@ -123,7 +122,7 @@ class BrandAdminController extends Controller
     public function destroy(Brand $brand)
     {
         if ($brand->logo_path && !$this->isExternalUrl($brand->logo_path)) {
-            Storage::disk('public')->delete($brand->logo_path);
+            $this->deleteMediaPath($brand->logo_path);
         }
 
         $brand->delete();
