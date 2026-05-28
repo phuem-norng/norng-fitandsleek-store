@@ -9,16 +9,96 @@ use App\Models\Product;
 use App\Models\Message;
 use App\Services\PaidOrderInventory;
 use App\Services\ProductGalleryImageProcessor;
+use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ProductAdminController extends Controller
 {
+    private function isInlineDataUrl(?string $value): bool
+    {
+        return str_starts_with(strtolower(trim((string) $value)), 'data:');
+    }
+
+    private function persistInlineImageUrl(string $dataUrl, string $folder = 'products'): ?string
+    {
+        if (! preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
+            return null;
+        }
+
+        $ext = match (strtolower($matches[1])) {
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            default => 'jpg',
+        };
+
+        $content = base64_decode($matches[2], true);
+        if ($content === false || $content === '') {
+            return null;
+        }
+
+        $filename = trim($folder, '/').'/'.Str::uuid().'.'.$ext;
+
+        return Media::put($filename, $content);
+    }
+
+    private function materializeImageReference(?string $url, string $folder): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+
+        if (! $this->isInlineDataUrl($url)) {
+            return $url;
+        }
+
+        return $this->persistInlineImageUrl($url, $folder) ?? $url;
+    }
+
+    /**
+     * Upload base64 cover/gallery/color swatch URLs to Cloudinary before save.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function materializeProductMedia(array &$data): void
+    {
+        if (array_key_exists('image_url', $data)) {
+            $data['image_url'] = $this->materializeImageReference($data['image_url'] ?? null, 'products/cover');
+        }
+
+        if (array_key_exists('gallery', $data) && is_array($data['gallery'])) {
+            $out = [];
+            foreach ($data['gallery'] as $line) {
+                $line = is_string($line) ? trim($line) : '';
+                if ($line === '') {
+                    continue;
+                }
+                $out[] = $this->materializeImageReference($line, 'products/gallery') ?? $line;
+            }
+            $data['gallery'] = $out;
+        }
+
+        if (array_key_exists('colors', $data) && is_array($data['colors'])) {
+            foreach ($data['colors'] as $i => $color) {
+                if (! is_array($color)) {
+                    continue;
+                }
+                $img = $color['image_url'] ?? null;
+                if (! is_string($img) || trim($img) === '') {
+                    continue;
+                }
+                $data['colors'][$i]['image_url'] = $this->materializeImageReference($img, 'products/colors');
+            }
+        }
+    }
+
      /**
      * @param  mixed  $raw
      * @return array<int, array{name: string, image_url: ?string}>|null
@@ -182,9 +262,19 @@ class ProductAdminController extends Controller
             ],
         ]);
 
-        $path = app(ProductGalleryImageProcessor::class)->storeNormalized($request->file('image'));
-        $normalizedPath = str_replace('\\', '/', $path);
-        $url = \App\Support\Media::url($normalizedPath) ?? '/storage/'.$normalizedPath;
+        try {
+            $stored = app(ProductGalleryImageProcessor::class)->storeNormalized($request->file('image'));
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Image upload failed.',
+                'errors' => ['image' => ['Could not upload image to media storage. Please retry.']],
+            ], 503);
+        }
+
+        $stored = str_replace('\\', '/', trim($stored));
+        $url = Media::isExternalUrl($stored)
+            ? $stored
+            : (Media::url($stored) ?? (str_starts_with($stored, '/storage/') ? $stored : '/storage/'.$stored));
 
         return response()->json([
             'message' => 'Image uploaded',
@@ -273,6 +363,7 @@ class ProductAdminController extends Controller
         }
 
         $data = $this->applyStockLabelPricing($data);
+        $this->materializeProductMedia($data);
 
         $product = Product::create($data);
 
@@ -366,6 +457,7 @@ class ProductAdminController extends Controller
         }
 
         $data = $this->applyStockLabelPricing($data);
+        $this->materializeProductMedia($data);
 
         $product->update($data);
 

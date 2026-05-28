@@ -27,19 +27,19 @@ class ProductGalleryImageProcessor
         $disk = $this->mediaDisk();
         $mime = strtolower((string) $file->getMimeType());
         if (! $this->canProcessWithGd($mime, $file)) {
-            return $file->store('product-gallery', $disk);
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         $src = $this->loadImage($file->getRealPath(), $mime, $file);
         if ($src === null) {
-            return $file->store('product-gallery', $disk);
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         $dest = imagecreatetruecolor(self::WIDTH, self::HEIGHT);
         if ($dest === false) {
             imagedestroy($src);
 
-            return $file->store('product-gallery', $disk);
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         $this->fillBackground($dest);
@@ -59,7 +59,7 @@ class ProductGalleryImageProcessor
             imagedestroy($dest);
 
             if (! $ok) {
-                return $file->store('product-gallery', $disk);
+                return Media::storeUploaded($file, 'product-gallery', $disk);
             }
 
             return $relative;
@@ -71,7 +71,7 @@ class ProductGalleryImageProcessor
         $bytes = $ok ? ob_get_clean() : ob_end_clean();
 
         if (! $ok || $bytes === false || $bytes === '') {
-            return $file->store('product-gallery', $disk);
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         return Media::put($relative, $bytes, $disk);

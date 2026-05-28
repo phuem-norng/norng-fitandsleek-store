@@ -984,43 +984,41 @@ if (inferred === "bag" || inferred === "bags" || inferred === "hat" || inferred 
  }, 3000);
  };
 
- const applyMainImageFile = (file) => {
+ const applyMainImageFile = async (file) => {
  if (!file || !isAcceptableProductImageFile(file)) return;
  setIsUploading(true);
+ setErr("");
  try {
- const reader = new FileReader();
- reader.onloadend = () => {
- setForm((s) => ({ ...s, image_url: reader.result }));
- setIsUploading(false);
- };
- reader.onerror = () => {
- setIsUploading(false);
- setErr("Failed to read image");
- };
- reader.readAsDataURL(file);
+ const url = await uploadGalleryFile(file);
+ if (!url) {
+ setErr("Upload did not return an image URL. Try again or check storage.");
+ return;
+ }
+ const primary = canonicalizeGalleryStorageUrl(url) || url;
+ setForm((s) => ({ ...s, image_url: primary }));
  } catch (error) {
+ setErr(extractErr(error));
+ } finally {
  setIsUploading(false);
- setErr("Failed to upload image");
  }
  };
 
- const applyEditMainImageFile = (file) => {
+ const applyEditMainImageFile = async (file) => {
  if (!file || !isAcceptableProductImageFile(file)) return;
  setIsUploading(true);
+ setEditGalleryError("");
  try {
- const reader = new FileReader();
- reader.onloadend = () => {
- setEditing((s) => ({ ...s, image_url: reader.result }));
- setIsUploading(false);
- };
- reader.onerror = () => {
- setIsUploading(false);
- setErr("Failed to read image");
- };
- reader.readAsDataURL(file);
+ const url = await uploadGalleryFile(file);
+ if (!url) {
+ setEditGalleryError("Upload did not return an image URL. Try again or check storage.");
+ return;
+ }
+ const primary = canonicalizeGalleryStorageUrl(url) || url;
+ setEditing((s) => (s ? { ...s, image_url: primary } : s));
  } catch (error) {
+ setEditGalleryError(extractErr(error));
+ } finally {
  setIsUploading(false);
- setErr("Failed to upload image");
  }
  };
 
