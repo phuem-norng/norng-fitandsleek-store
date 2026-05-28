@@ -216,10 +216,22 @@ class BakongPaymentController extends Controller
             ]);
         }
 
-        return response()->json(array_merge(
+        $errorCode = (int) ($response['errorCode'] ?? 0);
+        $pendingPayload = array_merge(
             $this->formatPaymentResponse($payment),
             ['status' => 'pending']
-        ));
+        );
+
+        if ((int) $responseCode === 1 && $errorCode === 15) {
+            $pendingPayload['verification_note'] =
+                'Payment verification is blocked from this server region. Set BAKONG_PROXY_URL to a Cambodia-hosted proxy (see backend/bakong-proxy).';
+            $pendingPayload['bakong_error_code'] = 15;
+        } elseif ((int) $responseCode === 1) {
+            $pendingPayload['verification_note'] =
+                'Waiting for Bakong to confirm your transfer. Keep this screen open after paying.';
+        }
+
+        return response()->json($pendingPayload);
     }
 
     /**

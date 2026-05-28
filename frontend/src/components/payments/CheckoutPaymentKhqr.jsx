@@ -16,6 +16,7 @@ export default function CheckoutPaymentKhqr({
   const [status, setStatus] = useState("idle");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [verificationNote, setVerificationNote] = useState("");
   const pollRef = useRef(null);
   const pollFailuresRef = useRef(0);
   const paidNotifiedRef = useRef(false);
@@ -71,6 +72,10 @@ export default function CheckoutPaymentKhqr({
       const { data } = await api.get(`/payments/bakong/status/${targetId}`);
       pollFailuresRef.current = 0;
       setError("");
+
+      if (data?.verification_note) {
+        setVerificationNote(String(data.verification_note));
+      }
 
       const nextPayment = data?.payment || data;
       const nextStatus = nextPayment?.status || data?.status;
@@ -136,6 +141,7 @@ export default function CheckoutPaymentKhqr({
       setError("");
       pollFailuresRef.current = 0;
       paidNotifiedRef.current = false;
+      setVerificationNote("");
       stopPolling();
     }
   }, [open, stopPolling]);
@@ -151,7 +157,7 @@ export default function CheckoutPaymentKhqr({
       expiresAt={payment?.expires_at}
       status={status}
       loading={loading}
-      error={error}
+      error={error || verificationNote}
       amount={amount}
       currency={payment?.currency || currency}
       onRegenerate={createKhqr}

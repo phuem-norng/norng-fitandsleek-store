@@ -99,6 +99,10 @@ return [
     'bakong' => [
         'base_url' => env('BAKONG_BASE_URL', 'https://api-bakong.nbc.gov.kh'),
         'token' => env('BAKONG_TOKEN'),
+        // NBC check_transaction_by_md5 is blocked outside Cambodia (errorCode 15). Use a Cambodia VPS proxy:
+        // deploy backend/bakong-proxy/index.php and set BAKONG_PROXY_URL to its public URL.
+        'proxy_url' => env('BAKONG_PROXY_URL'),
+        'proxy_secret' => env('BAKONG_PROXY_SECRET'),
         'merchant_name' => env('BAKONG_MERCHANT_NAME'),
         'merchant_city' => env('BAKONG_MERCHANT_CITY', 'Phnom Penh'),
         'receive_account' => env('BAKONG_RECEIVE_ACCOUNT'),
