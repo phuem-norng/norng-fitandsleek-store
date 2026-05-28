@@ -1,0 +1,27 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: Render Dashboard → New → Blueprint → connect this repo.
+# After fitandsleek-ai-vectorize is live, set on the Laravel backend service:
+#   IMAGE_VECTORIZE_URL=https://<ai-service-host>/vectorize
+
+# Optional: Laravel queue worker so product saves auto-index to Qdrant (SyncProductToQdrant job).
+# Or set IMAGE_SEARCH_SYNC_INLINE=true on the backend (slower admin saves, no worker).
+#
+#  - type: worker
+#    name: fitandsleek-backend-queue
+#    runtime: docker
+#    rootDir: backend
+#    dockerCommand: php artisan queue:work --sleep=3 --tries=3 --timeout=180
+#    plan: starter
+
+services:
+  - type: web
+    name: fitandsleek-ai-vectorize
+    runtime: docker
+    rootDir: ai-service
+    dockerfilePath: ./Dockerfile
+    # CLIP model needs RAM; use standard (2 GB) if starter OOMs on deploy.
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"

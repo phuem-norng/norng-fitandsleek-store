@@ -36,6 +36,10 @@ return [
         '~^http://127\.0\.0\.1:\d+$~',
         '~^https://localhost:\d+$~',
         '~^https://127\.0\.0\.1:\d+$~',
+        // Vercel previews and production (*.vercel.app)
+        '~^https://[a-zA-Z0-9-]+\.vercel\.app$~i',
+        // Cloudflare zone for this project
+        '~^https://([a-zA-Z0-9-]+\.)*phuemnorng-kalapakteam\.space$~i',
         // Cloudflare quick Tunnel (ephemeral *.trycloudflare.com)
         '~^https://[a-zA-Z0-9.-]+\.trycloudflare\.com$~i',
         '~^https://[a-zA-Z0-9-]+\.ngrok-free\.app$~',

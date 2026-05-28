@@ -3,5 +3,4 @@ uvicorn
 python-multipart
 pillow
 sentence-transformers
-torch
-torchvision
+# torch + torchvision installed in Dockerfile (CPU wheels for smaller image)

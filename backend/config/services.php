@@ -122,8 +122,13 @@ return [
     'image_search' => [
         'vectorize_url' => env('IMAGE_VECTORIZE_URL', 'http://localhost:9000/vectorize'),
         'qdrant_url' => env('QDRANT_URL', 'http://localhost:6333'),
+        'qdrant_api_key' => env('QDRANT_API_KEY'),
         'qdrant_collection' => env('QDRANT_COLLECTION', 'products'),
         'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 120),
+        // Auto-sync product images to Qdrant on create/update (ProductObserver).
+        'auto_sync' => env('IMAGE_SEARCH_AUTO_SYNC', true),
+        // true = index in the same HTTP request (slow; no queue worker needed on Render).
+        'sync_inline' => env('IMAGE_SEARCH_SYNC_INLINE', false),
     ],
 
     /*

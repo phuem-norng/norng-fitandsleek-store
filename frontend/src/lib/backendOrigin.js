@@ -18,15 +18,31 @@ function getConfiguredValues() {
  * fitandsleek.kalapak-team.space → frontend only; fitandsleekapp.kalapak-team.space → backend.
  * Do NOT call /api on the storefront host — it returns the SPA HTML shell, not JSON.
  */
+const DEFAULT_PRODUCTION_LARAVEL_ORIGIN =
+    (typeof import.meta.env.VITE_DEFAULT_LARAVEL_ORIGIN === "string" &&
+        import.meta.env.VITE_DEFAULT_LARAVEL_ORIGIN.trim()) ||
+    "https://norng-fitandsleek-backend.onrender.com";
+
+/** Storefront host → Laravel API origin (SPA never serves JSON at /api). */
 const PUBLIC_STOREFRONT_TO_LARAVEL_ORIGIN = {
     "fitandsleek.kalapak-team.space": "https://fitandsleekapp.kalapak-team.space",
     "www.fitandsleek.kalapak-team.space": "https://fitandsleekapp.kalapak-team.space",
+    "app.fitandsleek.phuemnorng-kalapakteam.space": DEFAULT_PRODUCTION_LARAVEL_ORIGIN,
+    "www.app.fitandsleek.phuemnorng-kalapakteam.space": DEFAULT_PRODUCTION_LARAVEL_ORIGIN,
 };
 
 function laravelOriginForPublicStorefrontHostname(hostname) {
     if (!hostname) return null;
-    const origin = PUBLIC_STOREFRONT_TO_LARAVEL_ORIGIN[String(hostname).toLowerCase()];
-    return origin || null;
+    const h = String(hostname).toLowerCase();
+    const mapped = PUBLIC_STOREFRONT_TO_LARAVEL_ORIGIN[h];
+    if (mapped) return mapped;
+    if (h.endsWith(".vercel.app")) {
+        return DEFAULT_PRODUCTION_LARAVEL_ORIGIN;
+    }
+    if (h === "phuemnorng-kalapakteam.space" || h.endsWith(".phuemnorng-kalapakteam.space")) {
+        return DEFAULT_PRODUCTION_LARAVEL_ORIGIN;
+    }
+    return null;
 }
 
 function currentOriginFallback() {
@@ -100,7 +116,11 @@ function normalizeConfiguredOrigin() {
                 return `${apiParsed.protocol}//${apiParsed.host}`;
             }
         }
-        // Same-origin `/api` behind one hostname (tunnel / reverse proxy).
+        const defaultApi = parseOrigin(DEFAULT_PRODUCTION_LARAVEL_ORIGIN);
+        if (defaultApi) {
+            return `${defaultApi.protocol}//${defaultApi.host}`;
+        }
+        // Same-origin `/api` behind one hostname (tunnel / reverse proxy / Vercel rewrites).
         if (window.location?.origin) {
             return window.location.origin;
         }

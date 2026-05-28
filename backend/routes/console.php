@@ -11,6 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('telegram:maintenance')->dailyAt('03:00');
 
 // PostgreSQL → Qdrant: index active products that have image_url but no vector yet (no manual artisan needed).
+// Backfill any products that missed the queue (failed jobs, worker was down, etc.).
 Schedule::command('qdrant:index-products --only-missing')
-    ->everyTenMinutes()
+    ->everyFiveMinutes()
     ->withoutOverlapping(25);

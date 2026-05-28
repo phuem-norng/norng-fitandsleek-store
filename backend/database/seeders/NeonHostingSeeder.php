@@ -375,17 +375,63 @@ class NeonHostingSeeder extends Seeder
 
     /**
      * Index seeded product images into Qdrant when ai-service + Qdrant are reachable.
+     * Skipped on Render/production when .env still points at Docker-only hosts (host.docker.internal).
      */
     private function tryIndexProductsInQdrant(): void
     {
+        if (! $this->qdrantConfiguredForRemoteHost()) {
+            $this->command?->line(
+                'Qdrant indexing skipped (set public QDRANT_URL + IMAGE_VECTORIZE_URL on Render, or run qdrant:index-products later).'
+            );
+
+            return;
+        }
+
         try {
-            Artisan::call('qdrant:setup');
-            Artisan::call('qdrant:index-products', [
+            $setupExit = Artisan::call('qdrant:setup');
+            $setupOutput = trim(Artisan::output());
+            if ($setupExit !== 0) {
+                $this->command?->warn('Qdrant setup skipped: '.($setupOutput ?: 'unreachable'));
+
+                return;
+            }
+
+            $indexExit = Artisan::call('qdrant:index-products', [
                 '--only-missing' => true,
             ]);
-            $this->command?->info(trim(Artisan::output()) ?: 'Qdrant indexing attempted for NH-* products.');
+            $indexOutput = trim(Artisan::output());
+            if ($indexExit !== 0) {
+                $this->command?->warn('Qdrant product indexing skipped: '.($indexOutput ?: 'failed'));
+
+                return;
+            }
+
+            $this->command?->info($indexOutput ?: 'Qdrant indexing completed for NH-* products.');
         } catch (\Throwable $e) {
-            $this->command?->warn('Qdrant indexing skipped (start ai-service + Qdrant, then run qdrant:index-products): '.$e->getMessage());
+            $this->command?->warn('Qdrant indexing skipped: '.$e->getMessage());
         }
+    }
+
+    private function qdrantConfiguredForRemoteHost(): bool
+    {
+        $urls = [
+            (string) env('QDRANT_URL', ''),
+            (string) env('IMAGE_VECTORIZE_URL', ''),
+        ];
+
+        foreach ($urls as $url) {
+            $url = strtolower(trim($url));
+            if ($url === '') {
+                return false;
+            }
+            if (str_contains($url, 'host.docker.internal')) {
+                return false;
+            }
+            if (str_contains($url, '127.0.0.1') || str_contains($url, 'localhost')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

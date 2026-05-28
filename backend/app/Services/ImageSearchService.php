@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\QdrantHttp;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -76,6 +77,24 @@ class ImageSearchService
         $this->upsertVector($productId, $vector, $metadata);
     }
 
+    public function deleteProductVector(int $productId): void
+    {
+        try {
+            $response = QdrantHttp::client(min(15, $this->timeout))
+                ->post($this->qdrantUrl.'/collections/'.$this->collection.'/points/delete?wait=true', [
+                    'points' => [$productId],
+                ]);
+        } catch (ConnectionException $e) {
+            throw new RuntimeException('Qdrant delete failed: '.$e->getMessage());
+        }
+
+        if ($response->failed() && $response->status() !== 404) {
+            throw new RuntimeException('Qdrant delete failed: '.$response->status().' '.$response->body());
+        }
+
+        Cache::forget('qdrant:collection_exists:'.$this->collection);
+    }
+
     public function upsertVector(int $productId, array $vector, array $metadata = []): void
     {
         $this->ensureCollectionExists();
@@ -97,7 +116,7 @@ class ImageSearchService
         ];
 
         try {
-            $response = Http::timeout($this->timeout)
+            $response = QdrantHttp::client($this->timeout)
                 ->put($this->qdrantUrl . '/collections/' . $this->collection . '/points?wait=true', $payload);
         } catch (ConnectionException $e) {
             throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
@@ -116,7 +135,7 @@ class ImageSearchService
         $vector = $this->vectorizeImage($image);
 
         try {
-            $response = Http::timeout($this->timeout)
+            $response = QdrantHttp::client($this->timeout)
                 ->post($this->qdrantUrl . '/collections/' . $this->collection . '/points/search', [
                     'vector' => $vector,
                     'limit' => $limit,
@@ -157,7 +176,7 @@ class ImageSearchService
         }
 
         try {
-            $check = Http::timeout(min(15, $this->timeout))
+            $check = QdrantHttp::client(min(15, $this->timeout))
                 ->get($this->qdrantUrl . '/collections/' . $this->collection);
         } catch (ConnectionException $e) {
             throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
@@ -174,7 +193,7 @@ class ImageSearchService
         }
 
         try {
-            $create = Http::timeout($this->timeout)
+            $create = QdrantHttp::client($this->timeout)
                 ->put($this->qdrantUrl . '/collections/' . $this->collection, [
                     'vectors' => [
                         'size' => 512,

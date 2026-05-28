@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Product;
+use App\Support\QdrantHttp;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -52,7 +53,7 @@ class QdrantDiagnoseCommand extends Command
         $metaUrl = $qdrant.'/collections/'.rawurlencode($collection);
         $this->line('  GET '.$metaUrl);
         try {
-            $c = Http::timeout(15)->get($metaUrl);
+            $c = QdrantHttp::client(15)->get($metaUrl);
             if ($c->successful()) {
                 $result = $c->json('result', []);
                 $this->line('  points_count: '.(string) (data_get($result, 'points_count') ?? 'n/a'));

@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Support\QdrantHttp;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
 
 class QdrantSetupCommand extends Command
 {
@@ -20,7 +20,7 @@ class QdrantSetupCommand extends Command
         $this->info("Checking Qdrant collection '{$collection}' at {$qdrantUrl}...");
 
         try {
-            $checkResponse = Http::timeout(20)->get("{$qdrantUrl}/collections/{$collection}");
+            $checkResponse = QdrantHttp::client(20)->get("{$qdrantUrl}/collections/{$collection}");
         } catch (ConnectionException $e) {
             $this->error('Unable to connect to Qdrant: '.$e->getMessage());
             return self::FAILURE;
@@ -39,7 +39,7 @@ class QdrantSetupCommand extends Command
         $this->warn("Collection '{$collection}' not found. Creating...");
 
         try {
-            $createResponse = Http::timeout(20)->put("{$qdrantUrl}/collections/{$collection}", [
+            $createResponse = QdrantHttp::client(20)->put("{$qdrantUrl}/collections/{$collection}", [
                 'vectors' => [
                     'size' => 512,
                     'distance' => 'Cosine',

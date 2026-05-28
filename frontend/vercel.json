@@ -1,5 +1,20 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://norng-fitandsleek-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/sanctum/:path*",
+      "destination": "https://norng-fitandsleek-backend.onrender.com/sanctum/:path*"
+    },
+    {
+      "source": "/storage/:path*",
+      "destination": "https://norng-fitandsleek-backend.onrender.com/storage/:path*"
+    },
+    {
+      "source": "/((?!api/|sanctum/|storage/).*)",
+      "destination": "/index.html"
+    }
   ]
 }

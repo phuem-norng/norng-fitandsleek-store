@@ -115,7 +115,22 @@ VITE_STORAGE_MEDIA_ORIGIN=https://pub-xxxx.r2.dev
 
 Test R2 from backend: `php artisan storage:test-r2`
 
-## Image search (Qdrant + CLIP)
+## Image search (Qdrant + CLIP) — optional on Render
+
+**Do not use** `host.docker.internal` or `127.0.0.1` in Render env — those only work on your laptop/Docker.
+
+On Render, either:
+
+- Leave image search disabled (storefront still works; seed skips Qdrant quietly), or
+- Host **Qdrant Cloud** + deploy **`ai-service/`** on Render (repo root `render.yaml` → service `fitandsleek-ai-vectorize`), then set:
+
+```env
+QDRANT_URL=https://xxxx.aws.cloud.qdrant.io
+QDRANT_API_KEY=your-key
+IMAGE_VECTORIZE_URL=https://fitandsleek-ai-vectorize.onrender.com/vectorize
+```
+
+After deploy, on the Laravel Render service run once: `php artisan qdrant:setup && php artisan qdrant:index-products --only-missing`
 
 Local / Docker with AI profile:
 

@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Services\ImageSearchService;
 use App\Support\ImageSearchImageFactory;
 use App\Support\Media;
+use App\Support\QdrantHttp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -27,21 +28,29 @@ class ImageSearchController extends Controller
         $vectorizeDetail = null;
         $qdrantDetail = null;
 
+        if (str_contains(strtolower($vectorizeUrl), 'host.docker.internal')
+            || str_contains(strtolower($vectorizeUrl), '127.0.0.1')
+            || str_contains(strtolower($vectorizeUrl), 'localhost')) {
+            $vectorizeDetail = 'IMAGE_VECTORIZE_URL is set for local Docker, not production. Deploy ai-service on Render and set a public https://…/vectorize URL.';
+        }
+
         try {
             $health = Http::timeout(8)->get($healthUrl);
             $vectorizeOk = $health->successful();
             if (! $vectorizeOk) {
-                $vectorizeDetail = 'HTTP '.$health->status();
+                $vectorizeDetail = $vectorizeDetail ?: 'HTTP '.$health->status();
             }
         } catch (Throwable $e) {
-            $vectorizeDetail = $e->getMessage();
+            $vectorizeDetail = $vectorizeDetail ?: $e->getMessage();
         }
 
         try {
-            $collections = Http::timeout(8)->get($qdrantUrl.'/collections');
+            $collections = QdrantHttp::client(8)->get($qdrantUrl.'/collections');
             $qdrantOk = $collections->successful();
             if (! $qdrantOk) {
-                $qdrantDetail = 'HTTP '.$collections->status();
+                $qdrantDetail = $collections->status() === 403
+                    ? 'Qdrant returned 403 — set QDRANT_API_KEY on the backend (from Qdrant Cloud → API Keys).'
+                    : 'HTTP '.$collections->status();
             }
         } catch (Throwable $e) {
             $qdrantDetail = $e->getMessage();
@@ -66,11 +75,11 @@ class ImageSearchController extends Controller
             'active_products_with_image' => $activeWithImage,
             'vectorize_url' => $vectorizeUrl,
             'qdrant_url' => $qdrantUrl,
-            'vectorize_detail' => config('app.debug') ? $vectorizeDetail : null,
-            'qdrant_detail' => config('app.debug') ? $qdrantDetail : null,
+            'vectorize_detail' => $vectorizeOk ? null : $vectorizeDetail,
+            'qdrant_detail' => $qdrantOk ? null : $qdrantDetail,
             'hint' => $ready
                 ? null
-                : 'Start Qdrant + ai-service (docker compose --profile ai up -d), then run: php artisan qdrant:setup && php artisan qdrant:index-products --only-missing',
+                : 'Ensure Qdrant + vectorize are running. New/updated products sync automatically; run qdrant:index-products --only-missing only for backfill.',
         ]);
     }
 
