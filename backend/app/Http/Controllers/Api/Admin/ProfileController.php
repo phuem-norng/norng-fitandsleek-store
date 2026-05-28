@@ -154,18 +154,23 @@ class ProfileController extends Controller
                 $path = $file->storeAs('profile_images', $filename, $profileDisk);
             }
         } catch (\Throwable $e) {
-            Log::error('Admin profile image upload failed on preferred disk.', [
+            $errorContext = [
                 'admin_id' => $user->id,
                 'preferred_disk' => $profileDisk,
                 'fallback_to_public' => $fallbackToPublic,
                 'exception' => get_class($e),
                 'error' => $e->getMessage(),
-            ]);
+            ];
+            Log::error('Admin profile image upload failed on preferred disk.', $errorContext);
+            // Ensure the same error appears in container stdout/stderr (Render live logs).
+            Log::channel('stderr')->error('Admin profile image upload failed on preferred disk.', $errorContext);
 
             if (! $fallbackToPublic) {
+                $debugEnabled = filter_var(env('ADMIN_PROFILE_IMAGE_DEBUG', false), FILTER_VALIDATE_BOOL);
                 return response()->json([
                     'success' => false,
                     'message' => 'Image upload storage is unavailable. Please retry shortly.',
+                    'debug_message' => $debugEnabled ? $e->getMessage() : null,
                 ], 503);
             }
 
