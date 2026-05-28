@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -118,8 +119,20 @@ class ProfileController extends Controller
             }
         }
 
-        // Store new image
-        $path = $request->file('profile_image')->store('profile-images', $profileDisk);
+        // Store new image with safe fallback when preferred disk is unavailable.
+        $file = $request->file('profile_image');
+        $filename = 'admin_profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        try {
+            $path = $file->storeAs('profile_images', $filename, $profileDisk);
+        } catch (\Throwable $e) {
+            Log::error('Admin profile image upload failed on preferred disk, falling back to public.', [
+                'admin_id' => $user->id,
+                'preferred_disk' => $profileDisk,
+                'error' => $e->getMessage(),
+            ]);
+
+            $path = $file->storeAs('profile_images', $filename, 'public');
+        }
         
         // Update user
         $user->update([
