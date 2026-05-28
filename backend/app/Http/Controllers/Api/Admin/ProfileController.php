@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -134,8 +135,21 @@ class ProfileController extends Controller
         $filename = 'admin_profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
         try {
             if ($profileDisk === 'cloudinary') {
-                // Cloudinary disk is more reliable with putFile than storeAs.
-                $path = Storage::disk('cloudinary')->putFile('profile_images', $file);
+                $uploadOptions = [
+                    'folder' => 'profile_images',
+                    'public_id' => pathinfo($filename, PATHINFO_FILENAME),
+                    'overwrite' => true,
+                    'resource_type' => 'image',
+                ];
+
+                $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
+                if ($preset !== '') {
+                    $uploadOptions['upload_preset'] = $preset;
+                }
+
+                // Use Cloudinary SDK directly to avoid adapter-specific failures on Render.
+                $uploadResult = Cloudinary::upload($file->getRealPath(), $uploadOptions);
+                $path = (string) $uploadResult->getSecurePath();
             } else {
                 $path = $file->storeAs('profile_images', $filename, $profileDisk);
             }
