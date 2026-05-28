@@ -2,6 +2,13 @@
 
 use Illuminate\Support\Str;
 
+$redisEnabled = filter_var(env('REDIS_ENABLED', false), FILTER_VALIDATE_BOOL);
+$cacheStore = env('CACHE_STORE', $redisEnabled ? 'failover' : 'file');
+
+if ($cacheStore === 'redis' && ! $redisEnabled) {
+    $cacheStore = 'file';
+}
+
 return [
 
     /*
@@ -15,7 +22,7 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    'default' => $cacheStore,
 
     /*
     |--------------------------------------------------------------------------
@@ -94,7 +101,8 @@ return [
         'failover' => [
             'driver' => 'failover',
             'stores' => [
-                'database',
+                'redis',
+                'file',
                 'array',
             ],
         ],

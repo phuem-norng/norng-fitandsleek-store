@@ -144,7 +144,7 @@ return [
 
     'redis' => [
 
-        'client' => env('REDIS_CLIENT', 'phpredis'),
+        'client' => env('REDIS_CLIENT', class_exists(\Redis::class) ? 'phpredis' : 'predis'),
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
@@ -154,7 +154,7 @@ return [
 
         'default' => [
             'url' => env('REDIS_URL'),
-            'scheme' => env('REDIS_SCHEME', 'tcp'),
+            'scheme' => env('REDIS_SCHEME', env('APP_ENV') === 'production' ? 'tls' : 'tcp'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'username' => env('REDIS_USERNAME'),
             'password' => env('REDIS_PASSWORD'),
@@ -164,11 +164,13 @@ return [
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
+            'read_write_timeout' => env('REDIS_READ_WRITE_TIMEOUT', 2),
+            'timeout' => env('REDIS_TIMEOUT', 2),
         ],
 
         'cache' => [
             'url' => env('REDIS_URL'),
-            'scheme' => env('REDIS_SCHEME', 'tcp'),
+            'scheme' => env('REDIS_SCHEME', env('APP_ENV') === 'production' ? 'tls' : 'tcp'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
             'username' => env('REDIS_USERNAME'),
             'password' => env('REDIS_PASSWORD'),
@@ -178,6 +180,8 @@ return [
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
+            'read_write_timeout' => env('REDIS_READ_WRITE_TIMEOUT', 2),
+            'timeout' => env('REDIS_TIMEOUT', 2),
         ],
 
     ],

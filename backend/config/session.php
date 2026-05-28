@@ -2,6 +2,13 @@
 
 use Illuminate\Support\Str;
 
+$redisEnabled = filter_var(env('REDIS_ENABLED', false), FILTER_VALIDATE_BOOL);
+$sessionDriver = env('SESSION_DRIVER', $redisEnabled ? 'redis' : 'file');
+
+if ($sessionDriver === 'redis' && ! $redisEnabled) {
+    $sessionDriver = 'file';
+}
+
 return [
 
     /*
@@ -18,7 +25,7 @@ return [
     |
     */
 
-    'driver' => env('SESSION_DRIVER', 'file'),
+    'driver' => $sessionDriver,
 
     /*
     |--------------------------------------------------------------------------
