@@ -19,6 +19,18 @@ class Media
         return preg_match('/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/', $host) === 1;
     }
 
+    private static function placeholderUrl(): string
+    {
+        $url = (string) \asset('placeholder.svg');
+
+        // Prevent mixed-content warnings when upstream app URL is accidentally http.
+        if (str_starts_with(strtolower($url), 'http://')) {
+            return 'https://' . substr($url, 7);
+        }
+
+        return $url;
+    }
+
     public static function url(?string $path): ?string
     {
         if (!$path) {
@@ -75,7 +87,7 @@ class Media
             // ignore and return placeholder below
         }
 
-        return \asset('placeholder.svg');
+        return self::placeholderUrl();
     }
 
     // Backward-compatible alias (so both calls work)
