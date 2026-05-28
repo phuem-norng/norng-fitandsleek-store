@@ -135,17 +135,17 @@ class ProfileController extends Controller
         $filename = 'admin_profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
         try {
             if ($profileDisk === 'cloudinary') {
-                $uploadOptions = [
-                    'folder' => 'profile_images',
-                    'public_id' => pathinfo($filename, PATHINFO_FILENAME),
-                    'overwrite' => true,
-                    'resource_type' => 'image',
-                ];
-
                 $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
+                $uploadOptions = ['folder' => 'profile_images'];
                 if ($preset !== '') {
+                    // Unsigned presets reject some parameters (e.g. overwrite/public_id).
                     $uploadOptions['upload_preset'] = $preset;
+                } else {
+                    // Signed upload path (via API key/secret in CLOUDINARY_URL).
+                    $uploadOptions['public_id'] = pathinfo($filename, PATHINFO_FILENAME);
+                    $uploadOptions['overwrite'] = true;
                 }
+                $uploadOptions['resource_type'] = 'image';
 
                 // Use Cloudinary SDK directly to avoid adapter-specific failures on Render.
                 $uploadResult = Cloudinary::upload($file->getRealPath(), $uploadOptions);
