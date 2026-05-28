@@ -139,9 +139,10 @@ class ProfileController extends Controller
                 $cloudName = trim((string) env('CLOUDINARY_CLOUD_NAME', ''));
                 $apiKey = trim((string) env('CLOUDINARY_API_KEY', ''));
                 $apiSecret = trim((string) env('CLOUDINARY_API_SECRET', ''));
+                $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
+                $cloudinaryUrl = trim((string) env('CLOUDINARY_URL', ''));
 
-                if ($cloudName === '' || $apiKey === '' || $apiSecret === '') {
-                    $cloudinaryUrl = trim((string) env('CLOUDINARY_URL', ''));
+                if ($cloudName === '' || $apiKey === '' || ($apiSecret === '' && $preset === '')) {
                     if ($cloudinaryUrl !== '') {
                         $parts = parse_url($cloudinaryUrl);
                         $cloudName = $cloudName !== '' ? $cloudName : trim((string) ($parts['host'] ?? ''));
@@ -150,30 +151,29 @@ class ProfileController extends Controller
                     }
                 }
 
-                if ($cloudName === '' || $apiKey === '' || $apiSecret === '') {
+                if ($cloudName === '' || ($apiKey === '' && $preset === '') || ($apiSecret === '' && $preset === '')) {
                     throw new RuntimeException('Cloudinary credentials are incomplete.');
                 }
 
-                $cloudinary = new CloudinarySdk([
-                    'cloud' => ['cloud_name' => $cloudName],
-                    'api' => ['api_key' => $apiKey, 'api_secret' => $apiSecret],
-                    'url' => ['secure' => true],
-                ]);
-
-                $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
                 $uploadOptions = ['folder' => 'profile_images'];
+                $uploadOptions['resource_type'] = 'image';
                 if ($preset !== '') {
-                    // Unsigned presets reject some parameters (e.g. overwrite/public_id).
-                    $uploadOptions['upload_preset'] = $preset;
+                    // Unsigned upload flow: does not require API secret/signature.
+                    $unsignedCloudinary = $cloudinaryUrl !== ''
+                        ? new CloudinarySdk($cloudinaryUrl)
+                        : new CloudinarySdk(['cloud' => ['cloud_name' => $cloudName], 'url' => ['secure' => true]]);
+                    $uploadResult = $unsignedCloudinary->uploadApi()->unsignedUpload($file->getRealPath(), $preset, $uploadOptions);
                 } else {
-                    // Signed upload path (via API key/secret in CLOUDINARY_URL).
+                    // Signed upload flow: requires key + secret.
                     $uploadOptions['public_id'] = pathinfo($filename, PATHINFO_FILENAME);
                     $uploadOptions['overwrite'] = true;
+                    $signedCloudinary = new CloudinarySdk([
+                        'cloud' => ['cloud_name' => $cloudName],
+                        'api' => ['api_key' => $apiKey, 'api_secret' => $apiSecret],
+                        'url' => ['secure' => true],
+                    ]);
+                    $uploadResult = $signedCloudinary->uploadApi()->upload($file->getRealPath(), $uploadOptions);
                 }
-                $uploadOptions['resource_type'] = 'image';
-
-                // Use Cloudinary SDK with explicit credentials to avoid facade config issues.
-                $uploadResult = $cloudinary->uploadApi()->upload($file->getRealPath(), $uploadOptions);
                 $path = (string) ($uploadResult['secure_url'] ?? '');
                 if ($path === '') {
                     throw new RuntimeException('Cloudinary upload did not return secure_url.');
