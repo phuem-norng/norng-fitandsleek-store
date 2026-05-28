@@ -14,6 +14,7 @@ use App\Services\TwoFactorService;
 use App\Services\VerificationChallengeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -319,7 +320,12 @@ class AuthController extends Controller
       }
 
       $purpose = $this->otpPurposeForChallenge($payload);
-      $otp = $this->sendOtpCode($user->email, $purpose);
+
+      try {
+        $otp = $this->sendOtpCode($user->email, $purpose);
+      } catch (\Throwable $e) {
+        return $this->otpMailFailedResponse($e);
+      }
 
       return response()->json([
         'message' => 'OTP sent to email.',
@@ -329,7 +335,11 @@ class AuthController extends Controller
       ]);
     }
 
-    $otp = $this->sendOtpCode($data['email'], $data['purpose']);
+    try {
+      $otp = $this->sendOtpCode($data['email'], $data['purpose']);
+    } catch (\Throwable $e) {
+      return $this->otpMailFailedResponse($e);
+    }
 
     return response()->json([
       'message' => 'OTP sent to email.',
@@ -619,9 +629,35 @@ class AuthController extends Controller
       'expires_at' => now()->addMinutes($expiresMinutes),
     ]);
 
-    Mail::to($email)->send(new OtpCodeMail($code, $purpose, $expiresMinutes));
+    try {
+      Mail::to($email)->send(new OtpCodeMail($code, $purpose, $expiresMinutes));
+    } catch (\Throwable $e) {
+      Log::error('[OTP] Failed to send verification email', [
+        'email' => $email,
+        'purpose' => $purpose,
+        'error' => $e->getMessage(),
+      ]);
 
-    return env('OTP_DEBUG', false) ? $code : null;
+      if ($this->otpDebugEnabled()) {
+        return $code;
+      }
+
+      throw $e;
+    }
+
+    return $this->otpDebugEnabled() ? $code : null;
+  }
+
+  private function otpDebugEnabled(): bool
+  {
+    return filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOLEAN);
+  }
+
+  private function otpMailFailedResponse(\Throwable $e)
+  {
+    return response()->json([
+      'message' => 'Unable to send verification email. Please check mail configuration and try again.',
+    ], 503);
   }
 
   private function issueDeviceBoundToken(
