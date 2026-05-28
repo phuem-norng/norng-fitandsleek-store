@@ -6,8 +6,10 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use App\Models\User;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Shipment;
 use App\Observers\OrderObserver;
+use App\Observers\ProductObserver;
 use App\Observers\ShipmentObserver;
 use Illuminate\Auth\Notifications\ResetPassword;
 
@@ -36,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Order::observe(OrderObserver::class);
+        Product::observe(ProductObserver::class);
         Shipment::observe(ShipmentObserver::class);
     }
 }

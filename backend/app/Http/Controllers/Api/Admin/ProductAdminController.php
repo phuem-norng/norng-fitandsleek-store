@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
-use App\Jobs\SyncProductToQdrant;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Product;
@@ -367,10 +366,6 @@ class ProductAdminController extends Controller
 
         $product = Product::create($data);
 
-        if ($product->is_active && filled($product->image_url)) {
-            SyncProductToQdrant::dispatch($product->id)->afterCommit();
-        }
-
         // Auto-create a customer/guest message for new products (EN + KM)
         try {
             $payload = [
@@ -460,11 +455,6 @@ class ProductAdminController extends Controller
         $this->materializeProductMedia($data);
 
         $product->update($data);
-
-        if ($product->is_active && filled($product->image_url)
-            && (array_key_exists('image_url', $data) || array_key_exists('is_active', $data))) {
-            SyncProductToQdrant::dispatch($product->id)->afterCommit();
-        }
 
         return $product->load(['category', 'brand', 'activeDiscount']);
     }

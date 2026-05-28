@@ -180,6 +180,22 @@ class ImageSearchService
             ->all();
     }
 
+    public function deletePoint(int $pointId): void
+    {
+        try {
+            $response = $this->qdrantHttp()
+                ->post($this->qdrantUrl . '/collections/' . $this->collection . '/points/delete?wait=true', [
+                    'points' => [$pointId],
+                ]);
+        } catch (ConnectionException $e) {
+            throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
+        }
+
+        if ($response->failed()) {
+            throw new RuntimeException('Qdrant delete failed: ' . $response->status() . ' ' . $response->body());
+        }
+    }
+
     public function ensureCollectionExists(): void
     {
         try {

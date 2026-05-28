@@ -49,14 +49,14 @@ class ProductQdrantIndexer
                 'is_vector_indexed' => true,
                 'vector_indexed_at' => now(),
                 'vector_index_error' => null,
-            ])->save();
+            ])->saveQuietly();
         } catch (\Throwable $e) {
             $message = Str::limit($e->getMessage(), 1000, '...');
 
             $product->forceFill([
                 'is_vector_indexed' => false,
                 'vector_index_error' => $message,
-            ])->save();
+            ])->saveQuietly();
 
             throw $e;
         } finally {
@@ -64,6 +64,24 @@ class ProductQdrantIndexer
                 @unlink($tempPath);
             }
         }
+    }
+
+    public function remove(Product $product): void
+    {
+        $this->imageSearchService->deletePoint($product->id);
+
+        if ($product->exists) {
+            $product->forceFill([
+                'is_vector_indexed' => false,
+                'vector_indexed_at' => null,
+                'vector_index_error' => null,
+            ])->saveQuietly();
+        }
+    }
+
+    public function removeById(int $productId): void
+    {
+        $this->imageSearchService->deletePoint($productId);
     }
 
     /**
