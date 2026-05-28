@@ -133,12 +133,18 @@ class ProfileController extends Controller
         $file = $request->file('profile_image');
         $filename = 'admin_profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
         try {
-            $path = $file->storeAs('profile_images', $filename, $profileDisk);
+            if ($profileDisk === 'cloudinary') {
+                // Cloudinary disk is more reliable with putFile than storeAs.
+                $path = Storage::disk('cloudinary')->putFile('profile_images', $file);
+            } else {
+                $path = $file->storeAs('profile_images', $filename, $profileDisk);
+            }
         } catch (\Throwable $e) {
             Log::error('Admin profile image upload failed on preferred disk.', [
                 'admin_id' => $user->id,
                 'preferred_disk' => $profileDisk,
                 'fallback_to_public' => $fallbackToPublic,
+                'exception' => get_class($e),
                 'error' => $e->getMessage(),
             ]);
 
