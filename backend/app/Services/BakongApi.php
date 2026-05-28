@@ -69,12 +69,21 @@ class BakongApi
         }
 
         if ($response->failed()) {
-            throw new RuntimeException('Bakong proxy HTTP ' . $response->status() . ': ' . $response->body());
+            $body = $response->body();
+            if (str_contains($body, 'CloudFront') || str_contains($body, '<HTML>')) {
+                throw new RuntimeException(
+                    'Bakong proxy blocked by CloudFront (403). Redeploy worker-forward.js — do not forward Host header.'
+                );
+            }
+
+            throw new RuntimeException('Bakong proxy HTTP ' . $response->status() . ': ' . $body);
         }
 
         $json = $response->json();
         if (! is_array($json)) {
-            throw new RuntimeException('Bakong proxy returned an invalid response.');
+            throw new RuntimeException(
+                'Bakong proxy returned non-JSON. Check Cloudflare worker and BAKONG_PROXY_URL.'
+            );
         }
 
         return $json;
