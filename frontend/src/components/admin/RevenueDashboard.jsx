@@ -37,11 +37,11 @@ const fullUsd = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-const PANEL_HEADERS = {
-  line: { bg: "#fecdd3", title: "#7f1d1d" },
-  column: { bg: "#e9d5ff", title: "#581c87" },
-  product: { bg: "#93c5fd", title: "#1e3a8a" },
-  country: { bg: "#e2e8f0", title: "#334155" },
+const PANEL_VARIANTS = {
+  line:    { from: "#EEF2FF", to: "#E0E7FF", text: "#3730A3", border: "#C7D2FE", darkBg: "rgba(99,102,241,0.12)", darkText: "#818CF8" },
+  column:  { from: "#F5F3FF", to: "#EDE9FE", text: "#5B21B6", border: "#DDD6FE", darkBg: "rgba(139,92,246,0.12)", darkText: "#A78BFA" },
+  product: { from: "#EFF6FF", to: "#DBEAFE", text: "#1D4ED8", border: "#BFDBFE", darkBg: "rgba(14,165,233,0.12)", darkText: "#38BDF8" },
+  country: { from: "#F0FDF4", to: "#DCFCE7", text: "#15803D", border: "#BBF7D0", darkBg: "rgba(16,185,129,0.12)", darkText: "#34D399" },
 };
 
 function truncateLabel(value, max = 26) {
@@ -51,14 +51,32 @@ function truncateLabel(value, max = 26) {
 }
 
 function RevenueVisualPanel({ title, variant, children, theme, action, style }) {
-  const accent = PANEL_HEADERS[variant] || PANEL_HEADERS.country;
+  const v = PANEL_VARIANTS[variant] || PANEL_VARIANTS.country;
   return (
     <div
-      className="flex h-full min-h-[300px] flex-col overflow-hidden rounded-2xl border"
-      style={{ borderColor: theme.cardBorder, background: theme.panelBg, ...style }}
+      className="flex h-full min-h-[300px] flex-col overflow-hidden rounded-xl border"
+      style={{
+        borderColor: theme.isDark ? "transparent" : v.border,
+        background: theme.cardBg,
+        boxShadow: theme.isDark
+          ? "0 1px 4px rgba(0,0,0,0.25)"
+          : "0 1px 4px rgba(15,23,42,0.05)",
+        ...style,
+      }}
     >
-      <div className="flex items-center justify-between gap-2 px-4 py-2.5" style={{ background: accent.bg }}>
-        <h3 className="text-sm font-semibold" style={{ color: accent.title }}>
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-2.5 border-b"
+        style={{
+          background: theme.isDark
+            ? v.darkBg
+            : `linear-gradient(to right, ${v.from}, ${v.to})`,
+          borderColor: theme.isDark ? "transparent" : v.border,
+        }}
+      >
+        <h3
+          className="text-xs font-bold tracking-tight"
+          style={{ color: theme.isDark ? v.darkText : v.text }}
+        >
           {title}
         </h3>
         {action}
@@ -71,15 +89,18 @@ function RevenueVisualPanel({ title, variant, children, theme, action, style }) 
 function FilterSelect({ label, value, onChange, options, theme }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide" style={{ color: theme.subtitle }}>
+      <span
+        className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest"
+        style={{ color: theme.subtitle }}
+      >
         {label}
       </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full rounded-xl border px-3 text-sm outline-none dark:[color-scheme:dark]"
+        className="h-10 w-full rounded-xl border px-3 text-sm font-medium outline-none dark:[color-scheme:dark]"
         style={{
-          background: theme.isDark ? "rgba(15, 23, 42, 0.6)" : "#ffffff",
+          background: theme.isDark ? "rgba(255,255,255,0.05)" : "#F8FAFC",
           borderColor: theme.cardBorder,
           color: theme.title,
         }}
@@ -190,6 +211,7 @@ export default function RevenueDashboard({ theme }) {
           : `${fullUsd.format(data?.total_revenue || 0)} total · ${yearNum}`
       }
       theme={theme}
+      showAccent={false}
     >
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <FilterSelect label="Year" value={year} onChange={setYear} options={yearOptions} theme={theme} />

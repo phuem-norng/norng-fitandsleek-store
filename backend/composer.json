@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "barryvdh/laravel-dompdf": "^3.1",
+        "cloudinary-labs/cloudinary-laravel": "*",
         "endroid/qr-code": "^5.0",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.2",

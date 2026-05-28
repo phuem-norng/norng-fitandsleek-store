@@ -604,7 +604,7 @@ export default function CustomerProfile() {
 
   return (
     <>
-      <div className="container-safe py-4 sm:py-6 lg:py-8">
+      <div className="container-safe fs-customer-profile py-4 sm:py-6 lg:py-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#6F8B7F] to-[#5f786d] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 text-white mb-4 sm:mb-6 lg:mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -976,9 +976,12 @@ export default function CustomerProfile() {
                 {addresses.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                     {addresses.map((addr) => (
-                      <div key={addr.id} className={`border-2 rounded-lg p-6 ${addr.is_default ? 'border-[#6F8B7F] bg-[#eef3f0]' : 'border-gray-200'}`}>
+                      <div
+                        key={addr.id}
+                        className={`fs-profile-address-card border-2 rounded-lg p-6 ${addr.is_default ? 'fs-profile-address-card--default border-[#6F8B7F] bg-[#eef3f0]' : 'border-gray-200'}`}
+                      >
                         {addr.is_default && (
-                          <span className="inline-block bg-[#6F8B7F] text-white text-xs font-bold px-2 py-1 rounded mb-3">
+                          <span className="fs-profile-address-default-badge inline-block bg-[#6F8B7F] text-white text-xs font-bold px-2 py-1 rounded mb-3">
                             DEFAULT
                           </span>
                         )}
@@ -1022,22 +1025,22 @@ export default function CustomerProfile() {
                         ) : (
                           <>
                             <p className="font-bold text-lg mb-1">{addr.label}</p>
-                            <p className="text-gray-700 text-sm mb-1"><span className="font-semibold">Receiver:</span> {addr.receiver_name || "-"}</p>
-                            <p className="text-gray-700 text-sm mb-1"><span className="font-semibold">Phone:</span> {addr.receiver_phone || "-"}</p>
-                            <p className="text-gray-700 text-sm mb-1">{addr.formatted_address || [addr.street, addr.city, addr.state, addr.zip, addr.country].filter(Boolean).join(", ")}</p>
+                            <p className="fs-profile-address-text text-gray-700 text-sm mb-1"><span className="font-semibold">Receiver:</span> {addr.receiver_name || "-"}</p>
+                            <p className="fs-profile-address-text text-gray-700 text-sm mb-1"><span className="font-semibold">Phone:</span> {addr.receiver_phone || "-"}</p>
+                            <p className="fs-profile-address-text text-gray-700 text-sm mb-1">{addr.formatted_address || [addr.street, addr.city, addr.state, addr.zip, addr.country].filter(Boolean).join(", ")}</p>
                             {(addr.latitude && addr.longitude) ? (
                               <a
                                 href={`https://www.google.com/maps?q=${addr.latitude},${addr.longitude}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs font-semibold text-[#6F8B7F] hover:text-[#5f786d]"
+                                className="fs-profile-address-link text-xs font-semibold text-[#6F8B7F] hover:text-[#5f786d]"
                               >
                                 View Pin ({Number(addr.latitude).toFixed(4)}, {Number(addr.longitude).toFixed(4)})
                               </a>
                             ) : null}
                             <div className="mt-4 flex flex-wrap gap-3">
                               {!addr.is_default && (
-                                <button onClick={() => setAsDefaultAddress(addr.id)} className="text-[#6F8B7F] hover:text-[#5f786d] text-sm font-semibold">Set as Default</button>
+                                <button onClick={() => setAsDefaultAddress(addr.id)} className="fs-profile-address-link text-[#6F8B7F] hover:text-[#5f786d] text-sm font-semibold">Set as Default</button>
                               )}
                               <button onClick={() => startEditAddress(addr)} className="text-slate-700 hover:text-slate-900 text-sm font-semibold">Edit</button>
                               <button onClick={() => handleDeleteAddress(addr.id)} className="text-red-600 hover:text-red-700 text-sm font-semibold">Delete</button>

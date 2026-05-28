@@ -1848,27 +1848,29 @@ html.admin-dashboard[data-admin-theme="dark"] .admin-theme .admin-surface {
 }
 
 .admin-theme .reports-dashboard .report-chart-panel {
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .admin-theme .reports-dashboard .report-chart-panel:hover {
-  box-shadow: 0 8px 28px rgba(148, 163, 184, 0.22);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
 }
 
 html.admin-dashboard[data-admin-theme="dark"] .admin-theme .reports-dashboard .report-chart-panel:hover {
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(99, 102, 241, 0.15);
+  transform: translateY(-1px);
 }
 
 .admin-theme .reports-dashboard .admin-stat-grid > .admin-surface {
   background: #ffffff !important;
-  border-color: rgba(226, 232, 240, 0.95) !important;
-  box-shadow: 0 4px 24px rgba(148, 163, 184, 0.16);
+  border-color: rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(99, 102, 241, 0.06);
 }
 
 html.admin-dashboard[data-admin-theme="dark"] .admin-theme .reports-dashboard .admin-stat-grid > .admin-surface {
-  background: rgba(30, 41, 59, 0.55) !important;
-  border-color: rgba(148, 163, 184, 0.12) !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  background: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(148, 163, 184, 0.1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 /* Shell rail / topbar (dark: canvas color). Light: rely on bg-white on the same node. */
@@ -3007,4 +3009,32 @@ html[data-storefront-theme="dark"] [class*="shadow-2xl"][class~="bg-white"],
 html[data-storefront-theme="dark"] [class*="shadow-xl"][class~="bg-white"] {
   background-color: #161b22 !important;
   box-shadow: 0 12px 48px rgba(1, 4, 9, 0.6) !important;
+}
+
+/* Customer profile page: explicit dark-mode hooks for address cards */
+html[data-storefront-theme="dark"] .fs-site .fs-customer-profile .fs-profile-address-card {
+  background-color: #161b22 !important;
+  border-color: #30363d !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-customer-profile .fs-profile-address-card--default {
+  background-color: #1f2a23 !important;
+  border-color: #3f5a4d !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-customer-profile .fs-profile-address-default-badge {
+  background-color: #4f7d67 !important;
+  color: #f0f6fc !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-customer-profile .fs-profile-address-text {
+  color: #d0d7de !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-customer-profile .fs-profile-address-link {
+  color: #9ecbb6 !important;
+}
+
+html[data-storefront-theme="dark"] .fs-site .fs-customer-profile .fs-profile-address-link:hover {
+  color: #b8decc !important;
 }
