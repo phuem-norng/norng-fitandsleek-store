@@ -9,7 +9,7 @@ use App\Services\StockReceiveService;
 use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class CategoryAdminController extends BaseAdminController
@@ -46,7 +46,7 @@ class CategoryAdminController extends BaseAdminController
     /** Save a camera/base64 upload to media disk so list views can use a small URL. */
     private function persistInlineImageUrl(Category $category, string $dataUrl, string $folder = 'categories'): ?string
     {
-        if (! preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
+        if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
             return null;
         }
 
@@ -76,12 +76,12 @@ class CategoryAdminController extends BaseAdminController
         }
 
         $url = trim((string) ($category->image_url ?? ''));
-        if ($url === '' || ! $this->isInlineDataUrl($url)) {
+        if ($url === '' || !$this->isInlineDataUrl($url)) {
             return null;
         }
 
         $path = $this->persistInlineImageUrl($category, $url);
-        if (! $path) {
+        if (!$path) {
             return null;
         }
 
@@ -109,9 +109,8 @@ class CategoryAdminController extends BaseAdminController
 
             if ($this->isInlineDataUrl($line)) {
                 $path = $this->persistInlineImageUrl($category, $line, 'categories/gallery');
-                $url = $path ? Media::url($path) : null;
-                if ($url) {
-                    $out[] = $url;
+                if ($path) {
+                    $out[] = Media::isExternalUrl($path) ? $path : (Media::url($path) ?? $path);
                 }
 
                 continue;
@@ -162,7 +161,7 @@ class CategoryAdminController extends BaseAdminController
     {
         $url = trim((string) ($c->image_url ?? ''));
 
-        if ($url !== '' && ! $this->isInlineDataUrl($url)) {
+        if ($url !== '' && !$this->isInlineDataUrl($url)) {
             return $url;
         }
 
@@ -175,7 +174,7 @@ class CategoryAdminController extends BaseAdminController
             $parent = $c->relationLoaded('parent') ? $c->parent : $c->parent()->first();
             if ($parent instanceof Category) {
                 $parentUrl = trim((string) ($parent->image_url ?? ''));
-                if ($parentUrl !== '' && ! $this->isInlineDataUrl($parentUrl)) {
+                if ($parentUrl !== '' && !$this->isInlineDataUrl($parentUrl)) {
                     return $parentUrl;
                 }
                 if ($parent->image_path) {
@@ -292,7 +291,7 @@ class CategoryAdminController extends BaseAdminController
             ->orderBy('name');
 
         // Stock & Inventory uses barcode_qr rows; keep them out of the Categories admin list unless requested.
-        if (! $request->boolean('include_stock_labels')) {
+        if (!$request->boolean('include_stock_labels')) {
             $query->catalogOnly();
         } else {
             $fromDate = trim((string) $request->input('from_date', ''));
@@ -314,9 +313,41 @@ class CategoryAdminController extends BaseAdminController
             }
         }
 
-        $items = $query->get()->map(fn ($c) => $this->mapCategory($c, forList: true));
+        $items = $query->get()->map(fn($c) => $this->mapCategory($c, forList: true));
 
         return response()->json(['data' => $items]);
+    }
+
+    /** Stock inventory / label photo upload → Cloudinary (or configured media disk). */
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,svg', 'max:10240'],
+        ]);
+
+        try {
+            $stored = Media::storeUploaded($request->file('image'), 'categories');
+        } catch (\Throwable $e) {
+            Log::error('Category image upload failed.', [
+                'disk' => $this->mediaDisk(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Image upload failed.',
+                'errors' => ['image' => ['Could not upload image to media storage. Please retry.']],
+            ], 503);
+        }
+
+        $stored = str_replace('\\', '/', trim($stored));
+        $url = Media::isExternalUrl($stored)
+            ? $stored
+            : (Media::url($stored) ?? $stored);
+
+        return response()->json([
+            'message' => 'Image uploaded',
+            'image_url' => $url,
+        ]);
     }
 
     public function store(Request $request)

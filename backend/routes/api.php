@@ -278,6 +278,7 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::get('/pos/sale-history', [PosSaleHistoryController::class, 'index']);
 
     // CRUD
+    Route::post('categories/image-upload', [CategoryAdminController::class, 'uploadImage']);
     Route::post('categories/{category}/quick-restock', [CategoryAdminController::class, 'quickRestock']);
     Route::get('inventory-integrity', [InventoryIntegrityController::class, 'index']);
     Route::post('inventory-integrity/repair', [InventoryIntegrityController::class, 'repair']);

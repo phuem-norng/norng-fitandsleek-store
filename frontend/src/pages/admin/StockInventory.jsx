@@ -834,18 +834,34 @@ export default function AdminBarcodeQR() {
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/(^-|-$)/g, "");
 
-    /* ── Image upload helpers ── */
+    /* ── Image upload helpers (Cloudinary via API) ── */
+    const uploadCategoryImage = async (file) => {
+        const fd = new FormData();
+        fd.append("image", file);
+        const { data } = await api.post("/admin/categories/image-upload", fd);
+        const raw =
+            data?.image_url ||
+            data?.data?.image_url ||
+            (typeof data?.data === "string" ? data.data : "");
+        return String(raw || "").trim();
+    };
+
     const handleImageUpload = async (e, isEdit = false) => {
         const file = e.target.files[0];
+        if (e.target) e.target.value = "";
         if (!file) return;
         setIsUploading(true);
+        setErr("");
         try {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                if (isEdit) setEditing((s) => ({ ...s, image_url: reader.result }));
-                else setForm((s) => ({ ...s, image_url: reader.result }));
-            };
-            reader.readAsDataURL(file);
+            const url = await uploadCategoryImage(file);
+            if (!url) {
+                setErr("Upload did not return an image URL. Try again or check storage.");
+                return;
+            }
+            if (isEdit) setEditing((s) => ({ ...s, image_url: url }));
+            else setForm((s) => ({ ...s, image_url: url }));
+        } catch (error) {
+            setErr(extractErr(error));
         } finally {
             setIsUploading(false);
         }
@@ -853,24 +869,28 @@ export default function AdminBarcodeQR() {
 
     const handleGalleryUpload = async (e, isEdit = false) => {
         const files = e.target.files;
+        if (e.target) e.target.value = "";
         if (!files || files.length === 0) return;
         setIsUploading(true);
+        setErr("");
         try {
             const urls = [];
             for (const file of Array.from(files)) {
-                await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => { urls.push(reader.result); resolve(); };
-                    reader.readAsDataURL(file);
-                });
+                const url = await uploadCategoryImage(file);
+                if (url) urls.push(url);
+            }
+            if (urls.length === 0) {
+                setErr("No images were uploaded. Try again or check storage.");
+                return;
             }
             const setter = isEdit ? setEditing : setForm;
             setter((s) => {
                 const current = parseGallery(s.gallery);
                 return { ...s, gallery: [...current, ...urls].filter(Boolean).join("\n") };
             });
+        } catch (error) {
+            setErr(extractErr(error));
         } finally {
-            if (e.target) e.target.value = "";
             setIsUploading(false);
         }
     };
@@ -882,12 +902,13 @@ export default function AdminBarcodeQR() {
         pendingReplaceGalleryIndexRef.current = null;
         if (!file || targetIndex == null || Number.isNaN(targetIndex)) return;
         setIsUploading(true);
+        setErr("");
         try {
-            const newUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(file);
-            });
+            const newUrl = await uploadCategoryImage(file);
+            if (!newUrl) {
+                setErr("Upload did not return an image URL. Try again or check storage.");
+                return;
+            }
             const setter = isEdit ? setEditing : setForm;
             setter((s) => {
                 const current = parseGallery(s.gallery);
@@ -896,6 +917,8 @@ export default function AdminBarcodeQR() {
                 next[targetIndex] = newUrl;
                 return { ...s, gallery: next.filter(Boolean).join("\n") };
             });
+        } catch (error) {
+            setErr(extractErr(error));
         } finally {
             setIsUploading(false);
         }
@@ -908,27 +931,25 @@ export default function AdminBarcodeQR() {
         if (!file) return;
         setAiBusy(true);
         setIsUploading(true);
+        setErr("");
         try {
-            const dataUrl = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-            setData((s) => ({ ...s, image_url: dataUrl }));
+            const imageUrl = await uploadCategoryImage(file);
+            if (!imageUrl) {
+                setErr("Upload did not return an image URL. Try again or check storage.");
+                return;
+            }
+            setData((s) => ({ ...s, image_url: imageUrl }));
 
             const fd = new FormData();
             fd.append("image", file);
             try {
-                const { data: vis } = await api.post("/vision/search", fd, {
-                    headers: { "Content-Type": "multipart/form-data" },
-                });
+                const { data: vis } = await api.post("/vision/search", fd);
                 const top = vis?.products?.[0];
                 if (top) {
                     const priceVal = top.final_price ?? top.price;
                     setData((s) => ({
                         ...s,
-                        image_url: dataUrl,
+                        image_url: imageUrl,
                         name: top.name || s.name,
                         description: top.description != null ? String(top.description) : s.description,
                         price: priceVal != null && priceVal !== "" ? String(priceVal) : s.price,
