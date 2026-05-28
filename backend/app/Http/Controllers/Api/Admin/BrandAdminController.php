@@ -65,9 +65,16 @@ class BrandAdminController extends BaseAdminController
                 'error' => $e->getMessage(),
             ]);
 
+            $debugEnabled = filter_var(env('ADMIN_PROFILE_IMAGE_DEBUG', false), FILTER_VALIDATE_BOOL);
+            $message = 'Could not upload logo to media storage. Please retry.';
+            if ($debugEnabled) {
+                $message .= ' ('.$e->getMessage().')';
+            }
+
             return response()->json([
                 'message' => 'Logo upload failed.',
-                'errors' => ['logo' => ['Could not upload logo to media storage. Please retry.']],
+                'errors' => ['logo' => [$message]],
+                'debug_message' => $debugEnabled ? $e->getMessage() : null,
             ], 503);
         }
     }

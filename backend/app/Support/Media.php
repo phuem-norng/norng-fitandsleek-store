@@ -2,9 +2,12 @@
 
 namespace App\Support;
 
+use Cloudinary\Cloudinary as CloudinarySdk;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 class Media
 {
@@ -135,6 +138,113 @@ class Media
         return self::url($path);
     }
 
+    private static function usesCloudinaryDisk(?string $disk): bool
+    {
+        return ($disk ?? self::disk()) === 'cloudinary';
+    }
+
+    /**
+     * @return array{cloudName: string, apiKey: string, apiSecret: string, cloudinaryUrl: string, preset: string}
+     */
+    private static function cloudinaryCredentials(): array
+    {
+        $cloudName = trim((string) env('CLOUDINARY_CLOUD_NAME', ''));
+        $apiKey = trim((string) env('CLOUDINARY_API_KEY', ''));
+        $apiSecret = trim((string) env('CLOUDINARY_API_SECRET', ''));
+        $cloudinaryUrl = trim((string) env('CLOUDINARY_URL', ''));
+        $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
+
+        if ($cloudinaryUrl !== '') {
+            $parts = parse_url($cloudinaryUrl);
+            if ($cloudName === '') {
+                $cloudName = trim((string) ($parts['host'] ?? ''));
+            }
+            if ($apiKey === '') {
+                $apiKey = trim((string) ($parts['user'] ?? ''));
+            }
+            if ($apiSecret === '') {
+                $apiSecret = trim((string) ($parts['pass'] ?? ''));
+            }
+        }
+
+        return compact('cloudName', 'apiKey', 'apiSecret', 'cloudinaryUrl', 'preset');
+    }
+
+    /**
+     * Reliable Cloudinary upload (unsigned preset or signed API). Returns secure HTTPS URL.
+     */
+    public static function uploadToCloudinary(UploadedFile $file, string $folder): string
+    {
+        $creds = self::cloudinaryCredentials();
+        $folder = trim($folder, '/');
+
+        if ($creds['cloudName'] === '') {
+            throw new RuntimeException('Cloudinary cloud name is not configured.');
+        }
+
+        $uploadOptions = [
+            'folder' => $folder,
+            'resource_type' => 'image',
+        ];
+
+        $realPath = $file->getRealPath();
+        if ($realPath === false || ! is_readable($realPath)) {
+            throw new RuntimeException('Uploaded file is not readable.');
+        }
+
+        if ($creds['preset'] !== '') {
+            $sdk = $creds['cloudinaryUrl'] !== ''
+                ? new CloudinarySdk($creds['cloudinaryUrl'])
+                : new CloudinarySdk([
+                    'cloud' => ['cloud_name' => $creds['cloudName']],
+                    'url' => ['secure' => true],
+                ]);
+            $result = $sdk->uploadApi()->unsignedUpload($realPath, $creds['preset'], $uploadOptions);
+        } else {
+            if ($creds['apiKey'] === '' || $creds['apiSecret'] === '') {
+                throw new RuntimeException('Cloudinary API key/secret or CLOUDINARY_UPLOAD_PRESET is required.');
+            }
+            $sdk = new CloudinarySdk([
+                'cloud' => ['cloud_name' => $creds['cloudName']],
+                'api' => ['api_key' => $creds['apiKey'], 'api_secret' => $creds['apiSecret']],
+                'url' => ['secure' => true],
+            ]);
+            $uploadOptions['public_id'] = $folder.'/'.Str::uuid();
+            $result = $sdk->uploadApi()->upload($realPath, $uploadOptions);
+        }
+
+        $url = (string) ($result['secure_url'] ?? '');
+        if ($url === '') {
+            throw new RuntimeException('Cloudinary upload did not return secure_url.');
+        }
+
+        return $url;
+    }
+
+    private static function persistUploadedFile(
+        UploadedFile $file,
+        string $directory,
+        ?string $filename,
+        ?string $disk
+    ): string {
+        $disk = $disk ?? self::disk();
+        $directory = trim($directory, '/');
+
+        if (self::usesCloudinaryDisk($disk)) {
+            return self::uploadToCloudinary($file, $directory);
+        }
+
+        $path = $filename !== null
+            ? $file->storeAs($directory, $filename, $disk)
+            : $file->store($directory, $disk);
+
+        if (! is_string($path) || trim($path) === '') {
+            throw new RuntimeException('Storage did not return a file path.');
+        }
+
+        return self::canonicalStoredReference($path, $disk);
+    }
+
     /**
      * Store an uploaded file on the configured media disk (Cloudinary when FILESYSTEM_DISK=cloudinary).
      * Returns a disk key or absolute CDN URL suitable for persisting in the database.
@@ -144,9 +254,7 @@ class Media
         $disk = $disk ?? self::disk();
 
         try {
-            $path = $file->store(trim($directory, '/'), $disk);
-
-            return self::canonicalStoredReference($path, $disk);
+            return self::persistUploadedFile($file, $directory, null, $disk);
         } catch (\Throwable $e) {
             if (! self::fallbackToPublic() || $disk === 'public') {
                 throw $e;
@@ -158,9 +266,7 @@ class Media
                 'error' => $e->getMessage(),
             ]);
 
-            $path = $file->store(trim($directory, '/'), 'public');
-
-            return self::canonicalStoredReference($path, 'public');
+            return self::persistUploadedFile($file, $directory, null, 'public');
         }
     }
 
@@ -171,12 +277,9 @@ class Media
         ?string $disk = null
     ): string {
         $disk = $disk ?? self::disk();
-        $directory = trim($directory, '/');
 
         try {
-            $path = $file->storeAs($directory, $filename, $disk);
-
-            return self::canonicalStoredReference($path, $disk);
+            return self::persistUploadedFile($file, $directory, $filename, $disk);
         } catch (\Throwable $e) {
             if (! self::fallbackToPublic() || $disk === 'public') {
                 throw $e;
@@ -189,9 +292,7 @@ class Media
                 'error' => $e->getMessage(),
             ]);
 
-            $path = $file->storeAs($directory, $filename, 'public');
-
-            return self::canonicalStoredReference($path, 'public');
+            return self::persistUploadedFile($file, $directory, $filename, 'public');
         }
     }
 
@@ -201,6 +302,24 @@ class Media
         $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
 
         try {
+            if (self::usesCloudinaryDisk($disk)) {
+                $ext = pathinfo($relativePath, PATHINFO_EXTENSION) ?: 'jpg';
+                $folder = pathinfo($relativePath, PATHINFO_DIRNAME);
+                $folder = $folder === '.' ? '' : $folder;
+                $tmp = tempnam(sys_get_temp_dir(), 'cld_');
+                if ($tmp === false) {
+                    throw new RuntimeException('Could not create temporary file for Cloudinary upload.');
+                }
+                try {
+                    file_put_contents($tmp, $contents);
+                    $upload = new UploadedFile($tmp, basename($relativePath) ?: 'upload.'.$ext, null, null, true);
+
+                    return self::uploadToCloudinary($upload, $folder);
+                } finally {
+                    @unlink($tmp);
+                }
+            }
+
             Storage::disk($disk)->put($relativePath, $contents);
 
             return self::canonicalStoredReference($relativePath, $disk);
