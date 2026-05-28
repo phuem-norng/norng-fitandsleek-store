@@ -107,14 +107,19 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        $profileDisk = (string) config('filesystems.default', 'public');
 
         // Delete old image if exists
-        if ($user->profile_image_path && Storage::disk('public')->exists($user->profile_image_path)) {
-            Storage::disk('public')->delete($user->profile_image_path);
+        if ($user->profile_image_path) {
+            try {
+                Storage::disk($profileDisk)->delete($user->profile_image_path);
+            } catch (\Throwable) {
+                // Best-effort cleanup for legacy paths from other disks.
+            }
         }
 
         // Store new image
-        $path = $request->file('profile_image')->store('profile-images', 'public');
+        $path = $request->file('profile_image')->store('profile-images', $profileDisk);
         
         // Update user
         $user->update([

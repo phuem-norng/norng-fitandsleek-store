@@ -53,9 +53,10 @@ class DriverAdminController extends Controller
             'profile_image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'],
         ]);
 
+        $profileDisk = (string) config('filesystems.default', 'public');
         $path = null;
         if ($request->hasFile('profile_image')) {
-            $path = $request->file('profile_image')->store('profile-images', 'public');
+            $path = $request->file('profile_image')->store('profile-images', $profileDisk);
         }
 
         $driver = User::create([
@@ -93,10 +94,15 @@ class DriverAdminController extends Controller
         ]);
 
         if ($request->hasFile('profile_image')) {
-            if ($driver->profile_image_path && Storage::disk('public')->exists($driver->profile_image_path)) {
-                Storage::disk('public')->delete($driver->profile_image_path);
+            $profileDisk = (string) config('filesystems.default', 'public');
+            if ($driver->profile_image_path) {
+                try {
+                    Storage::disk($profileDisk)->delete($driver->profile_image_path);
+                } catch (\Throwable) {
+                    // Best-effort cleanup for legacy paths from other disks.
+                }
             }
-            $newPath = $request->file('profile_image')->store('profile-images', 'public');
+            $newPath = $request->file('profile_image')->store('profile-images', $profileDisk);
             $validated['profile_image_path'] = $newPath;
             $validated['profile_image_updated_at'] = now();
         }

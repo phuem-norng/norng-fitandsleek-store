@@ -83,16 +83,21 @@ class CustomerProfileController extends Controller
         ]);
 
         $user = auth()->user();
+        $profileDisk = (string) config('filesystems.default', 'public');
 
         // Delete old image if exists
-        if ($user->profile_image_path && Storage::disk('public')->exists($user->profile_image_path)) {
-            Storage::disk('public')->delete($user->profile_image_path);
+        if ($user->profile_image_path) {
+            try {
+                Storage::disk($profileDisk)->delete($user->profile_image_path);
+            } catch (\Throwable) {
+                // Best-effort cleanup for legacy paths from other disks.
+            }
         }
 
         // Store new image
         $file = $request->file('profile_image');
         $filename = 'profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs('profile_images', $filename, 'public');
+        $path = $file->storeAs('profile_images', $filename, $profileDisk);
 
         // Update user
         $user->update(['profile_image_path' => $path]);
