@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -150,14 +151,21 @@ class ImageSearchService
 
     public function ensureCollectionExists(): void
     {
+        $cacheKey = 'qdrant:collection_exists:'.$this->collection;
+        if (Cache::get($cacheKey) === true) {
+            return;
+        }
+
         try {
-            $check = Http::timeout($this->timeout)
+            $check = Http::timeout(min(15, $this->timeout))
                 ->get($this->qdrantUrl . '/collections/' . $this->collection);
         } catch (ConnectionException $e) {
             throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
         }
 
         if ($check->successful()) {
+            Cache::put($cacheKey, true, now()->addHour());
+
             return;
         }
 
@@ -180,5 +188,7 @@ class ImageSearchService
         if ($create->failed()) {
             throw new RuntimeException('Failed to create Qdrant collection: ' . $create->status() . ' ' . $create->body());
         }
+
+        Cache::put($cacheKey, true, now()->addHour());
     }
 }

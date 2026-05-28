@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Message;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use App\Support\MediaDisk;
 
 class AdminMessageController extends Controller
 {
@@ -49,7 +49,7 @@ class AdminMessageController extends Controller
             'content' => ['required', 'string'],
             'link_url' => ['nullable', 'url', 'max:2048'],
             'media_url' => ['nullable', 'string', 'max:2048'],
-            'media_type' => ['nullable', 'in:image,video'],
+            'media_type' => ['nullable', 'in:image,video,audio'],
             'language' => ['required', 'in:en,km'],
             'target_audience' => ['required', 'in:all,customers,guests'],
             'is_active' => ['required', 'boolean'],
@@ -90,7 +90,7 @@ class AdminMessageController extends Controller
             'content' => ['sometimes', 'string'],
             'link_url' => ['nullable', 'url', 'max:2048'],
             'media_url' => ['nullable', 'string', 'max:2048'],
-            'media_type' => ['nullable', 'in:image,video'],
+            'media_type' => ['nullable', 'in:image,video,audio'],
             'language' => ['sometimes', 'in:en,km'],
             'target_audience' => ['sometimes', 'in:all,customers,guests'],
             'is_active' => ['sometimes', 'boolean'],
@@ -123,14 +123,18 @@ class AdminMessageController extends Controller
     public function uploadMedia(Request $request)
     {
         $validated = $request->validate([
-            'media' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg,gif,mp4,webm,ogg', 'max:51200'],
+            'media' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg,gif,mp4,webm,ogg,mp3,wav,mpeg,aac,m4a', 'max:51200'],
         ]);
 
         $file = $request->file('media');
-        $path = $file->store('messages', 'public');
-        $url = Storage::disk('public')->url($path);
-        $mime = $file->getMimeType();
-        $type = str_starts_with($mime, 'video/') ? 'video' : 'image';
+        $path = MediaDisk::storeUploadedFile($file, 'messages');
+        $url = MediaDisk::url($path);
+        $mime = strtolower((string) $file->getMimeType());
+        $type = match (true) {
+            str_starts_with($mime, 'video/') => 'video',
+            str_starts_with($mime, 'audio/') => 'audio',
+            default => 'image',
+        };
 
         return response()->json([
             'message' => 'Media uploaded',

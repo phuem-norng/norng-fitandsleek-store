@@ -18,36 +18,63 @@ const api = axios.create({
 const localAssetPattern =
   /^https?:\/\/(localhost|127\.0\.0\.1|host\.docker\.internal|backend|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?(\/.*)?$/i;
 
-const rewriteLocalhostUrls = (value) => {
+/** Only rewrite known media fields (faster than walking every string in large admin lists). */
+const ASSET_URL_KEYS = new Set([
+  "image_url",
+  "logo_url",
+  "logo_path",
+  "profile_image_url",
+  "profile_image_path",
+  "image_path",
+  "promo_image_path",
+  "media_url",
+  "image",
+  "logo",
+  "gallery",
+  "images",
+  "fallback_image",
+]);
+
+const rewriteLocalhostString = (value) => {
   if (typeof window === "undefined" || !window.location?.origin) return value;
+  const match = value.match(localAssetPattern);
+  if (!match) return value;
+  const path = match[3] || "";
+  const isStorage = path === "/storage" || path.startsWith("/storage/");
+  if (isStorage && !shouldRewriteLoopbackAssetsToPageOrigin()) {
+    return value;
+  }
+  return `${window.location.origin}${path}`;
+};
+
+const rewriteLocalhostUrls = (value, depth = 0) => {
+  if (depth > 14) return value;
 
   if (typeof value === "string") {
-    const match = value.match(localAssetPattern);
-    if (!match) return value;
-    const path = match[3] || "";
-    const isStorage = path === "/storage" || path.startsWith("/storage/");
-    // On an HTTPS storefront, always same-origin loopback URLs (including `/storage`) to avoid mixed content.
-    // On local HTTP dev, keep absolute `/storage` pointing at Laravel when the port may differ from Vite.
-    if (isStorage && !shouldRewriteLoopbackAssetsToPageOrigin()) {
-      return value;
-    }
-    return `${window.location.origin}${path}`;
+    return rewriteLocalhostString(value);
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => rewriteLocalhostUrls(item));
+    return value.map((item) => rewriteLocalhostUrls(item, depth + 1));
   }
 
   if (value && typeof value === "object") {
     const next = {};
     Object.entries(value).forEach(([key, item]) => {
-      next[key] = rewriteLocalhostUrls(item);
+      if (typeof item === "string" && ASSET_URL_KEYS.has(key) && localAssetPattern.test(item)) {
+        next[key] = rewriteLocalhostString(item);
+      } else {
+        next[key] = rewriteLocalhostUrls(item, depth + 1);
+      }
     });
     return next;
   }
 
   return value;
 };
+
+let cachedApiBaseUrl = baseURL;
+let cachedCsrfToken = null;
 
 // Get CSRF token from meta tag
 const getCsrfToken = () => {
@@ -57,7 +84,8 @@ const getCsrfToken = () => {
 
 // Attach Bearer token to requests
 api.interceptors.request.use((config) => {
-  config.baseURL = resolveApiBaseUrl();
+  cachedApiBaseUrl = resolveApiBaseUrl();
+  config.baseURL = cachedApiBaseUrl;
 
   // Default `Content-Type: application/json` breaks multipart file uploads (Laravel never sees the file).
   if (typeof FormData !== "undefined" && config.data instanceof FormData && config.headers) {
@@ -81,9 +109,11 @@ api.interceptors.request.use((config) => {
   }
 
   // Add CSRF token if available
-  const csrfToken = getCsrfToken();
-  if (csrfToken) {
-    config.headers["X-CSRF-TOKEN"] = csrfToken;
+  if (cachedCsrfToken === null) {
+    cachedCsrfToken = getCsrfToken() || "";
+  }
+  if (cachedCsrfToken) {
+    config.headers["X-CSRF-TOKEN"] = cachedCsrfToken;
   }
 
   const deviceHeaders = getDeviceHeaders();

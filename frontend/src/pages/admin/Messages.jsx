@@ -56,8 +56,10 @@ export default function AdminMessages() {
  if (!url) return "";
  const lower = url.toLowerCase();
  if (lower.startsWith("data:video")) return "video";
+ if (lower.startsWith("data:audio")) return "audio";
  if (lower.startsWith("data:image")) return "image";
- if (lower.match(/\.(mp4|webm|ogg)(\?|#|$)/)) return "video";
+ if (lower.match(/\.(mp4|webm|ogg|mov)(\?|#|$)/)) return "video";
+ if (lower.match(/\.(mp3|wav|aac|m4a|mpeg)(\?|#|$)/)) return "audio";
  if (lower.match(/\.(jpg|jpeg|png|webp|gif|svg)(\?|#|$)/)) return "image";
  return "";
  };
@@ -220,7 +222,11 @@ export default function AdminMessages() {
  setFormData((s) => ({
  ...s,
  media_url: localUrl,
- media_type: file.type.startsWith('video/') ? 'video' : 'image',
+ media_type: file.type.startsWith('video/')
+   ? 'video'
+   : file.type.startsWith('audio/')
+     ? 'audio'
+     : 'image',
  }));
  try {
  const fd = new FormData();
@@ -523,7 +529,7 @@ export default function AdminMessages() {
  Upload file
  <input
  type="file"
- accept="image/*,video/*"
+ accept="image/*,video/*,audio/*"
  onChange={handleMediaUpload}
  className="hidden"
  />
@@ -539,6 +545,7 @@ export default function AdminMessages() {
  <option value="">Auto</option>
  <option value="image">Image</option>
  <option value="video">Video</option>
+ <option value="audio">Audio</option>
  </select>
  </div>
  {uploadError && (
@@ -548,19 +555,23 @@ export default function AdminMessages() {
  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Preview</p>
  {formData.media_url ? (
- (formData.media_type || inferMediaType(formData.media_url)) === 'video' ? (
- <video
- src={formData.media_url.startsWith('http') ? formData.media_url : resolveImageUrl(formData.media_url)}
- controls
- className="w-full rounded-md"
- />
- ) : (
+ (() => {
+ const mediaSrc = formData.media_url.startsWith('http') ? formData.media_url : resolveImageUrl(formData.media_url);
+ const type = formData.media_type || inferMediaType(formData.media_url);
+ if (type === 'video') {
+ return <video src={mediaSrc} controls className="w-full rounded-md" />;
+ }
+ if (type === 'audio') {
+ return <audio src={mediaSrc} controls className="w-full" />;
+ }
+ return (
  <img
- src={formData.media_url.startsWith('http') ? formData.media_url : resolveImageUrl(formData.media_url)}
+ src={mediaSrc}
  alt="Preview"
  className="w-full rounded-md object-cover"
  />
- )
+ );
+ })()
  ) : (
  <p className="text-xs text-slate-400">No media</p>
  )}

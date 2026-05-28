@@ -4,15 +4,78 @@ namespace App\Http\Controllers\Api\Storefront;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
-use Illuminate\Http\Request;
 use App\Services\ImageSearchService;
+use App\Support\ImageSearchImageFactory;
+use App\Support\Media;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ImageSearchController extends Controller
 {
-    public function search(Request $request, ImageSearchService $imageSearchService)
+    public function status(): JsonResponse
     {
-        // Ensure this request isn't killed by the default 30s PHP limit while the model warms up.
+        $vectorizeUrl = rtrim((string) config('services.image_search.vectorize_url', ''), '/');
+        $qdrantUrl = rtrim((string) config('services.image_search.qdrant_url', ''), '/');
+        $healthUrl = preg_replace('#/vectorize$#', '/health', $vectorizeUrl) ?: $vectorizeUrl.'/health';
+
+        $vectorizeOk = false;
+        $qdrantOk = false;
+        $vectorizeDetail = null;
+        $qdrantDetail = null;
+
+        try {
+            $health = Http::timeout(8)->get($healthUrl);
+            $vectorizeOk = $health->successful();
+            if (! $vectorizeOk) {
+                $vectorizeDetail = 'HTTP '.$health->status();
+            }
+        } catch (Throwable $e) {
+            $vectorizeDetail = $e->getMessage();
+        }
+
+        try {
+            $collections = Http::timeout(8)->get($qdrantUrl.'/collections');
+            $qdrantOk = $collections->successful();
+            if (! $qdrantOk) {
+                $qdrantDetail = 'HTTP '.$collections->status();
+            }
+        } catch (Throwable $e) {
+            $qdrantDetail = $e->getMessage();
+        }
+
+        $collection = (string) config('services.image_search.qdrant_collection', 'products');
+        $indexedProducts = Product::query()->where('is_vector_indexed', true)->where('is_active', true)->count();
+        $activeWithImage = Product::query()
+            ->where('is_active', true)
+            ->whereNotNull('image_url')
+            ->where('image_url', '!=', '')
+            ->count();
+
+        $ready = $vectorizeOk && $qdrantOk && $indexedProducts > 0;
+
+        return response()->json([
+            'ready' => $ready,
+            'vectorize_ok' => $vectorizeOk,
+            'qdrant_ok' => $qdrantOk,
+            'collection' => $collection,
+            'indexed_products' => $indexedProducts,
+            'active_products_with_image' => $activeWithImage,
+            'vectorize_url' => $vectorizeUrl,
+            'qdrant_url' => $qdrantUrl,
+            'vectorize_detail' => config('app.debug') ? $vectorizeDetail : null,
+            'qdrant_detail' => config('app.debug') ? $qdrantDetail : null,
+            'hint' => $ready
+                ? null
+                : 'Start Qdrant + ai-service (docker compose --profile ai up -d), then run: php artisan qdrant:setup && php artisan qdrant:index-products --only-missing',
+        ]);
+    }
+
+    public function search(Request $request, ImageSearchService $imageSearchService): JsonResponse
+    {
         $desired = 180;
         @ini_set('max_execution_time', (string) $desired);
         if (function_exists('set_time_limit')) {
@@ -21,20 +84,36 @@ class ImageSearchController extends Controller
         @ini_set('default_socket_timeout', (string) max($desired, (int) ini_get('default_socket_timeout')));
 
         $validated = $request->validate([
-            'image' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,avif', 'max:5120'],
+            'image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,avif,gif', 'max:5120'],
+            'url' => ['nullable', 'url', 'max:2048'],
             'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
         ]);
 
-        $image = $request->file('image');
+        if (! $request->hasFile('image') && empty($validated['url'])) {
+            throw ValidationException::withMessages([
+                'image' => ['Upload an image file or provide a valid image URL.'],
+            ]);
+        }
+
         $limit = (int) ($validated['limit'] ?? 12);
+        $tempUpload = null;
 
         try {
-            $productIds = $imageSearchService->searchSimilarProductIds($image, $limit);
+            $image = $this->resolveQueryImage($request, $validated, $tempUpload);
+            $fetchLimit = min(50, max($limit * 3, $limit));
+            $productIds = $imageSearchService->searchSimilarProductIds($image, $fetchLimit);
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (Throwable $e) {
             return response()->json([
                 'message' => 'Image similarity search failed.',
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => config('app.debug') ? $e->getMessage() : 'Check that Qdrant and the vectorize service are running and products are indexed.',
+                'hint' => 'Run: php artisan qdrant:setup && php artisan qdrant:index-products --only-missing',
             ], 502);
+        } finally {
+            if ($tempUpload instanceof UploadedFile && is_file($tempUpload->getRealPath())) {
+                @unlink($tempUpload->getRealPath());
+            }
         }
 
         if (empty($productIds)) {
@@ -42,6 +121,7 @@ class ImageSearchController extends Controller
                 'products' => [],
                 'total' => 0,
                 'match_reason' => 'qdrant_similarity',
+                'hint' => 'No similar products in the index. Index catalog images with: php artisan qdrant:index-products --only-missing',
             ]);
         }
 
@@ -51,8 +131,6 @@ class ImageSearchController extends Controller
             ->whereIn('id', $productIds)
             ->get();
 
-        // Keep results category-consistent with the top visual match.
-        // This avoids mixing unrelated types (e.g. belts + clothes) in one response.
         $topMatchId = $productIds[0] ?? null;
         $topMatch = $topMatchId ? $products->firstWhere('id', $topMatchId) : null;
         $lockedCategoryId = $topMatch?->category_id;
@@ -63,7 +141,7 @@ class ImageSearchController extends Controller
         $rankedProducts = collect($productIds)
             ->map(function (int $id, int $index) use ($products) {
                 $product = $products->firstWhere('id', $id);
-                if (!$product) {
+                if (! $product) {
                     return null;
                 }
 
@@ -77,7 +155,7 @@ class ImageSearchController extends Controller
                     'discount_price' => $product->discount_price,
                     'discount_percentage' => $product->discount_percentage,
                     'has_discount' => (bool) $product->has_discount,
-                    'image_url' => $product->image_url,
+                    'image_url' => Media::url($product->image_url) ?? $product->image_url,
                     'category' => $product->category ? [
                         'id' => $product->category->id,
                         'name' => $product->category->name,
@@ -92,12 +170,27 @@ class ImageSearchController extends Controller
                 ];
             })
             ->filter()
-            ->values();
+            ->values()
+            ->take($limit);
 
         return response()->json([
             'match_reason' => 'qdrant_similarity',
             'products' => $rankedProducts,
             'total' => $rankedProducts->count(),
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function resolveQueryImage(Request $request, array $validated, ?UploadedFile &$tempUpload): UploadedFile
+    {
+        if ($request->hasFile('image')) {
+            return $request->file('image');
+        }
+
+        $tempUpload = ImageSearchImageFactory::fromUrl((string) $validated['url']);
+
+        return $tempUpload;
     }
 }

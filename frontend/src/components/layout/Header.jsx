@@ -529,17 +529,18 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     let mounted = true;
     const loadAutoMenu = async () => {
       try {
-        const [productsRes, discountsRes, brandsRes, categoriesRes] = await Promise.all([
-          api.get("/products"),
-          api.get("/products/discounts"),
-          api.get("/brands"),
-          api.get("/categories"),
+        const { fetchCachedBrands, fetchCachedCategories } = await import(
+          "../../lib/storefrontCatalogCache.js"
+        );
+        const [productsRes, discountsRes, brands, categories] = await Promise.all([
+          api.get("/products", { params: { per_page: 6 } }),
+          api.get("/products/discounts", { params: { per_page: 6 } }),
+          fetchCachedBrands(api),
+          fetchCachedCategories(api),
         ]);
 
         const products = productsRes?.data?.data || [];
         const discounts = discountsRes?.data?.data || [];
-        const brands = brandsRes?.data?.data || [];
-        const categories = Array.isArray(categoriesRes?.data) ? categoriesRes.data : [];
 
         const newProductItems = products.slice(0, 6).map((p) => ({
           label: p.name,
@@ -591,9 +592,21 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       }
     };
 
-    loadAutoMenu();
+    const run = () => {
+      if (mounted) loadAutoMenu();
+    };
+    const idleId =
+      typeof requestIdleCallback !== "undefined"
+        ? requestIdleCallback(run, { timeout: 2500 })
+        : null;
+    const timeoutId = idleId == null ? setTimeout(run, 1200) : null;
+
     return () => {
       mounted = false;
+      if (idleId != null && typeof cancelIdleCallback !== "undefined") {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId != null) clearTimeout(timeoutId);
     };
   }, []);
 

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use App\Support\MediaDisk;
 
 class HomepageSettingsController extends Controller
 {
@@ -651,8 +651,8 @@ class HomepageSettingsController extends Controller
             'logo' => 'required|file|mimes:jpg,jpeg,png,webp,svg,avif|max:5120',
         ]);
 
-        $path = $request->file('logo')->store('logos', 'public');
-        $url = Storage::disk('public')->url($path);
+        $path = MediaDisk::storeUploadedFile($request->file('logo'), 'logos');
+        $url = MediaDisk::url($path);
 
         $current = Setting::where('key', 'header')->where('group', 'homepage')->first();
         $header = $current ? (array) $current->value : [];
@@ -678,8 +678,8 @@ class HomepageSettingsController extends Controller
             'image' => 'required|file|mimes:jpg,jpeg,png,webp,svg,avif|max:5120',
         ]);
 
-        $path = $request->file('image')->store('menu-images', 'public');
-        $url = Storage::disk('public')->url($path);
+        $path = MediaDisk::storeUploadedFile($request->file('image'), 'menu-images');
+        $url = MediaDisk::url($path);
 
         return response()->json([
             'message' => 'Image uploaded',

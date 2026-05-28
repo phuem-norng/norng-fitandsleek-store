@@ -97,6 +97,7 @@ services:
       - ./backend/app:/var/www/html/app
       - ./backend/config:/var/www/html/config
       - ./backend/database/migrations:/var/www/html/database/migrations
+      - ./backend/database/seeders:/var/www/html/database/seeders
       - ./backend/.env:/var/www/html/.env
       - ./backend/routes:/var/www/html/routes
       - ./backend/public:/var/www/html/public

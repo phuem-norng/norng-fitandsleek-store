@@ -53,7 +53,7 @@ class DriverAdminController extends Controller
             'profile_image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'],
         ]);
 
-        $profileDisk = (string) config('filesystems.default', 'public');
+        $profileDisk = \App\Support\MediaDisk::name();
         $path = null;
         if ($request->hasFile('profile_image')) {
             $path = $request->file('profile_image')->store('profile-images', $profileDisk);
@@ -94,7 +94,7 @@ class DriverAdminController extends Controller
         ]);
 
         if ($request->hasFile('profile_image')) {
-            $profileDisk = (string) config('filesystems.default', 'public');
+            $profileDisk = \App\Support\MediaDisk::name();
             if ($driver->profile_image_path) {
                 try {
                     Storage::disk($profileDisk)->delete($driver->profile_image_path);

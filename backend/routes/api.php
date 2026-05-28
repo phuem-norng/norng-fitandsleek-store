@@ -152,7 +152,8 @@ Route::post('/payments/khqr/webhook', [PaymentController::class, 'khqrWebhook'])
 // Public notifications (guests)
 Route::get('/notifications/public', [NotificationController::class, 'index']);
 
-// Image Search (vector similarity)
+// Image Search (vector similarity — Qdrant + CLIP vectorize)
+Route::get('/image-search/status', [ImageSearchController::class, 'status']);
 Route::post('/image-search', [ImageSearchController::class, 'search'])->middleware('throttle:api-sensitive');
 Route::post('/vision/search', [ImageSearchController::class, 'search'])->middleware('throttle:api-sensitive');
 

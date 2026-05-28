@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use App\Support\MediaDisk;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -43,10 +44,11 @@ class TestR2StorageCommand extends Command
         $payload = 'fitandsleek-r2-ok-'.now()->toIso8601String();
 
         try {
-            Storage::disk('s3')->put($path, $payload);
-            $exists = Storage::disk('s3')->exists($path);
-            $url = Storage::disk('s3')->url($path);
-            Storage::disk('s3')->delete($path);
+            $disk = MediaDisk::disk();
+            $disk->put($path, $payload);
+            $exists = $disk->exists($path);
+            $url = $disk->url($path);
+            $disk->delete($path);
 
             if (! $exists) {
                 $this->error('Upload reported success but file was not found on R2.');

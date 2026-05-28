@@ -102,7 +102,7 @@ function rewriteViteDevStorageUrl(urlString) {
 const normalizePort = (url) => url;
 
 const hasFileExtension = (value) =>
-  /\.(png|jpe?g|webp|gif|avif|svg|mp4|webm|ogg)$/i.test(String(value || ""));
+  /\.(png|jpe?g|webp|gif|avif|svg|mp4|webm|ogg|mov|m4v|mp3|wav|aac|m4a|mpeg)$/i.test(String(value || ""));
 
 const shouldRewritePrivateHost = (urlString) => {
   try {

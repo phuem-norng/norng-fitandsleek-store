@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Camera, Upload, X, Image as ImageIcon, Search } from "lucide-react";
-import api from "../lib/api"; // adjust if your path differs
+import api from "../../lib/api";
+import { formatImageSearchError, IMAGE_SEARCH_TIMEOUT_MS } from "../../lib/imageSearchApi";
 import { errorAlert } from "../../lib/swal";
 
 function dataURLToBlob(dataURL) {
@@ -143,7 +144,7 @@ export default function ImageSearch({ onSearch, onClose, isOpen }) {
       form.append("image", blob, "image-search.jpg");
 
       const res = await api.post("/image-search", form, {
-        headers: { "Content-Type": "multipart/form-data" },
+        timeout: IMAGE_SEARCH_TIMEOUT_MS,
       });
 
       const payload = res?.data || {};
@@ -154,10 +155,7 @@ export default function ImageSearch({ onSearch, onClose, isOpen }) {
         items: payload.products || [],
       });
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Image search failed. Please try again.";
+      const msg = formatImageSearchError(err);
       setError(msg);
       errorAlert({
         khTitle: "ស្វែងរករូបភាពបរាជ័យ",

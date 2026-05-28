@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
 import {
+  fetchCachedBrands,
+  fetchCachedCategories,
+  fetchCachedFilterOptions,
+} from "../lib/storefrontCatalogCache.js";
+import {
   STOREFRONT_GENDER_OPTIONS,
   buildSectionOptionsFromHomepage,
   sortSizes,
@@ -21,20 +26,18 @@ export function useStorefrontFilterSections() {
   useEffect(() => {
     (async () => {
       try {
-        const [catRes, brandRes, optRes] = await Promise.all([
-          api.get("/categories"),
-          api.get("/brands"),
-          api.get("/products/filter-options"),
+        const [catList, brandList, opts] = await Promise.all([
+          fetchCachedCategories(api),
+          fetchCachedBrands(api),
+          fetchCachedFilterOptions(api),
         ]);
-        const catList = Array.isArray(catRes.data) ? catRes.data : catRes.data?.data || [];
-        const brandList = brandRes.data?.data || brandRes.data || [];
-        setCategories(Array.isArray(catList) ? catList : []);
-        setBrands(Array.isArray(brandList) ? brandList : []);
+        setCategories(catList);
+        setBrands(brandList);
         setAttributeOptions({
-          colors: optRes.data?.colors || [],
-          sizes: sortSizes(optRes.data?.sizes || []),
-          price_min: optRes.data?.price_min ?? null,
-          price_max: optRes.data?.price_max ?? null,
+          colors: opts.colors || [],
+          sizes: sortSizes(opts.sizes || []),
+          price_min: opts.price_min ?? null,
+          price_max: opts.price_max ?? null,
         });
       } catch {
         setCategories([]);

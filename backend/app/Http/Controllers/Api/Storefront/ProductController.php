@@ -102,38 +102,42 @@ class ProductController extends Controller
      */
     public function filterOptions()
     {
-        $rows = Product::query()
-            ->where('is_active', true)
-            ->get(['colors', 'sizes', 'price']);
+        $payload = \Illuminate\Support\Facades\Cache::remember('storefront:product_filter_options:v1', 300, function () {
+            $rows = Product::query()
+                ->where('is_active', true)
+                ->get(['colors', 'sizes', 'price']);
 
-        $colors = [];
-        $sizes = [];
-        foreach ($rows as $row) {
-            foreach ((array) ($row->colors ?? []) as $color) {
-                $c = trim((string) $color);
-                if ($c !== '') {
-                    $colors[$c] = true;
+            $colors = [];
+            $sizes = [];
+            foreach ($rows as $row) {
+                foreach ((array) ($row->colors ?? []) as $color) {
+                    $c = trim((string) $color);
+                    if ($c !== '') {
+                        $colors[$c] = true;
+                    }
+                }
+                foreach ((array) ($row->sizes ?? []) as $size) {
+                    $s = trim((string) $size);
+                    if ($s !== '') {
+                        $sizes[$s] = true;
+                    }
                 }
             }
-            foreach ((array) ($row->sizes ?? []) as $size) {
-                $s = trim((string) $size);
-                if ($s !== '') {
-                    $sizes[$s] = true;
-                }
-            }
-        }
 
-        $priceBounds = Product::query()
-            ->where('is_active', true)
-            ->selectRaw('MIN(price) as price_min, MAX(price) as price_max')
-            ->first();
+            $priceBounds = Product::query()
+                ->where('is_active', true)
+                ->selectRaw('MIN(price) as price_min, MAX(price) as price_max')
+                ->first();
 
-        return response()->json([
-            'colors' => collect(array_keys($colors))->sort()->values()->all(),
-            'sizes' => $this->sortSizeList(array_keys($sizes)),
-            'price_min' => $priceBounds?->price_min !== null ? (float) $priceBounds->price_min : null,
-            'price_max' => $priceBounds?->price_max !== null ? (float) $priceBounds->price_max : null,
-        ]);
+            return [
+                'colors' => collect(array_keys($colors))->sort()->values()->all(),
+                'sizes' => $this->sortSizeList(array_keys($sizes)),
+                'price_min' => $priceBounds?->price_min !== null ? (float) $priceBounds->price_min : null,
+                'price_max' => $priceBounds?->price_max !== null ? (float) $priceBounds->price_max : null,
+            ];
+        });
+
+        return response()->json($payload);
     }
 
     private function sortSizeList(array $sizes): array

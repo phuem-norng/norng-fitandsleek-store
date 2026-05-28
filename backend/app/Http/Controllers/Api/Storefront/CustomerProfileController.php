@@ -84,32 +84,13 @@ class CustomerProfileController extends Controller
         ]);
 
         $user = auth()->user();
-        $profileDisk = (string) config('filesystems.default', 'public');
-
-        // Delete old image if exists
         if ($user->profile_image_path) {
-            try {
-                Storage::disk($profileDisk)->delete($user->profile_image_path);
-            } catch (\Throwable) {
-                // Best-effort cleanup for legacy paths from other disks.
-            }
+            \App\Support\MediaDisk::delete($user->profile_image_path);
         }
 
-        // Store new image
         $file = $request->file('profile_image');
-        $filename = 'profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-        try {
-            $path = $file->storeAs('profile_images', $filename, $profileDisk);
-        } catch (\Throwable $e) {
-            Log::error('Profile image upload failed on preferred disk, falling back to public.', [
-                'user_id' => $user->id,
-                'preferred_disk' => $profileDisk,
-                'error' => $e->getMessage(),
-            ]);
-
-            // Fallback: keep upload working even when cloud disk is misconfigured/unavailable.
-            $path = $file->storeAs('profile_images', $filename, 'public');
-        }
+        $filename = 'profile_'.$user->id.'_'.time().'.'.$file->getClientOriginalExtension();
+        $path = $file->storeAs('profile_images', $filename, \App\Support\MediaDisk::name());
 
         // Update user
         $user->update(['profile_image_path' => $path]);

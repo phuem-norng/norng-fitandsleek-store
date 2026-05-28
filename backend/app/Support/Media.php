@@ -16,21 +16,39 @@ class Media
 
     public static function url(?string $path): ?string
     {
-        if (!$path) {
+        if (! $path) {
             return null;
         }
 
         $path = trim($path);
 
-        // already absolute url
         if (preg_match('#^https?://#i', $path)) {
             $parts = parse_url($path);
             $host = strtolower((string) ($parts['host'] ?? ''));
             if ($host !== '' && self::isPrivateHost($host)) {
-                $normalizedPath = '/' . ltrim((string) ($parts['path'] ?? ''), '/');
+                $normalizedPath = '/'.ltrim((string) ($parts['path'] ?? ''), '/');
+                $storagePos = strpos($normalizedPath, '/storage/');
+                if ($storagePos !== false) {
+                    return substr($normalizedPath, $storagePos);
+                }
+
                 return $normalizedPath !== '/' ? $normalizedPath : null;
             }
+
             return $path;
+        }
+
+        $key = MediaDisk::normalizeStorageKey($path);
+        if ($key === null) {
+            return null;
+        }
+
+        if (! MediaDisk::exists($key)) {
+            return asset('placeholder.svg');
+        }
+
+        if (MediaDisk::isRemote()) {
+            return MediaDisk::url($key);
         }
 
         if (str_starts_with($path, '/storage/')) {
@@ -38,29 +56,16 @@ class Media
         }
 
         if (str_starts_with($path, 'storage/')) {
-            return '/' . $path;
+            return '/'.$path;
         }
 
-        if (!str_contains($path, '/')) {
-            // Filename-only fallback for legacy banner/image fields.
-            return '/storage/banners/' . ltrim($path, '/');
+        if (! str_contains($path, '/')) {
+            return '/storage/banners/'.ltrim($path, '/');
         }
 
-        $normalized = ltrim($path, '/');
-        if (str_starts_with($normalized, 'storage/')) {
-            $normalized = ltrim(substr($normalized, 8), '/');
-        }
-
-        // If the backing file is missing, always return a safe placeholder.
-        if (!\Storage::disk('public')->exists($normalized)) {
-            return \asset('placeholder.svg');
-        }
-
-        // storage:link -> /storage
-        return '/storage/' . $normalized;
+        return '/storage/'.$key;
     }
 
-    // Backward-compatible alias (so both calls work)
     public static function publicUrl(?string $path): ?string
     {
         return self::url($path);

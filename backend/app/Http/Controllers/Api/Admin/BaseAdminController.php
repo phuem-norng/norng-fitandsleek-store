@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\MediaDisk;
 use Illuminate\Http\Request;
 
 abstract class BaseAdminController extends Controller
@@ -16,6 +17,6 @@ abstract class BaseAdminController extends Controller
     protected function storeImage(Request $request, string $field, string $dir): ?string
     {
         if (!$request->hasFile($field)) return null;
-        return $request->file($field)->store($dir, 'public');
+        return MediaDisk::storeUploadedFile($request->file($field), $dir);
     }
 }

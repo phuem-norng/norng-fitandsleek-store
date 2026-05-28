@@ -107,7 +107,7 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
-        $profileDisk = (string) config('filesystems.default', 'public');
+        $profileDisk = \App\Support\MediaDisk::name();
 
         // Delete old image if exists
         if ($user->profile_image_path) {

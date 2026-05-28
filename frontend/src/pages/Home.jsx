@@ -6,6 +6,7 @@ import PromoBannerSlider from "../components/home/PromoBannerSlider.jsx";
 import Section from "../components/shop/Section.jsx";
 import { useHomepageSettings } from "../state/homepageSettings.jsx";
 import api from "../lib/api";
+import { fetchCachedCategories } from "../lib/storefrontCatalogCache.js";
 import { useLanguage } from "../lib/i18n.jsx";
 
 function normalizeToken(value) {
@@ -87,18 +88,19 @@ export default function Home() {
   const [sections, setSections] = useState({});
   const { t } = useLanguage();
 
-  // Load categories
   useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await api.get("/categories");
-        const list = Array.isArray(data) ? data : data?.data;
-        setCategories(Array.isArray(list) ? list : []);
-      } catch (err) {
-        console.error("[Home] /categories failed:", err?.response?.status, err?.message);
-        setCategories([]);
-      }
-    })();
+    let cancelled = false;
+    fetchCachedCategories(api)
+      .then((list) => {
+        if (!cancelled) setCategories(list);
+      })
+      .catch((err) => {
+      console.error("[Home] /categories failed:", err?.message);
+      if (!cancelled) setCategories([]);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Get enabled sections from settings, sorted by order
@@ -138,8 +140,23 @@ export default function Home() {
     return mapped;
   }, [enabledSections, categories]);
 
-  // Load section products
+  const sectionKeys = useMemo(
+    () => enabledSections.map((s) => s.key).join(","),
+    [enabledSections]
+  );
+
+  // Load section products once categories + section config are ready (avoids empty-then-refetch cascade).
   useEffect(() => {
+    const needsCategories = enabledSections.some(
+      (s) =>
+        s.key !== "discounts" &&
+        !TAB_SECTION_MAP[s.key] &&
+        !PARENT_SECTION_KEYS.has(s.key)
+    );
+    if (needsCategories && categories.length === 0) {
+      return;
+    }
+
     const loadSection = async (key, categoriesForSection) => {
       const matchedCategories = Array.isArray(categoriesForSection)
         ? categoriesForSection.filter((category) => category?.slug || category?.id)
@@ -157,7 +174,7 @@ export default function Home() {
             const params = category?.slug
               ? { category: category.slug, per_page: 24 }
               : { category_id: category.id, per_page: 24 };
-            return api.get("/products", { params });
+            return api.get("/products", { params: { ...params, per_page: 8 } });
           })
         );
 
@@ -224,7 +241,7 @@ export default function Home() {
         loadSection(section.key, sectionCategories[section.key]);
       }
     });
-  }, [enabledSections, sectionCategories]);
+  }, [sectionKeys, categories.length, sectionCategories]);
 
   const getSectionLink = (section) => {
     const key = section?.key;

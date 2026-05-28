@@ -17,6 +17,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Media uploads (images, video, audio)
+    |--------------------------------------------------------------------------
+    |
+    | Set MEDIA_DISK or FILESYSTEM_DISK to "s3" for Cloudflare R2 (S3-compatible).
+    | Local dev can keep "public"; production should use "s3".
+    |
+    */
+    'media_disk' => env('MEDIA_DISK', env('FILESYSTEM_DISK', 'public')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |

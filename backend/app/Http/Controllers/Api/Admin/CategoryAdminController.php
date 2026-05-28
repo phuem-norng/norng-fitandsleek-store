@@ -7,9 +7,9 @@ use App\Models\Category;
 use App\Services\PaidOrderInventory;
 use App\Services\StockReceiveService;
 use App\Support\Media;
+use App\Support\MediaDisk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class CategoryAdminController extends Controller
@@ -64,7 +64,7 @@ class CategoryAdminController extends Controller
         }
 
         $filename = 'categories/' . $category->id . '-' . Str::random(8) . '.' . $ext;
-        Storage::disk('public')->put($filename, $content);
+        MediaDisk::put($filename, $content);
 
         return $filename;
     }
@@ -285,7 +285,7 @@ class CategoryAdminController extends Controller
 
         $path = null;
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('categories', 'public');
+            $path = MediaDisk::storeUploadedFile($request->file('image'), 'categories');
         }
 
         $c = Category::create([
@@ -393,8 +393,8 @@ class CategoryAdminController extends Controller
 
         if ($request->hasFile('image')) {
             if ($category->image_path)
-                Storage::disk('public')->delete($category->image_path);
-            $category->image_path = $request->file('image')->store('categories', 'public');
+                MediaDisk::delete($category->image_path);
+            $category->image_path = MediaDisk::storeUploadedFile($request->file('image'), 'categories');
         }
 
         $category->fill([
@@ -455,7 +455,7 @@ class CategoryAdminController extends Controller
             $recalcSnapshot = $stockReceive->inventoryRecalcSnapshotForReceiveChange($category);
 
             if ($category->image_path) {
-                Storage::disk('public')->delete($category->image_path);
+                MediaDisk::delete($category->image_path);
             }
 
             $category->delete();

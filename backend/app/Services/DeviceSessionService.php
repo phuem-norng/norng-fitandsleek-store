@@ -354,14 +354,19 @@ class DeviceSessionService
             return null;
         }
 
-        $session->update(array_merge([
-            'last_used_at' => now(),
-            'ip_address' => $context['ip_address'],
-            'user_agent' => $context['user_agent'],
-            'device_name' => $context['device_name'] ?: $session->device_name,
-            'browser' => $context['browser'] ?: $session->browser,
-            'os' => $context['os'] ?: $session->os,
-        ], $this->geoSessionAttributes($context)));
+        $shouldTouch = $session->last_used_at === null
+            || $session->last_used_at->lt(now()->subMinutes(5));
+
+        if ($shouldTouch) {
+            $session->update(array_merge([
+                'last_used_at' => now(),
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+                'device_name' => $context['device_name'] ?: $session->device_name,
+                'browser' => $context['browser'] ?: $session->browser,
+                'os' => $context['os'] ?: $session->os,
+            ], $this->geoSessionAttributes($context)));
+        }
 
         return $session;
     }

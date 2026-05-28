@@ -131,12 +131,9 @@ class ProductQdrantIndexer
             return null;
         }
 
-        if (str_starts_with($path, '/storage/')) {
-            return storage_path('app/public/'.ltrim(substr($path, 8), '/'));
-        }
-
-        if (str_starts_with($path, 'storage/')) {
-            return storage_path('app/public/'.ltrim(substr($path, 8), '/'));
+        $fromDisk = \App\Support\MediaDisk::localPathForProcessing($path);
+        if ($fromDisk !== null) {
+            return $fromDisk;
         }
 
         if (str_starts_with($path, '/')) {
@@ -144,11 +141,6 @@ class ProductQdrantIndexer
             if (file_exists($publicPath)) {
                 return $publicPath;
             }
-        }
-
-        $diskPath = Storage::disk('public')->path($path);
-        if (file_exists($diskPath)) {
-            return $diskPath;
         }
 
         if (file_exists($path)) {

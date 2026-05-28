@@ -13,8 +13,10 @@ class CustomerAdminController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['orders'])
+        $query = User::query()
             ->where('role', 'customer')
+            ->withCount('orders')
+            ->withSum('orders', 'total')
             ->orderByDesc('id');
 
         // Search functionality
@@ -29,10 +31,10 @@ class CustomerAdminController extends Controller
 
         $customers = $query->paginate($request->input('per_page', 15));
 
-        // Transform to include order count and total spent
         $customers->through(function ($customer) {
-            $customer->orders_count = $customer->orders()->count();
-            $customer->total_spent = $customer->orders()->sum('total');
+            $customer->orders_count = (int) ($customer->orders_count ?? 0);
+            $customer->total_spent = (float) ($customer->orders_sum_total ?? 0);
+
             return $customer;
         });
 

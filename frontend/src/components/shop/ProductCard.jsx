@@ -69,6 +69,8 @@ export default function ProductCard({ p }) {
           <img
             src={src}
             alt={p.name}
+            loading="lazy"
+            decoding="async"
             onError={() => setImgOk(false)}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
