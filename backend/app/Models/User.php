@@ -172,12 +172,22 @@ class User extends Authenticatable
 
         $defaultDisk = (string) config('filesystems.default', 'public');
 
-        if ($defaultDisk !== 'public' && Storage::disk($defaultDisk)->exists($normalizedPath)) {
-            return Storage::disk($defaultDisk)->url($normalizedPath);
+        if ($defaultDisk !== 'public') {
+            try {
+                if (Storage::disk($defaultDisk)->exists($normalizedPath)) {
+                    return Storage::disk($defaultDisk)->url($normalizedPath);
+                }
+            } catch (\Throwable) {
+                // Do not fail /api/me when cloud storage is temporarily unavailable.
+            }
         }
 
-        if (Storage::disk('public')->exists($normalizedPath)) {
-            return '/storage/' . $normalizedPath;
+        try {
+            if (Storage::disk('public')->exists($normalizedPath)) {
+                return '/storage/' . $normalizedPath;
+            }
+        } catch (\Throwable) {
+            // Ignore and fall through to null.
         }
 
         return null;
