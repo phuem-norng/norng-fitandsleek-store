@@ -22,6 +22,8 @@ class BakongApi
             throw new RuntimeException('Payment MD5 is missing.');
         }
 
+        $md5 = strtolower(trim($md5));
+
         $http = Http::timeout(20)->withHeaders([
             'Authorization' => 'Bearer ' . $token,
             'Content-Type' => 'application/json',

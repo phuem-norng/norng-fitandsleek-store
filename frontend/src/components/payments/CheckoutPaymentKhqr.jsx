@@ -18,11 +18,32 @@ export default function CheckoutPaymentKhqr({
   const [error, setError] = useState("");
   const pollRef = useRef(null);
   const pollFailuresRef = useRef(0);
+  const paidNotifiedRef = useRef(false);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const handlePaid = useCallback(
+    (payload) => {
+      if (paidNotifiedRef.current) return;
+      paidNotifiedRef.current = true;
+      setStatus("paid");
+      setError("");
+      stopPolling();
+      onPaid?.(payload);
+    },
+    [onPaid, stopPolling],
+  );
 
   const createKhqr = useCallback(async () => {
     if (!orderId) return;
     setLoading(true);
     setError("");
+    paidNotifiedRef.current = false;
 
     try {
       const { data } = await api.post("/payments/bakong/create", { order_id: orderId });
@@ -32,7 +53,7 @@ export default function CheckoutPaymentKhqr({
       setPaymentId(nextPayment?.payment_id || nextPayment?.id);
       setStatus(nextStatus);
       if (nextStatus === "paid") {
-        onPaid?.(nextPayment);
+        handlePaid(nextPayment);
       }
     } catch (e) {
       setError(e?.response?.data?.message || "Failed to create KHQR.");
@@ -40,11 +61,11 @@ export default function CheckoutPaymentKhqr({
     } finally {
       setLoading(false);
     }
-  }, [onPaid, orderId]);
+  }, [handlePaid, orderId]);
 
   const checkStatus = useCallback(async () => {
     const targetId = paymentId;
-    if (!targetId) return;
+    if (!targetId || paidNotifiedRef.current) return;
 
     try {
       const { data } = await api.get(`/payments/bakong/status/${targetId}`);
@@ -54,18 +75,28 @@ export default function CheckoutPaymentKhqr({
       const nextPayment = data?.payment || data;
       const nextStatus = nextPayment?.status || data?.status;
 
-      // Only overwrite payment if we actually received QR details; otherwise keep existing
-      const hasQr = nextPayment && (nextPayment.qr_string || nextPayment.qr_image_base64 || nextPayment.md5 || nextPayment.bill_number);
+      const hasQr =
+        nextPayment &&
+        (nextPayment.qr_string ||
+          nextPayment.qr_image_base64 ||
+          nextPayment.md5 ||
+          nextPayment.bill_number);
       if (hasQr) setPayment(nextPayment);
+
+      if (nextStatus === "paid") {
+        handlePaid(nextPayment || data);
+        return;
+      }
+
       if (nextStatus) {
         setStatus(nextStatus);
-        if (nextStatus === "paid") onPaid?.(nextPayment || data);
       }
     } catch (e) {
       pollFailuresRef.current += 1;
       if (e?.response?.status === 403) {
         setError(e?.response?.data?.message || "Unauthorized.");
         setStatus("error");
+        stopPolling();
         return;
       }
       if (pollFailuresRef.current >= 3) {
@@ -75,7 +106,7 @@ export default function CheckoutPaymentKhqr({
         );
       }
     }
-  }, [onPaid, paymentId]);
+  }, [handlePaid, paymentId, stopPolling]);
 
   useEffect(() => {
     if (!open) return;
@@ -87,16 +118,15 @@ export default function CheckoutPaymentKhqr({
     if (status === "paid" || status === "expired" || status === "error") return;
     if (!paymentId) return;
 
+    checkStatus();
     pollRef.current = setInterval(() => {
       checkStatus();
     }, 3000);
 
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-      }
+      stopPolling();
     };
-  }, [open, status, checkStatus, paymentId]);
+  }, [open, status, checkStatus, paymentId, stopPolling]);
 
   useEffect(() => {
     if (!open) {
@@ -105,8 +135,10 @@ export default function CheckoutPaymentKhqr({
       setStatus("idle");
       setError("");
       pollFailuresRef.current = 0;
+      paidNotifiedRef.current = false;
+      stopPolling();
     }
-  }, [open]);
+  }, [open, stopPolling]);
 
   return (
     <KhqrModal

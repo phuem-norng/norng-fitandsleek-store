@@ -7,6 +7,7 @@ use App\Services\PaidOrderInventory;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Setting;
 use App\Services\BakongApi;
 use App\Services\BakongKhqrService;
 use Illuminate\Http\JsonResponse;
@@ -107,8 +108,11 @@ class BakongPaymentController extends Controller
 
         $this->ensureOrderOwner($order, $request);
 
-        if ($payment->status === 'paid') {
-            return response()->json(['status' => 'paid']);
+        if ($payment->status === 'paid' || $order->payment_status === 'paid') {
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment),
+                ['status' => 'paid']
+            ));
         }
 
         if ($payment->expires_at && now()->greaterThan($payment->expires_at)) {
@@ -162,13 +166,9 @@ class BakongPaymentController extends Controller
         }
 
         $responseCode = $response['responseCode'] ?? $response['response_code'] ?? null;
-        $transaction = $response['data'] ?? [];
-        $billNumber = $this->extractBillNumber((array) $transaction);
-        $matchesOrder = $this->billMatches($billNumber, $payment->bill_number);
+        $transaction = is_array($response['data'] ?? null) ? $response['data'] : [];
 
-        $transactionHasBill = $billNumber !== null && $billNumber !== '';
-
-        if ((int) $responseCode === 0 && ! empty($transaction) && ($matchesOrder || ! $transactionHasBill)) {
+        if ((int) $responseCode === 0 && $this->transactionConfirmsPayment($payment, $transaction)) {
             try {
                 DB::transaction(function () use ($payment, $order, $response, $transaction) {
                     $payment->update([
@@ -199,16 +199,20 @@ class BakongPaymentController extends Controller
                 ));
             }
 
-            return response()->json([
-                'status' => 'paid',
-                'data' => $transaction,
-            ]);
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment->fresh()),
+                [
+                    'status' => 'paid',
+                    'data' => $transaction,
+                ]
+            ));
         }
 
-        if ((int) $responseCode === 0 && ! empty($transaction) && ! $matchesOrder) {
-            return response()->json([
-                'status' => 'pending',
-                'message' => 'Awaiting matching bill number confirmation.',
+        if ((int) $responseCode === 0 && ! empty($transaction)) {
+            Log::info('Bakong transaction returned but did not match payment', [
+                'payment_id' => $payment->id,
+                'bill_number' => $payment->bill_number,
+                'transaction' => $transaction,
             ]);
         }
 
@@ -216,6 +220,58 @@ class BakongPaymentController extends Controller
             $this->formatPaymentResponse($payment),
             ['status' => 'pending']
         ));
+    }
+
+    /**
+     * Bakong success payloads include hash, amount, and toAccountId — not always billNumber.
+     */
+    private function transactionConfirmsPayment(Payment $payment, array $transaction): bool
+    {
+        if ($transaction === [] || ! filled(data_get($transaction, 'hash'))) {
+            return false;
+        }
+
+        $expectedAccount = $this->expectedReceiveAccount();
+        $toAccount = strtolower(trim((string) data_get($transaction, 'toAccountId', '')));
+
+        if ($expectedAccount !== '' && $toAccount !== '' && ! $this->accountsMatch($expectedAccount, $toAccount)) {
+            return false;
+        }
+
+        $paidAmount = data_get($transaction, 'amount');
+        if ($paidAmount !== null && ! $this->amountsMatch((float) $payment->amount, (float) $paidAmount, (string) $payment->currency)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function expectedReceiveAccount(): string
+    {
+        $fromDb = Setting::query()
+            ->where('group', 'payment')
+            ->where('key', 'bakong_receive_account')
+            ->value('value');
+
+        $account = filled($fromDb)
+            ? (string) $fromDb
+            : (string) config('services.bakong.receive_account');
+
+        return strtolower(trim($account));
+    }
+
+    private function accountsMatch(string $expected, string $actual): bool
+    {
+        return strtolower(trim($expected)) === strtolower(trim($actual));
+    }
+
+    private function amountsMatch(float $expected, float $actual, string $currency): bool
+    {
+        if (strtoupper($currency) === 'KHR') {
+            return (int) round($expected) === (int) round($actual);
+        }
+
+        return abs($expected - $actual) < 0.01;
     }
 
     private function ensureOrderOwner(Order $order, Request $request): void
@@ -261,9 +317,20 @@ class BakongPaymentController extends Controller
 
     private function extractBillNumber(array $data): ?string
     {
-        return data_get($data, 'billNumber')
+        $direct = data_get($data, 'billNumber')
             ?? data_get($data, 'bill_no')
             ?? data_get($data, 'bill_number');
+
+        if (filled($direct)) {
+            return (string) $direct;
+        }
+
+        $description = trim((string) data_get($data, 'description', ''));
+        if ($description !== '' && preg_match('/ORD-[A-Z0-9-]+/i', $description, $matches)) {
+            return $matches[0];
+        }
+
+        return null;
     }
 
     private function billMatches(?string $actual, ?string $expected): bool
