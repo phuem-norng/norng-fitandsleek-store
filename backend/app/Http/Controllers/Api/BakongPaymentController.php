@@ -12,6 +12,7 @@ use App\Services\BakongKhqrService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BakongPaymentController extends Controller
 {
@@ -142,7 +143,24 @@ class BakongPaymentController extends Controller
             }
         }
 
-        $response = $this->bakong->checkByMd5((string) $payment->md5);
+        try {
+            $response = $this->bakong->checkByMd5((string) $payment->md5);
+        } catch (\Throwable $e) {
+            Log::warning('Bakong status check failed', [
+                'payment_id' => $payment->id,
+                'order_id' => $order->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment),
+                [
+                    'status' => 'pending',
+                    'message' => 'Payment status check is temporarily unavailable. Keep this screen open.',
+                ]
+            ));
+        }
+
         $responseCode = $response['responseCode'] ?? $response['response_code'] ?? null;
         $transaction = $response['data'] ?? [];
         $billNumber = $this->extractBillNumber((array) $transaction);
@@ -151,19 +169,35 @@ class BakongPaymentController extends Controller
         $transactionHasBill = $billNumber !== null && $billNumber !== '';
 
         if ((int) $responseCode === 0 && ! empty($transaction) && ($matchesOrder || ! $transactionHasBill)) {
-            DB::transaction(function () use ($payment, $order, $response, $transaction) {
-                $payment->update([
-                    'status' => 'paid',
-                    'paid_at' => now(),
-                    'bakong_data' => $transaction,
-                    'raw_response' => $response,
+            try {
+                DB::transaction(function () use ($payment, $order, $response, $transaction) {
+                    $payment->update([
+                        'status' => 'paid',
+                        'paid_at' => now(),
+                        'bakong_data' => $transaction,
+                        'raw_response' => $response,
+                    ]);
+
+                    if ($order->payment_status !== 'paid') {
+                        $this->markOrderAsPaid($order);
+                        $this->clearUserCart((int) $order->user_id);
+                    }
+                });
+            } catch (\Throwable $e) {
+                Log::error('Bakong payment confirmation failed', [
+                    'payment_id' => $payment->id,
+                    'order_id' => $order->id,
+                    'error' => $e->getMessage(),
                 ]);
 
-                if ($order->payment_status !== 'paid') {
-                    $this->markOrderAsPaid($order);
-                    $this->clearUserCart((int) $order->user_id);
-                }
-            });
+                return response()->json(array_merge(
+                    $this->formatPaymentResponse($payment->fresh()),
+                    [
+                        'status' => 'pending',
+                        'message' => 'Payment received but order update failed. Contact support with your bill number.',
+                    ]
+                ));
+            }
 
             return response()->json([
                 'status' => 'paid',
@@ -178,7 +212,10 @@ class BakongPaymentController extends Controller
             ]);
         }
 
-        return response()->json(['status' => 'pending']);
+        return response()->json(array_merge(
+            $this->formatPaymentResponse($payment),
+            ['status' => 'pending']
+        ));
     }
 
     private function ensureOrderOwner(Order $order, Request $request): void

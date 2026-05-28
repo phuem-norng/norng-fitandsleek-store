@@ -17,6 +17,7 @@ export default function CheckoutPaymentKhqr({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const pollRef = useRef(null);
+  const pollFailuresRef = useRef(0);
 
   const createKhqr = useCallback(async () => {
     if (!orderId) return;
@@ -47,6 +48,9 @@ export default function CheckoutPaymentKhqr({
 
     try {
       const { data } = await api.get(`/payments/bakong/status/${targetId}`);
+      pollFailuresRef.current = 0;
+      setError("");
+
       const nextPayment = data?.payment || data;
       const nextStatus = nextPayment?.status || data?.status;
 
@@ -58,9 +62,17 @@ export default function CheckoutPaymentKhqr({
         if (nextStatus === "paid") onPaid?.(nextPayment || data);
       }
     } catch (e) {
-      setError(e?.response?.data?.message || "Failed to check status.");
+      pollFailuresRef.current += 1;
       if (e?.response?.status === 403) {
+        setError(e?.response?.data?.message || "Unauthorized.");
         setStatus("error");
+        return;
+      }
+      if (pollFailuresRef.current >= 3) {
+        setError(
+          e?.response?.data?.message ||
+            "Unable to verify payment status. Keep this screen open and try scanning again.",
+        );
       }
     }
   }, [onPaid, paymentId]);
@@ -92,6 +104,7 @@ export default function CheckoutPaymentKhqr({
       setPaymentId(null);
       setStatus("idle");
       setError("");
+      pollFailuresRef.current = 0;
     }
   }, [open]);
 

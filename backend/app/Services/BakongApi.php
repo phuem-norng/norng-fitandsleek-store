@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -21,7 +22,7 @@ class BakongApi
             throw new RuntimeException('Payment MD5 is missing.');
         }
 
-        $http = Http::withHeaders([
+        $http = Http::timeout(20)->withHeaders([
             'Authorization' => 'Bearer ' . $token,
             'Content-Type' => 'application/json',
         ]);
@@ -29,15 +30,24 @@ class BakongApi
         $verifyOption = $this->resolveVerifyOption();
         $http = $http->withOptions(['verify' => $verifyOption]);
 
-        $response = $http->post($baseUrl . '/v1/check_transaction_by_md5', [
-            'md5' => $md5,
-        ]);
+        try {
+            $response = $http->post($baseUrl . '/v1/check_transaction_by_md5', [
+                'md5' => $md5,
+            ]);
+        } catch (ConnectionException $e) {
+            throw new RuntimeException('Bakong connection failed: ' . $e->getMessage(), 0, $e);
+        }
 
         if ($response->failed()) {
             throw new RuntimeException('Bakong HTTP ' . $response->status() . ': ' . $response->body());
         }
 
-        return $response->json();
+        $json = $response->json();
+        if (! is_array($json)) {
+            throw new RuntimeException('Bakong returned an invalid response.');
+        }
+
+        return $json;
     }
 
     private function resolveVerifyOption(): bool|string
