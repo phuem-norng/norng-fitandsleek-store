@@ -103,19 +103,29 @@ class ProfileController extends Controller
      */
     public function uploadImage(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'profile_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', // 5MB max
         ]);
 
         $user = $request->user();
-        $profileDisk = (string) config('filesystems.default', 'public');
+        $profileDisk = (string) env('ADMIN_PROFILE_IMAGE_DISK', 'cloudinary');
+        $fallbackToPublic = filter_var(
+            env('ADMIN_PROFILE_IMAGE_FALLBACK_TO_PUBLIC', env('APP_ENV') !== 'production'),
+            FILTER_VALIDATE_BOOL
+        );
+
+        if (!is_array(config("filesystems.disks.{$profileDisk}"))) {
+            $profileDisk = (string) config('filesystems.default', 'public');
+        }
 
         // Delete old image if exists
         if ($user->profile_image_path) {
-            try {
-                Storage::disk($profileDisk)->delete($user->profile_image_path);
-            } catch (\Throwable) {
-                // Best-effort cleanup for legacy paths from other disks.
+            foreach (array_unique([$profileDisk, 'cloudinary', 'public']) as $disk) {
+                try {
+                    Storage::disk($disk)->delete($user->profile_image_path);
+                } catch (\Throwable) {
+                    // Best-effort cleanup for legacy paths from other disks.
+                }
             }
         }
 
@@ -125,11 +135,19 @@ class ProfileController extends Controller
         try {
             $path = $file->storeAs('profile_images', $filename, $profileDisk);
         } catch (\Throwable $e) {
-            Log::error('Admin profile image upload failed on preferred disk, falling back to public.', [
+            Log::error('Admin profile image upload failed on preferred disk.', [
                 'admin_id' => $user->id,
                 'preferred_disk' => $profileDisk,
+                'fallback_to_public' => $fallbackToPublic,
                 'error' => $e->getMessage(),
             ]);
+
+            if (! $fallbackToPublic) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Image upload storage is unavailable. Please retry shortly.',
+                ], 503);
+            }
 
             $path = $file->storeAs('profile_images', $filename, 'public');
         }
