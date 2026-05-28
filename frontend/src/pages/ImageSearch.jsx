@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { ArrowLeft, Camera, Heart, Link as LinkIcon, Search, Upload } from 'lucide-react';
+import api from '../lib/api.js';
+import { IMAGE_SEARCH_REQUEST_TIMEOUT_MS, postImageSearch } from '../lib/imageSearch.js';
 import { resolveImageUrl } from '../lib/images.js';
 import { useWishlist } from '../state/wishlist.jsx';
 
@@ -207,8 +208,12 @@ export default function ImageSearch() {
     setSourceImage(urlInput);
 
     try {
-      console.log('🌐 [handleUrlSearch] POST /api/image-search');
-      const res = await axios.post('/api/image-search', { url: urlInput });
+      console.log('🌐 [handleUrlSearch] POST /image-search');
+      const res = await api.post(
+        '/image-search',
+        { url: urlInput },
+        { timeout: IMAGE_SEARCH_REQUEST_TIMEOUT_MS },
+      );
 
       console.log('✅ [handleUrlSearch] Response:', res.data);
 
@@ -268,10 +273,8 @@ export default function ImageSearch() {
     console.log('📦 [sendImageToBackend] FormData created');
 
     try {
-      console.log('🌐 [sendImageToBackend] POST /api/image-search');
-      const response = await axios.post('/api/image-search', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      console.log('🌐 [sendImageToBackend] POST /image-search');
+      const response = await postImageSearch(formData);
 
       console.log('✅ [sendImageToBackend] Response received:', response.status);
       console.log('📋 [sendImageToBackend] Data:', response.data);

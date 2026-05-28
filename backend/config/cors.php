@@ -29,9 +29,12 @@ return [
         'http://127.0.0.1:3000',
         'https://fitandsleek.kalapak-team.space',
         'https://fitandsleekapp.kalapak-team.space',
+        'https://web-fitandsleek.onrender.com',
+        'https://api-fitandsleek.onrender.com',
     ],
 
     'allowed_origins_patterns' => [
+        '~^https://[a-z0-9-]+\.onrender\.com$~i',
         '~^http://localhost:\d+$~',
         '~^http://127\.0\.0\.1:\d+$~',
         '~^https://localhost:\d+$~',

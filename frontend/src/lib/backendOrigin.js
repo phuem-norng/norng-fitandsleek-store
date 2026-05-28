@@ -21,6 +21,8 @@ function getConfiguredValues() {
 const PUBLIC_STOREFRONT_TO_LARAVEL_ORIGIN = {
     "fitandsleek.kalapak-team.space": "https://fitandsleekapp.kalapak-team.space",
     "www.fitandsleek.kalapak-team.space": "https://fitandsleekapp.kalapak-team.space",
+    "web-fitandsleek.onrender.com": "https://api-fitandsleek.onrender.com",
+    "www.web-fitandsleek.onrender.com": "https://api-fitandsleek.onrender.com",
 };
 
 function laravelOriginForPublicStorefrontHostname(hostname) {
