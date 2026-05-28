@@ -17,17 +17,39 @@ DB_PASSWORD=your_password
 DB_SSLMODE=require
 ```
 
-## 2. Create tables
+## 2. Render (automatic on deploy)
+
+The backend **Dockerfile** / `docker/entrypoint.sh` already runs on each container start:
+
+1. `php artisan migrate --force`
+2. `php artisan hosting:ensure-sample-data` — seeds **only if** the catalog has **0** categories
+
+**Required on Render → Environment** (from Neon dashboard):
+
+```env
+DB_CONNECTION=pgsql
+DB_HOST=ep-xxxx.region.aws.neon.tech
+DB_PORT=5432
+DB_DATABASE=neondb
+DB_USERNAME=...
+DB_PASSWORD=...
+DB_SSLMODE=require
+```
+
+After deploy, open **Render → Logs** and look for `Hosting sample data ensured` or `Catalog already has N categories`.
+
+To **force** re-seed once: set `SEED_NEON_HOSTING=true`, redeploy, then remove the variable.
+
+**Cloudflare R2:** seed does **not** upload images to R2 (product URLs use picsum.photos). You will see data in **Neon**, not files in the R2 bucket until you upload from admin.
+
+## 3. Manual seed (local or Render Shell)
 
 From `backend/`:
 
 ```bash
 php artisan migrate --force
-```
-
-## 3. Seed everything (recommended)
-
-```bash
+php artisan hosting:ensure-sample-data
+# or
 php artisan db:seed --class=NeonHostingSeeder
 ```
 

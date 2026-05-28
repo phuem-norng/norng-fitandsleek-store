@@ -37,6 +37,12 @@ case "$1" in
     php artisan storage:link --relative --force
     php artisan config:clear
     php artisan migrate --force
+  # Sample catalog for empty Neon DB (Render). Set SEED_NEON_HOSTING=true to force re-seed.
+    if [ "${SEED_NEON_HOSTING:-false}" = "true" ] || [ "${SEED_NEON_HOSTING:-}" = "1" ]; then
+      php artisan hosting:ensure-sample-data --force --no-interaction || true
+    else
+      php artisan hosting:ensure-sample-data --no-interaction || true
+    fi
     php-fpm -D
     exec nginx -g 'daemon off;'
     ;;
