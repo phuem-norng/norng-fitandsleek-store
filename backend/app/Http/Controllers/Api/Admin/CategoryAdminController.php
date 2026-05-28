@@ -103,14 +103,14 @@ class CategoryAdminController extends BaseAdminController
     /** Avoid multi-megabyte list payloads when labels store camera uploads as base64. */
     private function publicImageUrlForList(Category $c): ?string
     {
-        if ($c->image_path) {
-            return Media::url($c->image_path);
-        }
-
         $url = trim((string) ($c->image_url ?? ''));
 
         if ($url !== '' && ! $this->isInlineDataUrl($url)) {
             return $url;
+        }
+
+        if ($c->image_path) {
+            return Media::url($c->image_path);
         }
 
         $gallery = $this->galleryForList($c->gallery);
