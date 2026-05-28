@@ -12,8 +12,8 @@ class ImageSearchController extends Controller
 {
     public function search(Request $request, ImageSearchService $imageSearchService)
     {
-        // Ensure this request isn't killed by the default 30s PHP limit while the model warms up.
-        $desired = 180;
+        $timeout = max(1, (int) config('services.image_search.timeout', 25));
+        $desired = $timeout + 15;
         @ini_set('max_execution_time', (string) $desired);
         if (function_exists('set_time_limit')) {
             @set_time_limit($desired);

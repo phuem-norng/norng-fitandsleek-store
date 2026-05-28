@@ -77,8 +77,11 @@ services:
       APP_PORT: 8000
       SERVER_PORT: 8000
       # Use Compose DNS so indexing works without host port forwarding quirks.
-      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: products_fitandsleek_512
+      QDRANT_VECTOR_SIZE: "512"
+      IMAGE_SEARCH_TIMEOUT: "120"
       # Same DB name/user/password as backend/.env; host/port are the Compose network (not 127.0.0.1:5433).
       DB_CONNECTION: pgsql
       DB_HOST: db
@@ -124,8 +127,11 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
-      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: products_fitandsleek_512
+      QDRANT_VECTOR_SIZE: "512"
+      IMAGE_SEARCH_TIMEOUT: "120"
     command: ["worker", "queue:work", "--sleep=3", "--tries=3", "--timeout=180", "--max-jobs=500"]
     volumes:
       - ./backend/app:/var/www/html/app
@@ -159,8 +165,11 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
-      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: products_fitandsleek_512
+      QDRANT_VECTOR_SIZE: "512"
+      IMAGE_SEARCH_TIMEOUT: "120"
     command: ["artisan", "schedule:work"]
     volumes:
       - ./backend/app:/var/www/html/app

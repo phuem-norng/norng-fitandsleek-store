@@ -17,7 +17,7 @@ class QdrantIndexProductsCommand extends Command
                             {--include-inactive : Include inactive products}
                             {--queue : Dispatch a SyncProductToQdrant job per product instead of indexing inline (requires queue worker)}';
 
-    protected $description = 'Vectorize product images from PostgreSQL and upsert into Qdrant (see IMAGE_VECTORIZE_URL & QDRANT_URL in .env)';
+    protected $description = 'Vectorize product images from PostgreSQL and upsert into Qdrant (see FITANDSLEEK_CLIP_ENDPOINT & QDRANT_URL in .env)';
 
     public function handle(ImageSearchService $imageSearchService, ProductQdrantIndexer $indexer): int
     {

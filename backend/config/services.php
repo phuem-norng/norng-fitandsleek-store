@@ -120,10 +120,15 @@ return [
     ],
 
     'image_search' => [
-        'vectorize_url' => env('IMAGE_VECTORIZE_URL', 'http://localhost:9000/vectorize'),
+        'clip_endpoint' => env('FITANDSLEEK_CLIP_ENDPOINT', env('IMAGE_VECTORIZE_URL', 'http://localhost:9000/vectorize')),
+        'clip_vector_size' => (int) env('FITANDSLEEK_CLIP_VECTOR_SIZE', env('QDRANT_VECTOR_SIZE', 512)),
+        'ai_service_key' => env('AI_SERVICE_KEY'),
+        'vector_provider' => env('VECTOR_PROVIDER', 'local_clip'),
         'qdrant_url' => env('QDRANT_URL', 'http://localhost:6333'),
-        'qdrant_collection' => env('QDRANT_COLLECTION', 'products'),
-        'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 120),
+        'qdrant_api_key' => env('QDRANT_API_KEY'),
+        'qdrant_collection' => env('QDRANT_COLLECTION', 'products_fitandsleek_512'),
+        'vector_size' => (int) env('QDRANT_VECTOR_SIZE', 512),
+        'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 25),
     ],
 
     /*
