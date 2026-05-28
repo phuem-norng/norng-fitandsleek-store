@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\BakongApi;
 use App\Services\BakongKhqrService;
+use App\Services\BakongPaymentConfirmation;
 use App\Services\PaidOrderInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,8 @@ class PaymentController extends Controller
 {
     public function __construct(
         private readonly BakongKhqrService $bakong,
-        private readonly BakongApi $bakongApi
+        private readonly BakongApi $bakongApi,
+        private readonly BakongPaymentConfirmation $bakongConfirmation,
     ) {
     }
 
@@ -390,70 +392,50 @@ class PaymentController extends Controller
             $payload = $request->getContent();
             $expected = hash_hmac('sha256', $payload, $secret);
 
-            if (!hash_equals($expected, (string) $signature)) {
+            if (! hash_equals($expected, (string) $signature)) {
+                Log::warning('Bakong webhook rejected: invalid signature');
+
                 return response()->json(['message' => 'Invalid signature'], 401);
             }
         }
 
         $data = $request->all();
-        $billNumber = data_get($data, 'bill_number')
-            ?? data_get($data, 'billNumber')
-            ?? data_get($data, 'data.billNumber');
-        $md5 = data_get($data, 'md5') ?? data_get($data, 'data.md5');
+        Log::info('Bakong KHQR webhook received', [
+            'responseCode' => data_get($data, 'responseCode'),
+            'has_md5' => filled(data_get($data, 'md5') ?? data_get($data, 'data.md5')),
+            'has_data_hash' => filled(data_get($data, 'data.hash')),
+        ]);
 
-        if (!$billNumber && !$md5) {
-            return response()->json(['message' => 'Invalid payload'], 422);
-        }
+        $payment = $this->bakongConfirmation->findPaymentFromPayload($data);
+        if (! $payment) {
+            Log::warning('Bakong webhook: payment not found', [
+                'md5' => data_get($data, 'md5') ?? data_get($data, 'data.md5'),
+                'bill_number' => data_get($data, 'billNumber') ?? data_get($data, 'bill_number'),
+            ]);
 
-        $payment = Payment::where('provider', 'bakong')
-            ->when($billNumber, fn ($query) => $query->where('bill_number', $billNumber))
-            ->when(!$billNumber && $md5, fn ($query) => $query->where('md5', $md5))
-            ->latest('id')
-            ->first();
-
-        if (!$payment) {
             return response()->json(['message' => 'Payment not found'], 404);
         }
 
-        $status = data_get($data, 'status') ?? data_get($data, 'data.status');
-        $status = $this->normalizeKhqrStatus($status);
+        if ($this->bakongConfirmation->payloadIndicatesPaid($data, $payment)) {
+            $transaction = is_array(data_get($data, 'data')) ? data_get($data, 'data') : null;
+            $this->bakongConfirmation->markPaid($payment, $data, $transaction);
 
-        if ($status === 'paid' && $payment->order_id) {
-            DB::transaction(function () use ($payment, $status, $data) {
-                $payment->update([
-                    'status' => $status,
-                    'paid_at' => now(),
-                    'raw_response' => $data,
-                ]);
-
-                $order = Order::query()->whereKey($payment->order_id)->lockForUpdate()->first();
-                if (! $order) {
-                    return;
-                }
-
-                if ($order->payment_status === 'paid') {
-                    return;
-                }
-
-                $order->update([
-                    'payment_status' => 'paid',
-                    'status' => 'processing',
-                ]);
-
-                $this->clearUserCart((int) $order->user_id);
-
-                $order->load('items.product');
-                PaidOrderInventory::applyForOrder($order);
-            });
-        } else {
-            $payment->update([
-                'status' => $status,
-                'paid_at' => $status === 'paid' ? now() : null,
-                'raw_response' => $data,
-            ]);
+            return response()->json(['ok' => true, 'status' => 'paid']);
         }
 
-        return response()->json(['ok' => true]);
+        $status = $this->normalizeKhqrStatus(
+            data_get($data, 'status')
+            ?? data_get($data, 'data.status')
+            ?? data_get($data, 'payment_status')
+        );
+
+        $payment->update([
+            'status' => $status,
+            'paid_at' => $status === 'paid' ? now() : null,
+            'raw_response' => $data,
+        ]);
+
+        return response()->json(['ok' => true, 'status' => $status]);
     }
 
     private function sanitizePayment(Payment $payment): array
