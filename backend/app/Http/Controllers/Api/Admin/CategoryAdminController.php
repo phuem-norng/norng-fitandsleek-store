@@ -100,6 +100,18 @@ class CategoryAdminController extends BaseAdminController
         }
     }
 
+    private function firstProductImageUrl(Category $category): ?string
+    {
+        $product = $category->products()
+            ->whereNotNull('image_url')
+            ->where('image_url', '!=', '')
+            ->orderBy('id')
+            ->first(['image_url']);
+
+        $url = trim((string) ($product->image_url ?? ''));
+        return $url !== '' ? $url : null;
+    }
+
     /** Avoid multi-megabyte list payloads when labels store camera uploads as base64. */
     private function publicImageUrlForList(Category $c): ?string
     {
@@ -124,7 +136,23 @@ class CategoryAdminController extends BaseAdminController
                 if ($parent->image_path) {
                     return Media::url($parent->image_path);
                 }
+
+                // If parent image fields are empty, use parent product image (Cloudinary URL) and persist it.
+                $parentProductUrl = $this->firstProductImageUrl($parent);
+                if ($parentProductUrl !== null) {
+                    $parent->image_url = $parentProductUrl;
+                    $parent->saveQuietly();
+                    return $parentProductUrl;
+                }
             }
+        }
+
+        // Final fallback: use this label's first related product image and persist to avoid placeholders next time.
+        $productUrl = $this->firstProductImageUrl($c);
+        if ($productUrl !== null) {
+            $c->image_url = $productUrl;
+            $c->saveQuietly();
+            return $productUrl;
         }
 
         $gallery = $this->galleryForList($c->gallery);
