@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Order;
 use App\Models\Address;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class CustomerProfileController extends Controller
@@ -97,7 +98,18 @@ class CustomerProfileController extends Controller
         // Store new image
         $file = $request->file('profile_image');
         $filename = 'profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs('profile_images', $filename, $profileDisk);
+        try {
+            $path = $file->storeAs('profile_images', $filename, $profileDisk);
+        } catch (\Throwable $e) {
+            Log::error('Profile image upload failed on preferred disk, falling back to public.', [
+                'user_id' => $user->id,
+                'preferred_disk' => $profileDisk,
+                'error' => $e->getMessage(),
+            ]);
+
+            // Fallback: keep upload working even when cloud disk is misconfigured/unavailable.
+            $path = $file->storeAs('profile_images', $filename, 'public');
+        }
 
         // Update user
         $user->update(['profile_image_path' => $path]);
