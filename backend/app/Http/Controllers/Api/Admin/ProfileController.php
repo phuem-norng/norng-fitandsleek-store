@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
+use Cloudinary\Cloudinary as CloudinarySdk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class ProfileController extends Controller
 {
@@ -135,6 +136,30 @@ class ProfileController extends Controller
         $filename = 'admin_profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
         try {
             if ($profileDisk === 'cloudinary') {
+                $cloudName = trim((string) env('CLOUDINARY_CLOUD_NAME', ''));
+                $apiKey = trim((string) env('CLOUDINARY_API_KEY', ''));
+                $apiSecret = trim((string) env('CLOUDINARY_API_SECRET', ''));
+
+                if ($cloudName === '' || $apiKey === '' || $apiSecret === '') {
+                    $cloudinaryUrl = trim((string) env('CLOUDINARY_URL', ''));
+                    if ($cloudinaryUrl !== '') {
+                        $parts = parse_url($cloudinaryUrl);
+                        $cloudName = $cloudName !== '' ? $cloudName : trim((string) ($parts['host'] ?? ''));
+                        $apiKey = $apiKey !== '' ? $apiKey : trim((string) ($parts['user'] ?? ''));
+                        $apiSecret = $apiSecret !== '' ? $apiSecret : trim((string) ($parts['pass'] ?? ''));
+                    }
+                }
+
+                if ($cloudName === '' || $apiKey === '' || $apiSecret === '') {
+                    throw new RuntimeException('Cloudinary credentials are incomplete.');
+                }
+
+                $cloudinary = new CloudinarySdk([
+                    'cloud' => ['cloud_name' => $cloudName],
+                    'api' => ['api_key' => $apiKey, 'api_secret' => $apiSecret],
+                    'url' => ['secure' => true],
+                ]);
+
                 $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
                 $uploadOptions = ['folder' => 'profile_images'];
                 if ($preset !== '') {
@@ -147,9 +172,12 @@ class ProfileController extends Controller
                 }
                 $uploadOptions['resource_type'] = 'image';
 
-                // Use Cloudinary SDK directly to avoid adapter-specific failures on Render.
-                $uploadResult = Cloudinary::upload($file->getRealPath(), $uploadOptions);
-                $path = (string) $uploadResult->getSecurePath();
+                // Use Cloudinary SDK with explicit credentials to avoid facade config issues.
+                $uploadResult = $cloudinary->uploadApi()->upload($file->getRealPath(), $uploadOptions);
+                $path = (string) ($uploadResult['secure_url'] ?? '');
+                if ($path === '') {
+                    throw new RuntimeException('Cloudinary upload did not return secure_url.');
+                }
             } else {
                 $path = $file->storeAs('profile_images', $filename, $profileDisk);
             }
