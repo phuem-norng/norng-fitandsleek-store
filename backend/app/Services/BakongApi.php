@@ -30,6 +30,63 @@ class BakongApi
      */
     private function checkByMd5ViaProxy(string $md5, string $proxyUrl): array
     {
+        $style = strtolower((string) config('services.bakong.proxy_style', 'forward'));
+
+        if ($style === 'legacy') {
+            return $this->checkByMd5ViaLegacyProxy($md5, $proxyUrl);
+        }
+
+        return $this->checkByMd5ViaForwardProxy($md5, $proxyUrl);
+    }
+
+    /**
+     * Cloudflare Worker (or any path relay): forwards /v1/check_transaction_by_md5 to NBC.
+     *
+     * @return array<string, mixed>
+     */
+    private function checkByMd5ViaForwardProxy(string $md5, string $proxyUrl): array
+    {
+        $token = config('services.bakong.token');
+        if (! $token) {
+            throw new RuntimeException('Bakong token is not configured.');
+        }
+
+        $headers = [
+            'Authorization' => 'Bearer ' . $token,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ];
+
+        $verifyOption = $this->resolveVerifyOption();
+
+        try {
+            $response = Http::timeout(25)
+                ->withHeaders($headers)
+                ->withOptions(['verify' => $verifyOption])
+                ->post($proxyUrl . '/v1/check_transaction_by_md5', ['md5' => $md5]);
+        } catch (ConnectionException $e) {
+            throw new RuntimeException('Bakong proxy connection failed: ' . $e->getMessage(), 0, $e);
+        }
+
+        if ($response->failed()) {
+            throw new RuntimeException('Bakong proxy HTTP ' . $response->status() . ': ' . $response->body());
+        }
+
+        $json = $response->json();
+        if (! is_array($json)) {
+            throw new RuntimeException('Bakong proxy returned an invalid response.');
+        }
+
+        return $json;
+    }
+
+    /**
+     * PHP proxy on Cambodia VPS: POST {md5} to root; proxy adds Bearer token.
+     *
+     * @return array<string, mixed>
+     */
+    private function checkByMd5ViaLegacyProxy(string $md5, string $proxyUrl): array
+    {
         $headers = ['Accept' => 'application/json'];
         $proxySecret = (string) config('services.bakong.proxy_secret', '');
         if ($proxySecret !== '') {
