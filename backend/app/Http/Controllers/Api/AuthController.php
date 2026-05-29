@@ -660,7 +660,7 @@ class AuthController extends Controller
     }
 
     if (filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) || app()->environment('local')) {
-      return 'Email delivery failed. Use the dev code below or tap Resend after fixing mail settings.';
+      return 'We could not send the verification email. Please tap Resend or try again in a few minutes.';
     }
 
     return 'We could not send the verification email. Please try again in a few minutes.';

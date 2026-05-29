@@ -183,30 +183,12 @@ export function AuthNotice({ message }) {
   );
 }
 
-/** Hosts where the API may return debug_otp (OTP_DEBUG on backend) for class/staging use. */
-export function isOtpFallbackHost() {
-  if (typeof window === "undefined") return false;
-  const host = window.location.hostname.toLowerCase();
-  return (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "fitandsleek.kalapak-team.space" ||
-    host === "www.fitandsleek.kalapak-team.space"
-  );
-}
-
-/** User-facing OTP notice. On local/staging hosts, shows debug_otp when the API provides it. */
-export function formatOtpNotice({ message, email, fallback, emailSent, debugOtp }) {
-  const showFallbackCode = isOtpFallbackHost() && Boolean(debugOtp);
-
+/** User-facing OTP notice — code is email-only; never show OTP in the UI. */
+export function formatOtpNotice({ message, email, fallback, emailSent }) {
   if (emailSent === false) {
-    const devHint =
-      showFallbackCode
-        ? ` Staging code: ${debugOtp}`
-        : " Check spam or Promotions, or tap Resend.";
     return (
       message ||
-      `We could not deliver the email${email ? ` to ${email}` : ""}.${devHint}`
+      `We could not deliver the email${email ? ` to ${email}` : ""}. Check spam or Promotions, or tap Resend.`
     );
   }
 
@@ -214,10 +196,6 @@ export function formatOtpNotice({ message, email, fallback, emailSent, debugOtp 
     message ||
     fallback ||
     (email ? `We sent a verification code to ${email}` : "We sent a verification code to your email.");
-
-  if (showFallbackCode) {
-    return `${base} If it does not arrive, check spam/Promotions. Staging code: ${debugOtp}`;
-  }
 
   return `${base} If you do not see it within a few minutes, check spam and Promotions.`;
 }

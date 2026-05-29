@@ -13,17 +13,16 @@
 #   SPA (static build):   http://localhost:5173
 #   Qdrant:              localhost:6333
 #
-# backend/.env (mounted into the PHP container) must use the Compose network for the DB, not localhost:
-#   DB_CONNECTION=pgsql  DB_HOST=db  DB_PORT=5432  DB_DATABASE=<same as repo-root .env / backend/.env>
-#
-# pgAdmin / local tools on the host (Windows/Mac): use backend/.env as-is (127.0.0.1 + published port 5433).
+# Database: Laravel reads backend/.env (mounted into PHP containers). Do NOT hardcode DB_* in compose
+# environment — Docker env vars override .env and will ignore Neon / external hosts.
+#   Local Postgres container: DB_HOST=db  DB_PORT=5432  DB_SSLMODE=disable
+#   Neon / cloud Postgres:    DB_HOST=<neon-host>  DB_SSLMODE=require
+#   Host tools (pgAdmin on Mac): DB_HOST=127.0.0.1  DB_PORT=5433
 #
 # Frontend image is built for the browser on your machine: default VITE_BACKEND_ORIGIN=http://localhost:8001
 # so the open tab calls the API on host port 8001. Rebuild after changing: docker compose build frontend
 #
-# Compose loads a repo-root `.env` for ${DB_*} on the `db` service (see `.env.example`).
-#   DB_DATABASE / DB_USERNAME / DB_PASSWORD must match backend/.env (e.g. fitandsleek_v4 / postgres / Norng@123).
-# PHP containers use DB_HOST=db and DB_PORT=5432; host tools use backend/.env (127.0.0.1:5433).
+# Compose loads a repo-root `.env` for ${DB_*} on the optional `db` service only (see `.env.example`).
 
 name: fitandsleek_ai
 
@@ -89,15 +88,6 @@ services:
       QDRANT_COLLECTION: products_fitandsleek_512
       QDRANT_VECTOR_SIZE: "512"
       IMAGE_SEARCH_TIMEOUT: "120"
-      # Same DB name/user/password as backend/.env; host/port are the Compose network (not 127.0.0.1:5433).
-      DB_CONNECTION: pgsql
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v4}
-      DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
-      DB_SSLMODE: disable
-      OTP_DEBUG: "true"
     # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
     command: ["web"]
     ports:
@@ -144,13 +134,6 @@ services:
       ai-service:
         condition: service_started
     environment:
-      DB_CONNECTION: pgsql
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v4}
-      DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
-      DB_SSLMODE: disable
       FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: products_fitandsleek_512
@@ -185,13 +168,6 @@ services:
       ai-service:
         condition: service_started
     environment:
-      DB_CONNECTION: pgsql
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_DATABASE: ${DB_DATABASE:-fitandsleek_v4}
-      DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
-      DB_SSLMODE: disable
       FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: products_fitandsleek_512
