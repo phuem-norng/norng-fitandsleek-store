@@ -80,7 +80,7 @@ export function setupTelegramMainButton({
   showProgress = false,
 } = {}) {
   const tg = getTelegramWebApp();
-  const btn = tg?.MainButton;
+  const btn = tg && telegramAtLeast(tg, "6.0") ? tg.MainButton : null;
   if (!btn) return () => {};
 
   try {
@@ -113,9 +113,19 @@ export function setupTelegramMainButton({
   };
 }
 
+function telegramAtLeast(tg, version) {
+  if (!tg || typeof tg.isVersionAtLeast !== "function") return false;
+  try {
+    return tg.isVersionAtLeast(version);
+  } catch {
+    return false;
+  }
+}
+
 export function setupTelegramBackButton({ onClick, isVisible = true } = {}) {
   const tg = getTelegramWebApp();
-  const btn = tg?.BackButton;
+  // BackButton logs console warnings on WebApp 6.0; supported from 6.1+.
+  const btn = tg && telegramAtLeast(tg, "6.1") ? tg.BackButton : null;
   if (!btn) return () => {};
 
   try {

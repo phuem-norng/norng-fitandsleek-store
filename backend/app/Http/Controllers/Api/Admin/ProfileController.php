@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\Media;
+use Cloudinary\Cloudinary as CloudinarySdk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class ProfileController extends Controller
 {
@@ -102,24 +105,93 @@ class ProfileController extends Controller
      */
     public function uploadImage(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'profile_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', // 5MB max
         ]);
 
         $user = $request->user();
-        $profileDisk = \App\Support\MediaDisk::name();
+        $profileDisk = (string) env('ADMIN_PROFILE_IMAGE_DISK', Media::disk());
+        $preset = trim((string) env('CLOUDINARY_UPLOAD_PRESET', ''));
 
-        // Delete old image if exists
-        if ($user->profile_image_path) {
-            try {
-                Storage::disk($profileDisk)->delete($user->profile_image_path);
-            } catch (\Throwable) {
-                // Best-effort cleanup for legacy paths from other disks.
-            }
+        if (! is_array(config("filesystems.disks.{$profileDisk}"))) {
+            $profileDisk = Media::disk();
         }
 
-        // Store new image
-        $path = $request->file('profile_image')->store('profile-images', $profileDisk);
+        if ($user->profile_image_path) {
+            Media::delete($user->profile_image_path);
+        }
+
+        $file = $request->file('profile_image');
+        $filename = 'admin_profile_'.$user->id.'_'.time().'.'.$file->getClientOriginalExtension();
+        try {
+            if ($profileDisk === 'cloudinary' && $preset !== '') {
+                $cloudName = trim((string) env('CLOUDINARY_CLOUD_NAME', ''));
+                $apiKey = trim((string) env('CLOUDINARY_API_KEY', ''));
+                $apiSecret = trim((string) env('CLOUDINARY_API_SECRET', ''));
+                $cloudinaryUrl = trim((string) env('CLOUDINARY_URL', ''));
+
+                if ($cloudName === '' || $apiKey === '' || ($apiSecret === '' && $preset === '')) {
+                    if ($cloudinaryUrl !== '') {
+                        $parts = parse_url($cloudinaryUrl);
+                        $cloudName = $cloudName !== '' ? $cloudName : trim((string) ($parts['host'] ?? ''));
+                        $apiKey = $apiKey !== '' ? $apiKey : trim((string) ($parts['user'] ?? ''));
+                        $apiSecret = $apiSecret !== '' ? $apiSecret : trim((string) ($parts['pass'] ?? ''));
+                    }
+                }
+
+                if ($cloudName === '' || ($apiKey === '' && $preset === '') || ($apiSecret === '' && $preset === '')) {
+                    throw new RuntimeException('Cloudinary credentials are incomplete.');
+                }
+
+                $uploadOptions = ['folder' => 'profile_images'];
+                $uploadOptions['resource_type'] = 'image';
+                if ($preset !== '') {
+                    // Unsigned upload flow: does not require API secret/signature.
+                    $unsignedCloudinary = $cloudinaryUrl !== ''
+                        ? new CloudinarySdk($cloudinaryUrl)
+                        : new CloudinarySdk(['cloud' => ['cloud_name' => $cloudName], 'url' => ['secure' => true]]);
+                    $uploadResult = $unsignedCloudinary->uploadApi()->unsignedUpload($file->getRealPath(), $preset, $uploadOptions);
+                } else {
+                    // Signed upload flow: requires key + secret.
+                    $uploadOptions['public_id'] = pathinfo($filename, PATHINFO_FILENAME);
+                    $uploadOptions['overwrite'] = true;
+                    $signedCloudinary = new CloudinarySdk([
+                        'cloud' => ['cloud_name' => $cloudName],
+                        'api' => ['api_key' => $apiKey, 'api_secret' => $apiSecret],
+                        'url' => ['secure' => true],
+                    ]);
+                    $uploadResult = $signedCloudinary->uploadApi()->upload($file->getRealPath(), $uploadOptions);
+                }
+                $path = (string) ($uploadResult['secure_url'] ?? '');
+                if ($path === '') {
+                    throw new RuntimeException('Cloudinary upload did not return secure_url.');
+                }
+            } else {
+                $path = Media::storeUploadedAs($file, 'profile_images', $filename, $profileDisk);
+            }
+        } catch (\Throwable $e) {
+            $errorContext = [
+                'admin_id' => $user->id,
+                'preferred_disk' => $profileDisk,
+                'fallback_to_public' => Media::fallbackToPublic(),
+                'exception' => get_class($e),
+                'error' => $e->getMessage(),
+            ];
+            Log::error('Admin profile image upload failed on preferred disk.', $errorContext);
+            Log::channel('stderr')->error('Admin profile image upload failed on preferred disk.', $errorContext);
+
+            if (! Media::fallbackToPublic()) {
+                $debugEnabled = filter_var(env('ADMIN_PROFILE_IMAGE_DEBUG', false), FILTER_VALIDATE_BOOL);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Image upload storage is unavailable. Please retry shortly.',
+                    'debug_message' => $debugEnabled ? $e->getMessage() : null,
+                ], 503);
+            }
+
+            $path = Media::storeUploadedAs($file, 'profile_images', $filename, 'public');
+        }
         
         // Update user
         $user->update([

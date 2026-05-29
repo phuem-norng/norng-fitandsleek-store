@@ -79,7 +79,10 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const [viewMode, setViewMode] = useState("list");
  const [adminViewMode, setAdminViewMode] = useState("list");
  const [searchQuery, setSearchQuery] = useState("");
+ const [searchDebounced, setSearchDebounced] = useState("");
  const [currentPage, setCurrentPage] = useState(1);
+ const [customerTotalPages, setCustomerTotalPages] = useState(1);
+ const [customerTotal, setCustomerTotal] = useState(0);
  const [adminSearchQuery, setAdminSearchQuery] = useState("");
  const [selectedIds, setSelectedIds] = useState([]);
  const [showAddModal, setShowAddModal] = useState(false);
@@ -96,12 +99,17 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  );
 
  useEffect(() => {
- if (showCustomers) {
- loadCustomers();
- } else {
+ const t = window.setTimeout(() => setSearchDebounced(searchQuery.trim()), 350);
+ return () => window.clearTimeout(t);
+ }, [searchQuery]);
+
+ useEffect(() => {
+ if (!showCustomers) {
  setLoadingCustomers(false);
+ return;
  }
- }, [showCustomers]);
+ loadCustomers(currentPage, searchDebounced);
+ }, [showCustomers, currentPage, searchDebounced]);
 
  useEffect(() => {
  if (allowAdmins) {
@@ -139,14 +147,21 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  setter(buildAllColumnsVisibility(columns, visible, "name"));
  };
 
- const loadCustomers = async () => {
+ const loadCustomers = async (page = 1, search = "") => {
  setLoadingCustomers(true);
  try {
- const { data } = await api.get("/admin/customers");
- setCustomers(normalizeList(data));
+ const params = { page, per_page: pageSize, compact: 1 };
+ if (search) params.search = search;
+ const { data } = await api.get("/admin/customers", { params });
+ const list = normalizeList(data);
+ setCustomers(list);
+ setCustomerTotalPages(Math.max(1, Number(data?.last_page) || 1));
+ setCustomerTotal(Number(data?.total) || list.length);
  } catch (err) {
  console.error("Failed to load customers", err);
  setCustomers([]);
+ setCustomerTotalPages(1);
+ setCustomerTotal(0);
  } finally {
  setLoadingCustomers(false);
  }
@@ -165,16 +180,9 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  }
  };
 
- const filteredCustomers = useMemo(() => {
- const q = searchQuery.trim().toLowerCase();
- if (!q) return customers;
- return customers.filter((cust) =>
- [cust.name, cust.email, cust.phone].some((field) => field?.toString().toLowerCase().includes(q))
- );
- }, [customers, searchQuery]);
-
- const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
- const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+ const paginatedCustomers = customers;
+ const totalPages = customerTotalPages;
+ const filteredCustomers = customers;
  const allSelected = paginatedCustomers.length > 0 && paginatedCustomers.every((cust) => selectedIds.includes(cust.id));
 
  const filteredAdmins = useMemo(() => {
@@ -252,7 +260,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  if (modalContext === "admin") {
  await loadAdmins();
  } else {
- await loadCustomers();
+ await loadCustomers(currentPage, searchDebounced);
  }
  closeModals();
  } catch (err) {
@@ -269,7 +277,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  if (deleteContext === "admin") {
  await loadAdmins();
  } else {
- await loadCustomers();
+ await loadCustomers(currentPage, searchDebounced);
  }
  } catch (err) {
  console.error("Failed to delete user", err);
@@ -278,7 +286,15 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  }
  };
 
- if (loadingCustomers || loadingAdmins) return <AdminContentSkeleton title="Users" />;
+ if (loadingCustomers && customers.length === 0 && !showAdmins) {
+ return <AdminContentSkeleton title="Users" />;
+ }
+ if (loadingAdmins && admins.length === 0 && !showCustomers) {
+ return <AdminContentSkeleton title="Users" />;
+ }
+ if (loadingCustomers && loadingAdmins && customers.length === 0 && admins.length === 0) {
+ return <AdminContentSkeleton title="Users" />;
+ }
 
  const viewToggleButton = (mode, activeMode, setter, title, icon) => (
  <button
@@ -515,7 +531,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <div className="px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-slate-200 dark:border-slate-800">
  <div>
  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Customers</h2>
- <p className="text-slate-500 dark:text-slate-400">Total: {filteredCustomers.length} customer{filteredCustomers.length !== 1 ? "s" : ""}</p>
+ <p className="text-slate-500 dark:text-slate-400">Total: {customerTotal} customer{customerTotal !== 1 ? "s" : ""}</p>
  </div>
  <div className="flex flex-col gap-3 w-full lg:w-auto lg:flex-row lg:items-center">
  {totalPages > 1 && (

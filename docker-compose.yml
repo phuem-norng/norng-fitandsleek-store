@@ -73,12 +73,22 @@ services:
       db:
         condition: service_healthy
     environment:
+      # Docker Desktop / local dev: these override backend/.env so production URLs never leak into localhost.
+      APP_ENV: local
+      APP_DEBUG: "true"
       APP_URL: http://localhost:8001
+      FRONTEND_URL: http://localhost:5173
+      SANCTUM_STATEFUL_DOMAINS: localhost,127.0.0.1,localhost:5173,127.0.0.1:5173,0.0.0.0:5173
+      GOOGLE_REDIRECT_URI: http://localhost:8001/api/auth/google/callback
+      FACEBOOK_REDIRECT_URI: http://localhost:8001/api/auth/facebook/callback
       APP_PORT: 8000
       SERVER_PORT: 8000
       # Use Compose DNS so indexing works without host port forwarding quirks.
-      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: products_fitandsleek_512
+      QDRANT_VECTOR_SIZE: "512"
+      IMAGE_SEARCH_TIMEOUT: "120"
       # Same DB name/user/password as backend/.env; host/port are the Compose network (not 127.0.0.1:5433).
       DB_CONNECTION: pgsql
       DB_HOST: db
@@ -87,6 +97,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
+      OTP_DEBUG: "true"
     # nginx + php-fpm (concurrent requests; replaces single-threaded `artisan serve`)
     command: ["web"]
     ports:
@@ -100,8 +111,23 @@ services:
       - ./backend/database/seeders:/var/www/html/database/seeders
       - ./backend/.env:/var/www/html/.env
       - ./backend/routes:/var/www/html/routes
+      - ./backend/resources/views:/var/www/html/resources/views
       - ./backend/public:/var/www/html/public
       - ./backend/storage/app/public:/var/www/html/storage/app/public
+      - ./backend/storage/framework:/var/www/html/storage/framework
+      - ./backend/storage/logs:/var/www/html/storage/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "php",
+          "-r",
+          "exit(@file_get_contents('http://127.0.0.1:8000/api/health') ? 0 : 1);",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   queue-worker:
     profiles: [workers, full]
@@ -125,8 +151,11 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
-      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: products_fitandsleek_512
+      QDRANT_VECTOR_SIZE: "512"
+      IMAGE_SEARCH_TIMEOUT: "120"
     command: ["worker", "queue:work", "--sleep=3", "--tries=3", "--timeout=180", "--max-jobs=500"]
     volumes:
       - ./backend/app:/var/www/html/app
@@ -134,8 +163,11 @@ services:
       - ./backend/database/migrations:/var/www/html/database/migrations
       - ./backend/.env:/var/www/html/.env
       - ./backend/routes:/var/www/html/routes
+      - ./backend/resources/views:/var/www/html/resources/views
       - ./backend/public:/var/www/html/public
       - ./backend/storage/app/public:/var/www/html/storage/app/public
+      - ./backend/storage/framework:/var/www/html/storage/framework
+      - ./backend/storage/logs:/var/www/html/storage/logs
 
   # Runs Laravel scheduler (includes qdrant:index-products --only-missing every 10 minutes).
   scheduler:
@@ -160,8 +192,11 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Norng@123}
       DB_SSLMODE: disable
-      IMAGE_VECTORIZE_URL: http://ai-service:8000/vectorize
+      FITANDSLEEK_CLIP_ENDPOINT: http://ai-service:8000/vectorize
       QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: products_fitandsleek_512
+      QDRANT_VECTOR_SIZE: "512"
+      IMAGE_SEARCH_TIMEOUT: "120"
     command: ["artisan", "schedule:work"]
     volumes:
       - ./backend/app:/var/www/html/app
@@ -169,8 +204,11 @@ services:
       - ./backend/database/migrations:/var/www/html/database/migrations
       - ./backend/.env:/var/www/html/.env
       - ./backend/routes:/var/www/html/routes
+      - ./backend/resources/views:/var/www/html/resources/views
       - ./backend/public:/var/www/html/public
       - ./backend/storage/app/public:/var/www/html/storage/app/public
+      - ./backend/storage/framework:/var/www/html/storage/framework
+      - ./backend/storage/logs:/var/www/html/storage/logs
 
   # Static `serve` does not proxy `/api`. For a public hostname, the tunnel/reverse proxy must route
   # `/api` (and usually `/storage`) to Laravel; the SPA then calls same-origin `/api` (set
@@ -188,7 +226,8 @@ services:
     container_name: fitandsleek_frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "5173:5173"
     healthcheck:

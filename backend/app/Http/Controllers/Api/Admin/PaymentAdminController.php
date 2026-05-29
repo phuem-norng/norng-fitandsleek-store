@@ -17,7 +17,11 @@ class PaymentAdminController extends BaseAdminController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Payment::with(['order.user', 'verifiedBy']);
+        $query = Payment::with([
+            'order:id,user_id,total,status',
+            'order.user:id,name,email',
+            'verifiedBy:id,name',
+        ]);
 
         // Filter by status
         if ($request->has('status')) {

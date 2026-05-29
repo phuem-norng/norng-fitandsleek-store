@@ -4,11 +4,16 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Message;
+use App\Support\Media;
 use Illuminate\Http\Request;
-use App\Support\MediaDisk;
 
 class AdminMessageController extends Controller
 {
+    private function mediaDisk(): string
+    {
+        return Media::disk();
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -49,7 +54,7 @@ class AdminMessageController extends Controller
             'content' => ['required', 'string'],
             'link_url' => ['nullable', 'url', 'max:2048'],
             'media_url' => ['nullable', 'string', 'max:2048'],
-            'media_type' => ['nullable', 'in:image,video,audio'],
+            'media_type' => ['nullable', 'in:image,video'],
             'language' => ['required', 'in:en,km'],
             'target_audience' => ['required', 'in:all,customers,guests'],
             'is_active' => ['required', 'boolean'],
@@ -90,7 +95,7 @@ class AdminMessageController extends Controller
             'content' => ['sometimes', 'string'],
             'link_url' => ['nullable', 'url', 'max:2048'],
             'media_url' => ['nullable', 'string', 'max:2048'],
-            'media_type' => ['nullable', 'in:image,video,audio'],
+            'media_type' => ['nullable', 'in:image,video'],
             'language' => ['sometimes', 'in:en,km'],
             'target_audience' => ['sometimes', 'in:all,customers,guests'],
             'is_active' => ['sometimes', 'boolean'],
@@ -123,18 +128,14 @@ class AdminMessageController extends Controller
     public function uploadMedia(Request $request)
     {
         $validated = $request->validate([
-            'media' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg,gif,mp4,webm,ogg,mp3,wav,mpeg,aac,m4a', 'max:51200'],
+            'media' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg,gif,mp4,webm,ogg', 'max:51200'],
         ]);
 
         $file = $request->file('media');
-        $path = MediaDisk::storeUploadedFile($file, 'messages');
-        $url = MediaDisk::url($path);
-        $mime = strtolower((string) $file->getMimeType());
-        $type = match (true) {
-            str_starts_with($mime, 'video/') => 'video',
-            str_starts_with($mime, 'audio/') => 'audio',
-            default => 'image',
-        };
+        $path = Media::storeUploaded($file, 'messages', $this->mediaDisk());
+        $url = Media::isExternalUrl($path) ? $path : (Media::url($path) ?? $path);
+        $mime = $file->getMimeType();
+        $type = str_starts_with($mime, 'video/') ? 'video' : 'image';
 
         return response()->json([
             'message' => 'Media uploaded',

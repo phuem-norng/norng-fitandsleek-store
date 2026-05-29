@@ -7,12 +7,12 @@ use App\Models\Category;
 use App\Services\PaidOrderInventory;
 use App\Services\StockReceiveService;
 use App\Support\Media;
-use App\Support\MediaDisk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-class CategoryAdminController extends Controller
+class CategoryAdminController extends BaseAdminController
 {
     /** @return list<int> */
     private function normalizeCategoryIds(?array $categoryIds, ?int $categoryId, ?Category $existing = null): array
@@ -43,10 +43,10 @@ class CategoryAdminController extends Controller
         return str_starts_with(strtolower(trim((string) $value)), 'data:');
     }
 
-    /** Save a camera/base64 upload to the public disk so list views can use a small URL. */
-    private function persistInlineImageUrl(Category $category, string $dataUrl): ?string
+    /** Save a camera/base64 upload to media disk so list views can use a small URL. */
+    private function persistInlineImageUrl(Category $category, string $dataUrl, string $folder = 'categories'): ?string
     {
-        if (! preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
+        if (!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s', trim($dataUrl), $matches)) {
             return null;
         }
 
@@ -63,10 +63,9 @@ class CategoryAdminController extends Controller
             return null;
         }
 
-        $filename = 'categories/' . $category->id . '-' . Str::random(8) . '.' . $ext;
-        MediaDisk::put($filename, $content);
+        $filename = trim($folder, '/') . '/' . $category->id . '-' . Str::random(8) . '.' . $ext;
 
-        return $filename;
+        return Media::put($filename, $content, $this->mediaDisk());
     }
 
     /** Convert inline `image_url` to `image_path` when labels were saved as base64. */
@@ -77,12 +76,12 @@ class CategoryAdminController extends Controller
         }
 
         $url = trim((string) ($category->image_url ?? ''));
-        if ($url === '' || ! $this->isInlineDataUrl($url)) {
+        if ($url === '' || !$this->isInlineDataUrl($url)) {
             return null;
         }
 
         $path = $this->persistInlineImageUrl($category, $url);
-        if (! $path) {
+        if (!$path) {
             return null;
         }
 
@@ -93,24 +92,111 @@ class CategoryAdminController extends Controller
         return Media::url($path);
     }
 
+    /** Upload gallery lines stored as base64 data URLs (Stock Inventory form) to the media disk. */
+    private function materializeGallery(Category $category): void
+    {
+        $gallery = $category->gallery;
+        if ($gallery === null || trim($gallery) === '') {
+            return;
+        }
+
+        $out = [];
+        foreach (preg_split('/\r\n|\r|\n/', $gallery) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+
+            if ($this->isInlineDataUrl($line)) {
+                $path = $this->persistInlineImageUrl($category, $line, 'categories/gallery');
+                if ($path) {
+                    $out[] = Media::isExternalUrl($path) ? $path : (Media::url($path) ?? $path);
+                }
+
+                continue;
+            }
+
+            $out[] = $line;
+        }
+
+        if ($out !== []) {
+            $category->gallery = implode("\n", $out);
+        }
+    }
+
     private function normalizeCategoryImages(Category $category): void
     {
+        $changed = false;
+
         if ($this->isInlineDataUrl($category->image_url)) {
             $this->materializeInlineImage($category);
+            $changed = true;
         }
+
+        $beforeGallery = $category->gallery;
+        $this->materializeGallery($category);
+        if ($category->gallery !== $beforeGallery) {
+            $changed = true;
+        }
+
+        if ($changed) {
+            $category->saveQuietly();
+        }
+    }
+
+    private function firstProductImageUrl(Category $category): ?string
+    {
+        $product = $category->products()
+            ->whereNotNull('image_url')
+            ->where('image_url', '!=', '')
+            ->orderBy('id')
+            ->first(['image_url']);
+
+        $url = trim((string) ($product->image_url ?? ''));
+        return $url !== '' ? $url : null;
     }
 
     /** Avoid multi-megabyte list payloads when labels store camera uploads as base64. */
     private function publicImageUrlForList(Category $c): ?string
     {
+        $url = trim((string) ($c->image_url ?? ''));
+
+        if ($url !== '' && !$this->isInlineDataUrl($url)) {
+            return $url;
+        }
+
         if ($c->image_path) {
             return Media::url($c->image_path);
         }
 
-        $url = trim((string) ($c->image_url ?? ''));
+        // Stock/received child rows often inherit product visuals from the parent label row.
+        if ($c->parent_id) {
+            $parent = $c->relationLoaded('parent') ? $c->parent : $c->parent()->first();
+            if ($parent instanceof Category) {
+                $parentUrl = trim((string) ($parent->image_url ?? ''));
+                if ($parentUrl !== '' && !$this->isInlineDataUrl($parentUrl)) {
+                    return $parentUrl;
+                }
+                if ($parent->image_path) {
+                    return Media::url($parent->image_path);
+                }
 
-        if ($url !== '' && ! $this->isInlineDataUrl($url)) {
-            return $url;
+                // If parent image fields are empty, use parent product image (Cloudinary URL) and persist it.
+                $parentProductUrl = $this->firstProductImageUrl($parent);
+                if ($parentProductUrl !== null) {
+                    $parent->image_url = $parentProductUrl;
+                    $parent->saveQuietly();
+                    return $parentProductUrl;
+                }
+            }
+        }
+
+        // Final fallback: use this label's first related product image and persist to avoid placeholders next time.
+        $productUrl = $this->firstProductImageUrl($c);
+        if ($productUrl !== null) {
+            $c->image_url = $productUrl;
+            $c->saveQuietly();
+            return $productUrl;
         }
 
         $gallery = $this->galleryForList($c->gallery);
@@ -200,11 +286,12 @@ class CategoryAdminController extends Controller
     public function index(Request $request)
     {
         $query = Category::query()
+            ->with(['parent:id,image_url,image_path'])
             ->orderBy('sort_order')
             ->orderBy('name');
 
         // Stock & Inventory uses barcode_qr rows; keep them out of the Categories admin list unless requested.
-        if (! $request->boolean('include_stock_labels')) {
+        if (!$request->boolean('include_stock_labels')) {
             $query->catalogOnly();
         } else {
             $fromDate = trim((string) $request->input('from_date', ''));
@@ -226,9 +313,41 @@ class CategoryAdminController extends Controller
             }
         }
 
-        $items = $query->get()->map(fn ($c) => $this->mapCategory($c, forList: true));
+        $items = $query->get()->map(fn($c) => $this->mapCategory($c, forList: true));
 
         return response()->json(['data' => $items]);
+    }
+
+    /** Stock inventory / label photo upload → Cloudinary (or configured media disk). */
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,svg', 'max:10240'],
+        ]);
+
+        try {
+            $stored = Media::storeUploaded($request->file('image'), 'categories');
+        } catch (\Throwable $e) {
+            Log::error('Category image upload failed.', [
+                'disk' => $this->mediaDisk(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Image upload failed.',
+                'errors' => ['image' => ['Could not upload image to media storage. Please retry.']],
+            ], 503);
+        }
+
+        $stored = str_replace('\\', '/', trim($stored));
+        $url = Media::isExternalUrl($stored)
+            ? $stored
+            : (Media::url($stored) ?? $stored);
+
+        return response()->json([
+            'message' => 'Image uploaded',
+            'image_url' => $url,
+        ]);
     }
 
     public function store(Request $request)
@@ -285,7 +404,7 @@ class CategoryAdminController extends Controller
 
         $path = null;
         if ($request->hasFile('image')) {
-            $path = MediaDisk::storeUploadedFile($request->file('image'), 'categories');
+            $path = $this->storeImage($request, 'image', 'categories');
         }
 
         $c = Category::create([
@@ -392,9 +511,8 @@ class CategoryAdminController extends Controller
             && (int) $recalcSnapshot['inventory']->id === (int) $category->id;
 
         if ($request->hasFile('image')) {
-            if ($category->image_path)
-                MediaDisk::delete($category->image_path);
-            $category->image_path = MediaDisk::storeUploadedFile($request->file('image'), 'categories');
+            $this->deleteMediaPath($category->image_path);
+            $category->image_path = $this->storeImage($request, 'image', 'categories');
         }
 
         $category->fill([
@@ -455,7 +573,7 @@ class CategoryAdminController extends Controller
             $recalcSnapshot = $stockReceive->inventoryRecalcSnapshotForReceiveChange($category);
 
             if ($category->image_path) {
-                MediaDisk::delete($category->image_path);
+                $this->deleteMediaPath($category->image_path);
             }
 
             $category->delete();

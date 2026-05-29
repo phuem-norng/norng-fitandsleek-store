@@ -6,7 +6,6 @@ use App\Models\Collection;
 use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use App\Support\MediaDisk;
 
 class CollectionAdminController extends BaseAdminController
 {
@@ -78,15 +77,13 @@ class CollectionAdminController extends BaseAdminController
         if ($request->has('is_active')) $collection->is_active = $this->bool($request->input('is_active'));
 
         if ($this->bool($request->input('remove_image', false)) && $collection->image_url) {
-            MediaDisk::delete($collection->image_url);
+            $this->deleteMediaPath($collection->image_url);
             $collection->image_url = null;
         }
 
         $newPath = $this->storeImage($request,'image','collections');
         if ($newPath) {
-            if ($collection->image_url) {
-                MediaDisk::delete($collection->image_url);
-            }
+            $this->deleteMediaPath($collection->image_url);
             $collection->image_url = $newPath;
         }
 
@@ -102,9 +99,7 @@ class CollectionAdminController extends BaseAdminController
 
     public function destroy(Collection $collection)
     {
-        if ($collection->image_url) {
-            MediaDisk::delete($collection->image_url);
-        }
+        $this->deleteMediaPath($collection->image_url);
         $collection->delete();
         return response()->json(['ok'=>true]);
     }

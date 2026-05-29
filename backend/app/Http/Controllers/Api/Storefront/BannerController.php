@@ -40,6 +40,10 @@ class BannerController extends Controller
             'link_url' => $b->link_url,
             'position' => $b->position ?? 'hero',
             'is_active' => (bool)$b->is_active,
+            'show_badge' => $b->show_badge !== false,
+            'show_title' => $b->show_title !== false,
+            'show_subtitle' => $b->show_subtitle !== false,
+            'show_cta' => $b->show_cta !== false,
         ];
     }
 

@@ -2,34 +2,51 @@
 
 namespace App\Services;
 
-use App\Support\QdrantHttp;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class ImageSearchService
 {
-    private string $vectorizeUrl;
+    private string $clipEndpoint;
+
     private string $qdrantUrl;
+
     private string $collection;
+
     private int $timeout;
+
+    private int $vectorSize;
+
+    private ?string $aiServiceKey;
+
+    private ?string $qdrantApiKey;
+
+    /** Hugging Face /embed expects multipart field `file`; legacy /vectorize uses `image`. */
+    private bool $clipUsesFileField;
 
     public function __construct()
     {
-        $this->vectorizeUrl = rtrim((string) config('services.image_search.vectorize_url', 'http://localhost:9000/vectorize'), '/');
+        $this->clipEndpoint = rtrim((string) config('services.image_search.clip_endpoint', 'http://localhost:9000/vectorize'), '/');
         $this->qdrantUrl = rtrim((string) config('services.image_search.qdrant_url', 'http://localhost:6333'), '/');
-        $this->collection = (string) config('services.image_search.qdrant_collection', 'products');
-        // Vectorizer often exceeds 30s on cold start (model load); floor avoids silent timeouts.
-        $this->timeout = max(120, (int) config('services.image_search.timeout', 120));
+        $this->collection = (string) config('services.image_search.qdrant_collection', 'products_fitandsleek_512');
+        $this->vectorSize = (int) config('services.image_search.vector_size', 512);
+        $this->aiServiceKey = filled(config('services.image_search.ai_service_key'))
+            ? (string) config('services.image_search.ai_service_key')
+            : null;
+        $this->qdrantApiKey = filled(config('services.image_search.qdrant_api_key'))
+            ? (string) config('services.image_search.qdrant_api_key')
+            : null;
+        $this->clipUsesFileField = (bool) preg_match('#/embed/?$#i', $this->clipEndpoint);
+        $this->timeout = max(1, (int) config('services.image_search.timeout', 25));
 
-        // Keep PHP alive while the vectorizer model loads on cold start.
-        $bufferSeconds = 15; // small cushion for response handling
+        $bufferSeconds = 15;
         $desiredLimit = $this->timeout + $bufferSeconds;
         $currentLimit = (int) ini_get('max_execution_time');
 
-        // Some hosts ignore set_time_limit; also set ini_max_execution_time for redundancy.
         if ($currentLimit !== 0 && $currentLimit < $desiredLimit) {
             @ini_set('max_execution_time', (string) $desiredLimit);
             if (function_exists('set_time_limit')) {
@@ -37,38 +54,51 @@ class ImageSearchService
             }
         }
 
-        // Extend socket timeout so curl won't abort earlier than our HTTP timeout.
         $socketTimeout = (int) ini_get('default_socket_timeout');
         if ($socketTimeout !== 0 && $socketTimeout < $this->timeout) {
             @ini_set('default_socket_timeout', (string) $this->timeout);
         }
     }
 
+    public function getTimeout(): int
+    {
+        return $this->timeout;
+    }
+
+    public function getVectorSize(): int
+    {
+        return $this->vectorSize;
+    }
+
     public function vectorizeImage(UploadedFile $image): array
     {
+        $fieldName = $this->clipUsesFileField ? 'file' : 'image';
+
         try {
-            $response = Http::timeout($this->timeout)
+            $response = $this->clipHttp()
                 ->attach(
-                    'image',
+                    $fieldName,
                     file_get_contents($image->getRealPath()),
                     $image->getClientOriginalName() ?: 'image.jpg'
                 )
-                ->post($this->vectorizeUrl);
+                ->post($this->clipEndpoint);
         } catch (ConnectionException $e) {
-            throw new RuntimeException('Vectorize service is unreachable: ' . $e->getMessage());
+            throw new RuntimeException('CLIP embedding service is unreachable: ' . $e->getMessage());
         }
 
         if ($response->failed()) {
-            throw new RuntimeException('Vectorize service error: ' . $response->status() . ' ' . $response->body());
+            throw new RuntimeException('CLIP embedding service error: ' . $response->status() . ' ' . $response->body());
         }
 
-        $vector = $response->json('vector');
+        $vector = $this->parseVectorFromResponse($response);
 
-        if (!is_array($vector) || count($vector) !== 512) {
-            throw new RuntimeException('Invalid vector returned from vectorize service. Expected 512 dimensions.');
+        if (count($vector) !== $this->vectorSize) {
+            throw new RuntimeException(
+                'Invalid vector returned from CLIP service. Expected ' . $this->vectorSize . ' dimensions, got ' . count($vector) . '.'
+            );
         }
 
-        return array_map(static fn($v) => (float) $v, $vector);
+        return $vector;
     }
 
     public function indexProductImage(int $productId, UploadedFile $image, array $metadata = []): void
@@ -77,30 +107,12 @@ class ImageSearchService
         $this->upsertVector($productId, $vector, $metadata);
     }
 
-    public function deleteProductVector(int $productId): void
-    {
-        try {
-            $response = QdrantHttp::client(min(15, $this->timeout))
-                ->post($this->qdrantUrl.'/collections/'.$this->collection.'/points/delete?wait=true', [
-                    'points' => [$productId],
-                ]);
-        } catch (ConnectionException $e) {
-            throw new RuntimeException('Qdrant delete failed: '.$e->getMessage());
-        }
-
-        if ($response->failed() && $response->status() !== 404) {
-            throw new RuntimeException('Qdrant delete failed: '.$response->status().' '.$response->body());
-        }
-
-        Cache::forget('qdrant:collection_exists:'.$this->collection);
-    }
-
     public function upsertVector(int $productId, array $vector, array $metadata = []): void
     {
         $this->ensureCollectionExists();
 
         $safeMetadata = collect($metadata)
-            ->filter(static fn($value) => is_scalar($value) || $value === null)
+            ->filter(static fn ($value) => is_scalar($value) || $value === null)
             ->toArray();
 
         $payload = [
@@ -116,7 +128,7 @@ class ImageSearchService
         ];
 
         try {
-            $response = QdrantHttp::client($this->timeout)
+            $response = $this->qdrantHttp()
                 ->put($this->qdrantUrl . '/collections/' . $this->collection . '/points?wait=true', $payload);
         } catch (ConnectionException $e) {
             throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
@@ -129,13 +141,12 @@ class ImageSearchService
 
     public function searchSimilarProductIds(UploadedFile $image, int $limit = 12): array
     {
-        // Make sure the collection exists before searching, otherwise Qdrant returns 404.
         $this->ensureCollectionExists();
 
         $vector = $this->vectorizeImage($image);
 
         try {
-            $response = QdrantHttp::client($this->timeout)
+            $response = $this->qdrantHttp()
                 ->post($this->qdrantUrl . '/collections/' . $this->collection . '/points/search', [
                     'vector' => $vector,
                     'limit' => $limit,
@@ -160,31 +171,41 @@ class ImageSearchService
                 }
 
                 $pointId = data_get($item, 'id');
+
                 return is_numeric($pointId) ? (int) $pointId : null;
             })
-            ->filter(static fn($id) => $id !== null)
+            ->filter(static fn ($id) => $id !== null)
             ->unique()
             ->values()
             ->all();
     }
 
-    public function ensureCollectionExists(): void
+    public function deletePoint(int $pointId): void
     {
-        $cacheKey = 'qdrant:collection_exists:'.$this->collection;
-        if (Cache::get($cacheKey) === true) {
-            return;
+        try {
+            $response = $this->qdrantHttp()
+                ->post($this->qdrantUrl . '/collections/' . $this->collection . '/points/delete?wait=true', [
+                    'points' => [$pointId],
+                ]);
+        } catch (ConnectionException $e) {
+            throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
         }
 
+        if ($response->failed()) {
+            throw new RuntimeException('Qdrant delete failed: ' . $response->status() . ' ' . $response->body());
+        }
+    }
+
+    public function ensureCollectionExists(): void
+    {
         try {
-            $check = QdrantHttp::client(min(15, $this->timeout))
+            $check = $this->qdrantHttp()
                 ->get($this->qdrantUrl . '/collections/' . $this->collection);
         } catch (ConnectionException $e) {
             throw new RuntimeException('Qdrant is unreachable: ' . $e->getMessage());
         }
 
         if ($check->successful()) {
-            Cache::put($cacheKey, true, now()->addHour());
-
             return;
         }
 
@@ -193,10 +214,10 @@ class ImageSearchService
         }
 
         try {
-            $create = QdrantHttp::client($this->timeout)
+            $create = $this->qdrantHttp()
                 ->put($this->qdrantUrl . '/collections/' . $this->collection, [
                     'vectors' => [
-                        'size' => 512,
+                        'size' => $this->vectorSize,
                         'distance' => 'Cosine',
                     ],
                 ]);
@@ -207,7 +228,41 @@ class ImageSearchService
         if ($create->failed()) {
             throw new RuntimeException('Failed to create Qdrant collection: ' . $create->status() . ' ' . $create->body());
         }
+    }
 
-        Cache::put($cacheKey, true, now()->addHour());
+    private function clipHttp(): PendingRequest
+    {
+        $request = Http::timeout($this->timeout);
+
+        if ($this->aiServiceKey !== null) {
+            $request = $request->withHeaders(['x-api-key' => $this->aiServiceKey]);
+        }
+
+        return $request;
+    }
+
+    private function qdrantHttp(): PendingRequest
+    {
+        $request = Http::timeout($this->timeout);
+
+        if ($this->qdrantApiKey !== null) {
+            $request = $request->withHeaders(['api-key' => $this->qdrantApiKey]);
+        }
+
+        return $request;
+    }
+
+    /**
+     * @return list<float>
+     */
+    private function parseVectorFromResponse(Response $response): array
+    {
+        $vector = $response->json('vector') ?? $response->json('embedding');
+
+        if (! is_array($vector)) {
+            throw new RuntimeException('Invalid vector returned from CLIP service. Expected a numeric array in `vector` or `embedding`.');
+        }
+
+        return array_map(static fn ($v) => (float) $v, $vector);
     }
 }

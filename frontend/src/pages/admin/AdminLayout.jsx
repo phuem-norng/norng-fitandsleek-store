@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../state/auth";
@@ -468,6 +468,8 @@ export default function AdminLayout() {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId = 0;
+
     const loadBadges = async () => {
       try {
         const { data } = await api.get("/admin/nav-badges");
@@ -480,10 +482,26 @@ export default function AdminLayout() {
         /* badges are optional */
       }
     };
-    loadBadges();
-    const intervalId = window.setInterval(loadBadges, 120000);
+
+    const start = () => {
+      if (cancelled) return;
+      loadBadges();
+      intervalId = window.setInterval(loadBadges, 120000);
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(start, { timeout: 2500 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(idleId);
+        window.clearInterval(intervalId);
+      };
+    }
+
+    const delayId = window.setTimeout(start, 400);
     return () => {
       cancelled = true;
+      window.clearTimeout(delayId);
       window.clearInterval(intervalId);
     };
   }, []);
@@ -607,16 +625,8 @@ export default function AdminLayout() {
     );
   };
 
-  // Loading state must render AFTER all hooks above so React's hook count is
-  // stable across renders (React error #310 fires otherwise).
-  if (settingsLoading) {
-    return (
-      <div className="flex min-h-[100dvh] w-full flex-col p-6">
-        <AdminContentSkeleton lines={2} imageHeight={160} className="mx-auto w-full max-w-4xl flex-1" />
-      </div>
-    );
-  }
-
+  // Do not block the whole admin shell on homepage settings — pages load in parallel.
+  // Logo falls back to "FS" until settings arrive.
   return (
     <div className="admin-theme admin-root admin-gemini-shell flex min-h-screen font-sans text-slate-800 dark:text-slate-100 admin-soft">
       <input
@@ -822,7 +832,9 @@ export default function AdminLayout() {
               : "pb-[calc(8rem+env(safe-area-inset-bottom,0px))] md:pb-8"
             }`}
         >
-          <Outlet />
+          <Suspense fallback={<AdminContentSkeleton lines={2} imageHeight={120} className="min-h-[40vh]" />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 

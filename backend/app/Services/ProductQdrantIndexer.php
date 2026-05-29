@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Support\Media;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -48,14 +49,14 @@ class ProductQdrantIndexer
                 'is_vector_indexed' => true,
                 'vector_indexed_at' => now(),
                 'vector_index_error' => null,
-            ])->save();
+            ])->saveQuietly();
         } catch (\Throwable $e) {
             $message = Str::limit($e->getMessage(), 1000, '...');
 
             $product->forceFill([
                 'is_vector_indexed' => false,
                 'vector_index_error' => $message,
-            ])->save();
+            ])->saveQuietly();
 
             throw $e;
         } finally {
@@ -63,6 +64,24 @@ class ProductQdrantIndexer
                 @unlink($tempPath);
             }
         }
+    }
+
+    public function remove(Product $product): void
+    {
+        $this->imageSearchService->deletePoint($product->id);
+
+        if ($product->exists) {
+            $product->forceFill([
+                'is_vector_indexed' => false,
+                'vector_indexed_at' => null,
+                'vector_index_error' => null,
+            ])->saveQuietly();
+        }
+    }
+
+    public function removeById(int $productId): void
+    {
+        $this->imageSearchService->deletePoint($productId);
     }
 
     /**
@@ -88,15 +107,20 @@ class ProductQdrantIndexer
             $mime = $response->header('Content-Type');
         } else {
             $filename = basename(parse_url($imageUrl, PHP_URL_PATH) ?: 'image.jpg');
+            $content = Media::readBytes($imageUrl);
 
-            $localPath = $this->resolveLocalPath($imageUrl);
-            if (! $localPath || ! file_exists($localPath)) {
-                throw new \RuntimeException('Image file not found: '.$imageUrl);
+            if ($content === null) {
+                $localPath = Media::resolveLocalPath($imageUrl);
+                if (! $localPath || ! file_exists($localPath)) {
+                    throw new \RuntimeException('Image file not found: '.$imageUrl);
+                }
+
+                $content = file_get_contents($localPath);
+                $mime = mime_content_type($localPath) ?: 'image/jpeg';
+                $filename = basename($localPath);
+            } else {
+                $mime = 'image/jpeg';
             }
-
-            $content = file_get_contents($localPath);
-            $mime = mime_content_type($localPath) ?: 'image/jpeg';
-            $filename = basename($localPath);
         }
 
         if ($content === false || $content === null) {
@@ -121,33 +145,6 @@ class ProductQdrantIndexer
             new UploadedFile($tempPath, $filename, $mime ?: 'image/jpeg', null, true),
             $tempPath,
         ];
-    }
-
-    private function resolveLocalPath(string $imageUrl): ?string
-    {
-        $path = trim($imageUrl);
-
-        if ($path === '') {
-            return null;
-        }
-
-        $fromDisk = \App\Support\MediaDisk::localPathForProcessing($path);
-        if ($fromDisk !== null) {
-            return $fromDisk;
-        }
-
-        if (str_starts_with($path, '/')) {
-            $publicPath = public_path(ltrim($path, '/'));
-            if (file_exists($publicPath)) {
-                return $publicPath;
-            }
-        }
-
-        if (file_exists($path)) {
-            return $path;
-        }
-
-        return null;
     }
 
     private function extensionFromMime(string $mime): string

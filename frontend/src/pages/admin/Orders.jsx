@@ -5,7 +5,7 @@ import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/ad
 import { countFilterSelections, matchesSection } from "../../lib/adminListFilters.js";
 import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
 import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
-import { AdminSectionLoader, AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
+import { AdminSectionLoader, AdminDashboardLoader } from "@/components/admin/AdminLoading";
 import {
  buildAllColumnsVisibility,
  loadTableColumnVisibility,
@@ -25,6 +25,11 @@ const ORDERS_TABLE_COLUMNS = [
 ];
 
 const ORDERS_COLUMNS_STORAGE_KEY = "fitandsleek-orders-columns";
+
+function currentYearMonthDefault() {
+ const now = new Date();
+ return { year: String(now.getFullYear()), month: String(now.getMonth() + 1) };
+}
 
 function Money({ value }) {
  const n = Number(value || 0);
@@ -215,6 +220,9 @@ const formatDate = (dateString) => {
 export default function AdminOrders() {
  const { primaryColor, mode } = useTheme();
  const [rows, setRows] = useState([]);
+ const [currentPage, setCurrentPage] = useState(1);
+ const [totalPages, setTotalPages] = useState(1);
+ const [orderTotal, setOrderTotal] = useState(0);
  const [loading, setLoading] = useState(true);
  const [selected, setSelected] = useState(null);
  const [status, setStatus] = useState("");
@@ -227,7 +235,7 @@ export default function AdminOrders() {
  total_revenue: 0,
  });
  const listFilters = useAdminFilterDrawer(["status", "payment"]);
- const yearMonthFilter = useAdminYearMonthFilter(2020);
+ const yearMonthFilter = useAdminYearMonthFilter(2020, currentYearMonthDefault());
  const fetchAbortRef = useRef(null);
  const hasLoadedOnceRef = useRef(false);
  const [refreshCounter, setRefreshCounter] = useState(0);
@@ -249,6 +257,7 @@ export default function AdminOrders() {
  status: listFilters.applied.status || [],
  payment: listFilters.applied.payment || [],
  search: searchDebounced,
+ page: currentPage,
  refresh: refreshCounter,
  }),
  [
@@ -256,6 +265,7 @@ export default function AdminOrders() {
  yearMonthFilter.dateRange.to,
  listFilters.applied,
  searchDebounced,
+ currentPage,
  refreshCounter,
  ],
  );
@@ -268,6 +278,15 @@ export default function AdminOrders() {
  }, [search]);
 
  useEffect(() => {
+ setCurrentPage(1);
+ }, [
+ yearMonthFilter.dateRange.from,
+ yearMonthFilter.dateRange.to,
+ listFilters.applied,
+ searchDebounced,
+ ]);
+
+ useEffect(() => {
  fetchAbortRef.current?.abort();
  const ac = new AbortController();
  fetchAbortRef.current = ac;
@@ -277,7 +296,7 @@ export default function AdminOrders() {
 
  (async () => {
  try {
- const params = { per_page: 100, compact: 1 };
+ const params = { per_page: 25, compact: 1, page: parsed.page || 1, include_summary: 0 };
  if (parsed.from) params.from_date = parsed.from;
  if (parsed.to) params.to_date = parsed.to;
  if (parsed.status?.length) params.statuses = parsed.status;
@@ -289,8 +308,14 @@ export default function AdminOrders() {
 
  const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
  setRows(list);
+ setTotalPages(Math.max(1, Number(data?.last_page) || 1));
+ setOrderTotal(Number(data?.total) || list.length);
  setSummary(
- data?.summary ?? { order_count: list.length, total_items: 0, total_revenue: 0 },
+ data?.summary ?? {
+ order_count: Number(data?.total) || list.length,
+ total_items: list.reduce((acc, o) => acc + (Number(o.items_count) || 0), 0),
+ total_revenue: list.reduce((acc, o) => acc + (Number(o.total) || 0), 0),
+ },
  );
  setErr("");
  } catch (error) {
@@ -495,10 +520,6 @@ export default function AdminOrders() {
  ];
  }, [rows]);
 
- const showInitialSkeleton = loading && rows.length === 0;
-
- if (showInitialSkeleton) return <AdminContentSkeleton title="Orders" />;
-
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
@@ -668,7 +689,7 @@ export default function AdminOrders() {
  </div>
 
  {loading && rows.length === 0 ? (
- <AdminSectionLoader rows={6} />
+ <AdminSectionLoader rows={8} />
  ) : rows.length === 0 ? (
  <div className="p-12 text-center">
  <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -868,6 +889,32 @@ export default function AdminOrders() {
  )}
  </div>
  </div>
+
+ {totalPages > 1 && (
+ <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+ <p className="text-sm text-slate-500 dark:text-slate-400">
+ Page {currentPage} of {totalPages} · {orderTotal} order{orderTotal !== 1 ? "s" : ""}
+ </p>
+ <div className="flex items-center gap-2">
+ <button
+ type="button"
+ onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+ disabled={currentPage === 1 || loading}
+ className="h-9 px-3 rounded-lg border admin-border text-sm disabled:opacity-40"
+ >
+ Previous
+ </button>
+ <button
+ type="button"
+ onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+ disabled={currentPage === totalPages || loading}
+ className="h-9 px-3 rounded-lg border admin-border text-sm disabled:opacity-40"
+ >
+ Next
+ </button>
+ </div>
+ </div>
+ )}
 
  <AdminConfirmDialog
  open={pendingDeleteId != null || pendingBulkDelete}

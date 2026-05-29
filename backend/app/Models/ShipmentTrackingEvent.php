@@ -9,6 +9,9 @@ class ShipmentTrackingEvent extends Model
 {
     use HasFactory;
 
+    /** Table only has `created_at` (see migration), not `updated_at`. */
+    public const UPDATED_AT = null;
+
     protected $fillable = [
         'shipment_id',
         'updated_by',

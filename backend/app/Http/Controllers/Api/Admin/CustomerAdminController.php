@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -13,32 +15,74 @@ class CustomerAdminController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::query()
-            ->where('role', 'customer')
-            ->withCount('orders')
-            ->withSum('orders', 'total')
-            ->orderByDesc('id');
+        $orderStats = DB::table('orders')
+            ->select('user_id')
+            ->selectRaw('COUNT(*)::int as orders_count')
+            ->selectRaw('COALESCE(SUM(total), 0) as total_spent')
+            ->groupBy('user_id');
 
-        // Search functionality
-        if ($request->has('search')) {
-            $search = $request->input('search');
+        $query = User::query()
+            ->select([
+                'users.id',
+                'users.name',
+                'users.email',
+                'users.phone',
+                'users.address',
+                'users.profile_image_path',
+                'users.created_at',
+                'users.role',
+            ])
+            ->selectRaw('COALESCE(order_stats.orders_count, 0) as orders_count')
+            ->selectRaw('COALESCE(order_stats.total_spent, 0) as total_spent')
+            ->leftJoinSub($orderStats, 'order_stats', 'order_stats.user_id', '=', 'users.id')
+            ->where('users.role', 'customer')
+            ->orderByDesc('users.id');
+
+        if ($request->filled('search')) {
+            $search = '%'.$request->string('search')->trim().'%';
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('email', 'ilike', "%{$search}%")
-                  ->orWhere('phone', 'ilike', "%{$search}%");
+                $q->where('users.name', 'ilike', $search)
+                    ->orWhere('users.email', 'ilike', $search)
+                    ->orWhere('users.phone', 'ilike', $search);
             });
         }
 
-        $customers = $query->paginate($request->input('per_page', 15));
+        $perPage = min(max((int) $request->input('per_page', 15), 1), 100);
 
-        $customers->through(function ($customer) {
-            $customer->orders_count = (int) ($customer->orders_count ?? 0);
-            $customer->total_spent = (float) ($customer->orders_sum_total ?? 0);
+        $paginator = $query->paginate($perPage);
 
-            return $customer;
+        $paginator->getCollection()->transform(function (User $user) {
+            $user->setAppends([]);
+            $user->profile_image_url = self::listProfileImageUrl($user->profile_image_path);
+            $user->total_spent = round((float) ($user->total_spent ?? 0), 2);
+
+            return $user;
         });
 
-        return response()->json($customers);
+        return response()->json($paginator);
+    }
+
+    /**
+     * Fast list avatar URL — avoids per-row Storage::exists() from User::$appends.
+     */
+    private static function listProfileImageUrl(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        $path = trim($path);
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
+        if (str_starts_with($path, '/storage/')) {
+            return $path;
+        }
+
+        $key = Media::storageKey($path);
+
+        return $key ? '/storage/'.$key : '/storage/'.ltrim($path, '/');
     }
 
     public function show(User $customer)

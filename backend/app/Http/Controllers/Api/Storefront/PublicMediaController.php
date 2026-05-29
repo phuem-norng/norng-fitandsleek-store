@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Api\Storefront;
 
 use App\Http\Controllers\Controller;
-use App\Support\MediaDisk;
+use App\Support\Media;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Serves public-disk files under /api/media/* so Flutter web (and other cross-origin
- * clients) receive CORS headers. When media is on R2/S3, redirects to the public CDN URL.
+ * clients) receive CORS headers. When FILESYSTEM_DISK=cloudinary, redirects to the CDN URL.
  */
 class PublicMediaController extends Controller
 {
@@ -19,19 +20,25 @@ class PublicMediaController extends Controller
             abort(404);
         }
 
-        if (MediaDisk::isRemote()) {
-            if (! MediaDisk::exists($path)) {
-                abort(404);
+        $defaultDisk = Media::disk();
+        if ($defaultDisk !== 'public') {
+            try {
+                if (Storage::disk($defaultDisk)->exists($path)) {
+                    $remoteUrl = Storage::disk($defaultDisk)->url($path);
+                    if (Media::isExternalUrl($remoteUrl)) {
+                        return redirect()->away($remoteUrl);
+                    }
+                }
+            } catch (\Throwable) {
+                // Fall through to local public disk for legacy files.
             }
-
-            return redirect(MediaDisk::url($path));
         }
 
-        if (! MediaDisk::disk()->exists($path)) {
+        if (! Storage::disk('public')->exists($path)) {
             abort(404);
         }
 
-        $full = MediaDisk::disk()->path($path);
+        $full = Storage::disk('public')->path($path);
         $mime = @mime_content_type($full) ?: 'application/octet-stream';
 
         return response()->file($full, [

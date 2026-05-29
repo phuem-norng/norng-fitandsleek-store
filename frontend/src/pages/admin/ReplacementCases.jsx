@@ -152,7 +152,8 @@ export default function AdminReplacementCases() {
  );
  });
 
- if (loading) return <AdminContentSkeleton title="Replacement Cases" />;
+ const showInitialSkeleton = loading && cases.length === 0;
+ if (showInitialSkeleton) return <AdminContentSkeleton title="Replacement Cases" />;
 
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">

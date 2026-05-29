@@ -5,9 +5,9 @@ import {
   yearMonthToDateRange,
 } from "./adminYearMonthFilter.js";
 
-export function useAdminYearMonthFilter(startYear = 2020) {
-  const [draft, setDraft] = useState(EMPTY_YEAR_MONTH);
-  const [applied, setApplied] = useState(EMPTY_YEAR_MONTH);
+export function useAdminYearMonthFilter(startYear = 2020, initialApplied = EMPTY_YEAR_MONTH) {
+  const [draft, setDraft] = useState(initialApplied);
+  const [applied, setApplied] = useState(initialApplied);
 
   const syncDraftFromApplied = useCallback(() => {
     setDraft({ ...applied });

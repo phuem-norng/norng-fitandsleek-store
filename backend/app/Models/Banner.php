@@ -8,12 +8,17 @@ class Banner extends Model
 {
     protected $fillable = [
         'page','sort_order','title','subtitle','image_url','link_url',
-        'position','is_active','order'
+        'position','is_active','order',
+        'show_badge','show_title','show_subtitle','show_cta',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'sort_order' => 'integer',
         'order' => 'integer',
+        'show_badge' => 'boolean',
+        'show_title' => 'boolean',
+        'show_subtitle' => 'boolean',
+        'show_cta' => 'boolean',
     ];
 }

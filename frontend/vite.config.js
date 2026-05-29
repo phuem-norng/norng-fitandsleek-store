@@ -39,9 +39,6 @@ export default defineConfig(({ mode }) => {
       target: proxyTarget,
       changeOrigin: true,
       secure: false,
-      // Image search: CLIP cold start + vectorize can exceed 60s
-      timeout: 180000,
-      proxyTimeout: 180000,
     },
     "/sanctum": {
       target: proxyTarget,
@@ -68,10 +65,10 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes("node_modules")) return;
-            if (id.includes("recharts") || id.includes("d3-")) return "charts";
-            if (id.includes("framer-motion")) return "motion";
-            if (id.includes("html5-qrcode")) return "qr";
-            if (id.includes("react-dom") || id.includes("react-router")) return "react-vendor";
+            if (id.includes("recharts")) return "recharts";
+            if (id.includes("html5-qrcode")) return "html5-qrcode";
+            if (id.includes("@radix-ui") || id.includes("framer-motion")) return "ui-vendor";
+            return "vendor";
           },
         },
       },

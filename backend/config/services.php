@@ -53,7 +53,9 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI'),
+        'redirect' => env('APP_ENV') === 'local' && ($local = env('GOOGLE_REDIRECT_URI_LOCAL'))
+            ? $local
+            : env('GOOGLE_REDIRECT_URI'),
         'guzzle' => $socialiteGuzzle,
     ],
 
@@ -66,7 +68,9 @@ return [
     'facebook' => [
         'client_id' => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect' => env('FACEBOOK_REDIRECT_URI'),
+        'redirect' => env('APP_ENV') === 'local' && ($local = env('FACEBOOK_REDIRECT_URI_LOCAL'))
+            ? $local
+            : env('FACEBOOK_REDIRECT_URI'),
         'guzzle' => $socialiteGuzzle,
     ],
 
@@ -99,6 +103,11 @@ return [
     'bakong' => [
         'base_url' => env('BAKONG_BASE_URL', 'https://api-bakong.nbc.gov.kh'),
         'token' => env('BAKONG_TOKEN'),
+        // NBC check_transaction_by_md5 is blocked outside Cambodia (errorCode 15).
+        // forward = Cloudflare Worker path relay (default); legacy = backend/bakong-proxy/index.php
+        'proxy_url' => env('BAKONG_PROXY_URL'),
+        'proxy_style' => env('BAKONG_PROXY_STYLE', 'forward'),
+        'proxy_secret' => env('BAKONG_PROXY_SECRET'),
         'merchant_name' => env('BAKONG_MERCHANT_NAME'),
         'merchant_city' => env('BAKONG_MERCHANT_CITY', 'Phnom Penh'),
         'receive_account' => env('BAKONG_RECEIVE_ACCOUNT'),
@@ -120,15 +129,15 @@ return [
     ],
 
     'image_search' => [
-        'vectorize_url' => env('IMAGE_VECTORIZE_URL', 'http://localhost:9000/vectorize'),
+        'clip_endpoint' => env('FITANDSLEEK_CLIP_ENDPOINT', env('IMAGE_VECTORIZE_URL', 'http://localhost:9000/vectorize')),
+        'clip_vector_size' => (int) env('FITANDSLEEK_CLIP_VECTOR_SIZE', env('QDRANT_VECTOR_SIZE', 512)),
+        'ai_service_key' => env('AI_SERVICE_KEY'),
+        'vector_provider' => env('VECTOR_PROVIDER', 'local_clip'),
         'qdrant_url' => env('QDRANT_URL', 'http://localhost:6333'),
         'qdrant_api_key' => env('QDRANT_API_KEY'),
-        'qdrant_collection' => env('QDRANT_COLLECTION', 'products'),
-        'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 120),
-        // Auto-sync product images to Qdrant on create/update (ProductObserver).
-        'auto_sync' => env('IMAGE_SEARCH_AUTO_SYNC', true),
-        // true = index in the same HTTP request (slow; no queue worker needed on Render).
-        'sync_inline' => env('IMAGE_SEARCH_SYNC_INLINE', false),
+        'qdrant_collection' => env('QDRANT_COLLECTION', 'products_fitandsleek_512'),
+        'vector_size' => (int) env('QDRANT_VECTOR_SIZE', 512),
+        'timeout' => (int) env('IMAGE_SEARCH_TIMEOUT', 25),
     ],
 
     /*

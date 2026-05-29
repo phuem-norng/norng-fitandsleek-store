@@ -52,9 +52,13 @@ return [
     |
     */
 
-    'url' => env('APP_URL', 'http://localhost'),
+    'url' => env('APP_ENV') === 'local' && ($local = env('APP_URL_LOCAL'))
+        ? $local
+        : env('APP_URL', 'http://localhost'),
 
-    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    'frontend_url' => env('APP_ENV') === 'local' && ($local = env('FRONTEND_URL_LOCAL'))
+        ? $local
+        : env('FRONTEND_URL', 'http://localhost:5173'),
 
     'logo_url' => env('APP_LOGO_URL', '/logo.png'),
 

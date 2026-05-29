@@ -6,7 +6,6 @@ use App\Models\Menu;
 use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use App\Support\MediaDisk;
 
 class MenuAdminController extends BaseAdminController
 {
@@ -95,7 +94,7 @@ class MenuAdminController extends BaseAdminController
         if ($request->has('promo_link')) $menu->promo_link = $request->input('promo_link');
 
         if ($this->bool($request->input('remove_promo_image', false)) && $menu->promo_image_path) {
-            MediaDisk::delete($menu->promo_image_path);
+            $this->deleteMediaPath($menu->promo_image_path);
             $menu->promo_image_path = null;
         }
 
@@ -110,9 +109,7 @@ class MenuAdminController extends BaseAdminController
 
         $newPromo = $this->storeImage($request,'promo_image','menus');
         if ($newPromo) {
-            if ($menu->promo_image_path) {
-                MediaDisk::delete($menu->promo_image_path);
-            }
+            $this->deleteMediaPath($menu->promo_image_path);
             $menu->promo_image_path = $newPromo;
         }
 
@@ -130,9 +127,7 @@ class MenuAdminController extends BaseAdminController
 
     public function destroy(Menu $menu)
     {
-        if ($menu->promo_image_path) {
-            MediaDisk::delete($menu->promo_image_path);
-        }
+        $this->deleteMediaPath($menu->promo_image_path);
         $menu->delete();
         return response()->json(['ok'=>true]);
     }

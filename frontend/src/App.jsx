@@ -3,12 +3,15 @@ import { Navigate, Route, Routes, useLocation, useParams } from "react-router-do
 import SiteLayout from "./components/layout/SiteLayout.jsx";
 import Home from "./pages/Home.jsx";
 import Search from "./pages/Search.jsx";
+import ImageSearch from "./pages/ImageSearch.jsx";
+import ProductDetail from "./pages/ProductDetail.jsx";
 import Discounts from "./pages/Discounts.jsx";
 import DiscountCategory from "./pages/DiscountCategory.jsx";
 import Login from "./pages/auth/Login.jsx";
 import Register from "./pages/auth/Register.jsx";
 import OAuthCallback from "./pages/auth/OAuthCallback.jsx";
 import CartPage from "./pages/Cart.jsx";
+import Checkout from "./pages/Checkout.jsx";
 import PaymentProcess from "./pages/PaymentProcess.jsx";
 import Orders from "./pages/Orders.jsx";
 import ContactPage from "./pages/Contact.jsx";
@@ -21,42 +24,38 @@ import CookiesPage from "./pages/Cookies.jsx";
 import NotificationsPage from "./pages/Notifications.jsx";
 import BrandDetail from "./pages/BrandDetail.jsx";
 import CategoryPage from "./pages/CategoryPage.jsx";
-import { CatalogAvailabilityProvider } from "./state/catalogAvailability.jsx";
+import CustomerProfile from "./pages/CustomerProfile.jsx";
+import AdminLayout from "./pages/admin/AdminLayout.jsx";
 import {
-  LazyBoundary,
-  LazyAdminBarcodeQR,
-  LazyAdminBrands,
-  LazyAdminCategories,
-  LazyAdminCustomers,
-  LazyAdminDiscounts,
-  LazyAdminHome,
-  LazyAdminInvoicePage,
-  LazyAdminLayout,
-  LazyAdminManagement,
-  LazyAdminOrders,
-  LazyAdminPayments,
-  LazyAdminPosScan,
-  LazyAdminProducts,
-  LazyAdminReplacementCases,
-  LazyAdminAdministrators,
-  LazyChatbotSettings,
-  LazyCheckout,
-  LazyCompleteHomepageManager,
-  LazyContacts,
-  LazyCustomerProfile,
-  LazyHomePageManager,
-  LazyImageSearch,
-  LazyInventoryIntegrity,
-  LazyMessages,
-  LazyNotifications,
-  LazyPaymentSettings,
-  LazyProductDetail,
-  LazyProfile,
-  LazyReports,
-  LazySaleHistory,
-  LazySettings,
-  LazyUserManagement,
-} from "./routes/lazyPages.jsx";
+  AdminHome,
+  Reports,
+  AdminProducts,
+  AdminCategories,
+  AdminBrands,
+  AdminBarcodeQR,
+  InventoryIntegrity,
+  AdminPosScan,
+  AdminOrders,
+  AdminInvoicePage,
+  AdminCustomers,
+  AdminAdministrators,
+  HomePageManager,
+  CompleteHomepageManager,
+  Contacts,
+  Messages,
+  ChatbotSettings,
+  Notifications,
+  Profile,
+  Settings,
+  AdminDiscounts,
+  UserManagement,
+  AdminManagement,
+  AdminPayments,
+  SaleHistory,
+  AdminReplacementCases,
+  PaymentSettings,
+} from "./pages/admin/adminLazy.js";
+import { CatalogAvailabilityProvider } from "./state/catalogAvailability.jsx";
 import { HomepageSettingsProvider, useHomepageSettings } from "./state/homepageSettings.jsx";
 import { useLanguage } from "./lib/i18n.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
@@ -65,7 +64,7 @@ import HomepageSettingsTest from "./pages/HomepageSettingsTest.jsx";
 import PublicHomepageManager from "./pages/PublicHomepageManager.jsx";
 import ExtendedHomepageManager from "./pages/ExtendedHomepageManager.jsx";
 import DriverScanPage from "./pages/driver/Scan.jsx";
-import { useAuth } from "./state/auth.jsx";
+import { useAuth, TOKEN_KEY } from "./state/auth.jsx";
 import { useTheme } from "./state/theme.jsx";
 import { AdminContentSkeleton } from "./components/admin/AdminLoading.jsx";
 
@@ -131,11 +130,14 @@ function isAdminUser(user) {
 
 function RequireAdmin({ children }) {
   const { user, booted } = useAuth();
-  if (!booted) return (
-    <div className="flex min-h-[100dvh] w-full flex-col p-6">
-      <AdminContentSkeleton lines={2} imageHeight={140} className="mx-auto w-full max-w-4xl flex-1" />
-    </div>
-  );
+  const hasToken = typeof window !== "undefined" && !!localStorage.getItem(TOKEN_KEY);
+
+  if (!booted && !hasToken) {
+    return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
+  }
+  if (!booted && hasToken) {
+    return children;
+  }
   if (!user) return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
   if (!isAdminUser(user)) return <Navigate to="/" replace />;
   return children;
@@ -190,26 +192,12 @@ export default function App() {
         <Route element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="/search" element={<Search />} />
-          <Route
-            path="/image-search"
-            element={
-              <LazyBoundary>
-                <LazyImageSearch />
-              </LazyBoundary>
-            }
-          />
+          <Route path="/image-search" element={<ImageSearch />} />
           <Route path="/brands/:slug" element={<BrandDetail />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
           <Route path="/discounts" element={<Discounts />} />
           <Route path="/discounts/:categorySlug" element={<DiscountCategory />} />
-          <Route
-            path="/p/:slug"
-            element={
-              <LazyBoundary>
-                <LazyProductDetail />
-              </LazyBoundary>
-            }
-          />
+          <Route path="/p/:slug" element={<ProductDetail />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/support" element={<SupportPage />} />
@@ -228,9 +216,7 @@ export default function App() {
             path="/profile"
             element={
               <RequireAuth>
-                <LazyBoundary>
-                  <LazyCustomerProfile />
-                </LazyBoundary>
+                <CustomerProfile />
               </RequireAuth>
             }
           />
@@ -238,9 +224,7 @@ export default function App() {
             path="/checkout"
             element={
               <RequireAuth>
-                <LazyBoundary>
-                  <LazyCheckout />
-                </LazyBoundary>
+                <Checkout />
               </RequireAuth>
             }
           />
@@ -271,50 +255,48 @@ export default function App() {
           path="/admin"
           element={
             <RequireAdmin>
-              <LazyBoundary admin>
-                <LazyAdminLayout />
-              </LazyBoundary>
+              <AdminLayout />
             </RequireAdmin>
           }
         >
-          <Route index element={<LazyAdminHome />} />
-          <Route path="reports" element={<LazyReports />} />
-          <Route path="products" element={<LazyAdminProducts />} />
-          <Route path="inventory" element={<LazyAdminProducts />} />
-          <Route path="discounts" element={<LazyAdminDiscounts />} />
-          <Route path="sales" element={<LazyAdminDiscounts />} />
-          <Route path="categories" element={<LazyAdminCategories />} />
-          <Route path="brands" element={<LazyAdminBrands />} />
-          <Route path="stock-inventory/new" element={<LazyAdminBarcodeQR />} />
-          <Route path="stock-inventory/:id/edit" element={<LazyAdminBarcodeQR />} />
-          <Route path="stock-inventory" element={<LazyAdminBarcodeQR />} />
-          <Route path="stock-received/new" element={<LazyAdminBarcodeQR />} />
-          <Route path="stock-received/:id/edit" element={<LazyAdminBarcodeQR />} />
-          <Route path="stock-received" element={<LazyAdminBarcodeQR />} />
-          <Route path="inventory-integrity" element={<LazyInventoryIntegrity />} />
+          <Route index element={<AdminHome />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="products" element={<AdminProducts />} />
+          <Route path="inventory" element={<AdminProducts />} />
+          <Route path="discounts" element={<AdminDiscounts />} />
+          <Route path="sales" element={<AdminDiscounts />} />
+          <Route path="categories" element={<AdminCategories />} />
+          <Route path="brands" element={<AdminBrands />} />
+          <Route path="stock-inventory/new" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory/:id/edit" element={<AdminBarcodeQR />} />
+          <Route path="stock-inventory" element={<AdminBarcodeQR />} />
+          <Route path="stock-received/new" element={<AdminBarcodeQR />} />
+          <Route path="stock-received/:id/edit" element={<AdminBarcodeQR />} />
+          <Route path="stock-received" element={<AdminBarcodeQR />} />
+          <Route path="inventory-integrity" element={<InventoryIntegrity />} />
           <Route path="barcode-qr/new" element={<Navigate to="/admin/stock-inventory/new" replace />} />
           <Route path="barcode-qr/:id/edit" element={<LegacyBarcodeQrToStockInventoryEdit />} />
           <Route path="barcode-qr" element={<Navigate to="/admin/stock-inventory" replace />} />
-          <Route path="checkout" element={<LazyAdminPosScan />} />
+          <Route path="checkout" element={<AdminPosScan />} />
           <Route path="pos" element={<Navigate to="/admin/checkout" replace />} />
-          <Route path="homepage" element={<LazyHomePageManager />} />
-          <Route path="homepage-complete" element={<LazyCompleteHomepageManager />} />
-          <Route path="orders" element={<LazyAdminOrders />} />
-          <Route path="orders/:orderId/invoice" element={<LazyAdminInvoicePage />} />
-          <Route path="customers" element={<LazyAdminCustomers />} />
-          <Route path="administrators" element={<LazyAdminAdministrators />} />
-          <Route path="contacts" element={<LazyContacts />} />
-          <Route path="notifications" element={<LazyNotifications />} />
-          <Route path="messages" element={<LazyMessages />} />
-          <Route path="chatbot" element={<LazyChatbotSettings />} />
-          <Route path="profile" element={<LazyProfile />} />
-          <Route path="settings" element={<LazySettings />} />
-          <Route path="user-management" element={<LazyUserManagement />} />
-          <Route path="admin-management" element={<LazyAdminManagement />} />
-          <Route path="payments" element={<LazyAdminPayments />} />
-          <Route path="payments/sale-history" element={<LazySaleHistory />} />
-          <Route path="replacement-cases" element={<LazyAdminReplacementCases />} />
-          <Route path="payment-settings" element={<LazyPaymentSettings />} />
+          <Route path="homepage" element={<HomePageManager />} />
+          <Route path="homepage-complete" element={<CompleteHomepageManager />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="orders/:orderId/invoice" element={<AdminInvoicePage />} />
+          <Route path="customers" element={<AdminCustomers />} />
+          <Route path="administrators" element={<AdminAdministrators />} />
+          <Route path="contacts" element={<Contacts />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="messages" element={<Messages />} />
+          <Route path="chatbot" element={<ChatbotSettings />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="user-management" element={<UserManagement />} />
+          <Route path="admin-management" element={<AdminManagement />} />
+          <Route path="payments" element={<AdminPayments />} />
+          <Route path="payments/sale-history" element={<SaleHistory />} />
+          <Route path="replacement-cases" element={<AdminReplacementCases />} />
+          <Route path="payment-settings" element={<PaymentSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -15,6 +15,7 @@ use App\Support\OrderMetrics;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -347,26 +348,28 @@ class ReportController extends Controller
     // Dashboard overview — respects from/to or period query params
     public function dashboard(Request $request)
     {
+        $cacheKey = 'admin_dashboard_v2:' . md5(json_encode([
+            'period' => $request->input('period'),
+            'from' => $request->input('from'),
+            'to' => $request->input('to'),
+        ]));
+
+        $payload = Cache::remember($cacheKey, 45, fn () => $this->buildDashboardPayload($request));
+
+        return response()->json($payload);
+    }
+
+    private function buildDashboardPayload(Request $request): array
+    {
         [$fromRange, $toRange] = $this->resolveDateRange($request);
 
-        $today      = now()->startOfDay();
-        $thisMonth  = now()->startOfMonth();
+        $today = now()->startOfDay();
+        $thisMonth = now()->startOfMonth();
 
-        // Revenue in the selected range
         $totalRevenue = OrderMetrics::sumRevenue($fromRange, $toRange);
-
-        // Always-current reference figures for the subtext
         $monthRevenue = OrderMetrics::sumRevenue($thisMonth, null);
         $todayRevenue = OrderMetrics::sumRevenue($today, null);
 
-        // Orders in the selected range
-        $ordersInRange    = Order::whereBetween('created_at', [$fromRange, $toRange]);
-        $totalOrders      = (clone $ordersInRange)->count();
-        $pendingOrders    = (clone $ordersInRange)->where('status', 'pending')->count();
-        $processingOrders = (clone $ordersInRange)->where('status', 'processing')->count();
-        $completedOrders  = (clone $ordersInRange)->where('status', 'completed')->count();
-
-        /** Counts grouped by lifecycle status — used for dashboard charts */
         $ordersByStatusRows = Order::query()
             ->whereBetween('created_at', [$fromRange, $toRange])
             ->select('status', DB::raw('COUNT(*) as cnt'))
@@ -374,65 +377,77 @@ class ReportController extends Controller
             ->orderByDesc(DB::raw('COUNT(*)'))
             ->get();
 
-        // Product stats — inventory has no date context
-        $totalProducts   = Product::count();
-        $activeProducts  = Product::where('is_active', true)->count();
-        $lowStockProducts = Product::where('stock', '<', 10)->count();
+        $statusCounts = $ordersByStatusRows->pluck('cnt', 'status');
+        $totalOrders = (int) $statusCounts->sum();
+        $pendingOrders = (int) ($statusCounts->get('pending', 0) + $statusCounts->get('pending_payment', 0));
+        $processingOrders = (int) $statusCounts->get('processing', 0);
+        $completedOrders = (int) ($statusCounts->get('completed', 0) + $statusCounts->get('delivered', 0));
 
-        // Customer stats
-        $totalCustomers       = User::where('role', 'customer')->count();
-        $newCustomersInRange  = User::where('role', 'customer')
-            ->whereBetween('created_at', [$fromRange, $toRange])
-            ->count();
+        $productStats = Cache::remember('admin_dashboard_product_stats', 120, function () {
+            return [
+                'total' => Product::count(),
+                'active' => Product::where('is_active', true)->count(),
+                'low_stock' => Product::where('stock', '<', 10)->count(),
+            ];
+        });
 
-        return response()->json([
+        $customerStats = Cache::remember('admin_dashboard_customer_stats', 120, function () use ($fromRange, $toRange) {
+            return [
+                'total' => User::where('role', 'customer')->count(),
+                'new_this_month' => User::where('role', 'customer')
+                    ->whereBetween('created_at', [$fromRange, $toRange])
+                    ->count(),
+            ];
+        });
+
+        return [
             'revenue' => [
                 'total' => round($totalRevenue, 2),
                 'month' => round($monthRevenue, 2),
                 'today' => round($todayRevenue, 2),
             ],
             'orders' => [
-                'total'      => $totalOrders,
-                'pending'    => $pendingOrders,
+                'total' => $totalOrders,
+                'pending' => $pendingOrders,
                 'processing' => $processingOrders,
-                'completed'  => $completedOrders,
+                'completed' => $completedOrders,
             ],
-            /** For charts: `{ status: string, count: int }[]` ordered by descending count */
             'orders_by_status' => $ordersByStatusRows->map(fn ($row) => [
                 'status' => (string) $row->status,
-                'count'  => (int) $row->cnt,
-            ])->values(),
-            'products' => [
-                'total'     => $totalProducts,
-                'active'    => $activeProducts,
-                'low_stock' => $lowStockProducts,
-            ],
-            'customers' => [
-                'total'          => $totalCustomers,
-                'new_this_month' => $newCustomersInRange,
-            ],
+                'count' => (int) $row->cnt,
+            ])->values()->all(),
+            'products' => $productStats,
+            'customers' => $customerStats,
             'period' => [
                 'from' => $fromRange->toDateString(),
                 'to' => $toRange->toDateString(),
             ],
-        ]);
+        ];
     }
 
     // Sales chart — respects from/to or period query params
     public function sales(Request $request)
     {
-        [$startDate, $endDate] = $this->resolveDateRange($request);
+        $cacheKey = 'admin_sales_v2:' . md5(json_encode([
+            'period' => $request->input('period'),
+            'from' => $request->input('from'),
+            'to' => $request->input('to'),
+        ]));
 
-        $sales = Order::select(
-            DB::raw('DATE(created_at) as date'),
-            DB::raw('COUNT(*) as orders'),
-            DB::raw('SUM(total) as revenue')
-        )
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->where('status', '!=', 'cancelled')
-            ->groupBy(DB::raw('DATE(created_at)'))
-            ->orderBy('date')
-            ->get();
+        $sales = Cache::remember($cacheKey, 45, function () use ($request) {
+            [$startDate, $endDate] = $this->resolveDateRange($request);
+
+            return Order::select(
+                DB::raw('DATE(created_at) as date'),
+                DB::raw('COUNT(*) as orders'),
+                DB::raw('SUM(total) as revenue')
+            )
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->where('status', '!=', 'cancelled')
+                ->groupBy(DB::raw('DATE(created_at)'))
+                ->orderBy('date')
+                ->get();
+        });
 
         return response()->json([
             'sales' => $sales,

@@ -23,10 +23,11 @@ const DEFAULT_PRODUCTION_LARAVEL_ORIGIN =
         import.meta.env.VITE_DEFAULT_LARAVEL_ORIGIN.trim()) ||
     "https://norng-fitandsleek-backend.onrender.com";
 
-/** Storefront host → Laravel API origin (SPA never serves JSON at /api). */
 const PUBLIC_STOREFRONT_TO_LARAVEL_ORIGIN = {
     "fitandsleek.kalapak-team.space": "https://fitandsleekapp.kalapak-team.space",
     "www.fitandsleek.kalapak-team.space": "https://fitandsleekapp.kalapak-team.space",
+    "web-fitandsleek.onrender.com": "https://api-fitandsleek.onrender.com",
+    "www.web-fitandsleek.onrender.com": "https://api-fitandsleek.onrender.com",
     "app.fitandsleek.phuemnorng-kalapakteam.space": DEFAULT_PRODUCTION_LARAVEL_ORIGIN,
     "www.app.fitandsleek.phuemnorng-kalapakteam.space": DEFAULT_PRODUCTION_LARAVEL_ORIGIN,
 };
@@ -120,7 +121,6 @@ function normalizeConfiguredOrigin() {
         if (defaultApi) {
             return `${defaultApi.protocol}//${defaultApi.host}`;
         }
-        // Same-origin `/api` behind one hostname (tunnel / reverse proxy / Vercel rewrites).
         if (window.location?.origin) {
             return window.location.origin;
         }

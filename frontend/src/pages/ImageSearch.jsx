@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera, Heart, Link as LinkIcon, Search, Upload } from 'lucide-react';
+import api from '../lib/api.js';
+import { IMAGE_SEARCH_REQUEST_TIMEOUT_MS, postImageSearch } from '../lib/imageSearch.js';
 import { resolveImageUrl } from '../lib/images.js';
-import { fetchImageSearchStatus, formatImageSearchError, postImageSearch } from '../lib/imageSearchApi.js';
 import { useWishlist } from '../state/wishlist.jsx';
 
 export default function ImageSearch() {
@@ -19,7 +20,6 @@ export default function ImageSearch() {
   const [error, setError] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [urlInput, setUrlInput] = useState('');
-  const [serviceHint, setServiceHint] = useState('');
   
   const fileInputRef = useRef();
   const videoRef = useRef();
@@ -53,32 +53,6 @@ export default function ImageSearch() {
       sessionStorage.removeItem(STORAGE_KEY);
     }
   }, [step]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchImageSearchStatus()
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.ready) {
-          setServiceHint('');
-          return;
-        }
-        setServiceHint(
-          data?.hint ||
-            'Image search is not ready yet. Start Qdrant + AI service and index products.',
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setServiceHint(
-            'Could not reach image search services. Use docker compose --profile ai up -d, then index products.',
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const persistSearchState = (next) => {
     try {
@@ -234,7 +208,14 @@ export default function ImageSearch() {
     setSourceImage(urlInput);
 
     try {
-      const res = await postImageSearch({ url: urlInput });
+      console.log('🌐 [handleUrlSearch] POST /image-search');
+      const res = await api.post(
+        '/image-search',
+        { url: urlInput },
+        { timeout: IMAGE_SEARCH_REQUEST_TIMEOUT_MS },
+      );
+
+      console.log('✅ [handleUrlSearch] Response:', res.data);
 
       const nextProducts = res.data.products || [];
       const nextDetectedText = res.data.detected_text || '';
@@ -244,10 +225,6 @@ export default function ImageSearch() {
       setDetectedText(nextDetectedText);
       setMatchReason(nextMatchReason);
 
-      if (nextProducts.length === 0 && res.data.hint) {
-        setError(res.data.hint);
-      }
-
       persistSearchState({
         products: nextProducts,
         sourceImage: urlInput,
@@ -255,8 +232,10 @@ export default function ImageSearch() {
         matchReason: nextMatchReason,
       });
       setStep('results');
+      console.log('✅ [handleUrlSearch] Set step to RESULTS');
     } catch (err) {
-      setError(formatImageSearchError(err));
+      console.error('❌ [handleUrlSearch] Error:', err.message);
+      setError(`URL search failed: ${err.response?.data?.message || err.message}`);
       setStep('input');
       setSourceImage(null);
     }
@@ -274,8 +253,9 @@ export default function ImageSearch() {
     const sizeMB = file.size / (1024 * 1024);
     console.log('📊 [sendImageToBackend] File size:', sizeMB.toFixed(2), 'MB');
 
-    if (sizeMB > 5) {
-      setError('Image must be less than 5MB');
+    if (sizeMB > 2) {
+      console.warn('⚠️ [sendImageToBackend] File too large');
+      setError('Image must be less than 2MB');
       setStep('input');
       return;
     }
@@ -288,20 +268,30 @@ export default function ImageSearch() {
     const previewUrl = URL.createObjectURL(file);
     setSourceImage(previewUrl);
 
+    const formData = new FormData();
+    formData.append('image', file);
+    console.log('📦 [sendImageToBackend] FormData created');
+
     try {
-      const response = await postImageSearch({ file });
+      console.log('🌐 [sendImageToBackend] POST /image-search');
+      const response = await postImageSearch(formData);
+
+      console.log('✅ [sendImageToBackend] Response received:', response.status);
+      console.log('📋 [sendImageToBackend] Data:', response.data);
 
       const prods = response.data.products || [];
       const text = response.data.detected_text || '';
       const reason = response.data.match_reason || '';
 
+      console.log('📊 [sendImageToBackend] Results:', {
+        productCount: prods.length,
+        detected_text: text,
+        match_reason: reason
+      });
+
       setProducts(prods);
       setDetectedText(text);
       setMatchReason(reason);
-
-      if (prods.length === 0 && response.data.hint) {
-        setError(response.data.hint);
-      }
 
       persistSearchState({
         products: prods,
@@ -310,8 +300,14 @@ export default function ImageSearch() {
         matchReason: reason,
       });
       setStep('results');
+      console.log('✅ [sendImageToBackend] Set step to RESULTS');
     } catch (err) {
-      setError(formatImageSearchError(err));
+      console.error('❌ [sendImageToBackend] Error:', err.message);
+      if (err.response) {
+        console.error('Status:', err.response.status);
+        console.error('Data:', err.response.data);
+      }
+      setError(`Upload failed: ${err.response?.data?.message || err.message}`);
       setStep('input');
       URL.revokeObjectURL(previewUrl);
       setSourceImage(null);
@@ -433,12 +429,6 @@ export default function ImageSearch() {
                     </button>
                   </div>
                 </div>
-
-                {serviceHint && !error && (
-                  <div className="mt-6 p-4 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg">
-                    {serviceHint}
-                  </div>
-                )}
 
                 {/* Error Message */}
                 {error && (

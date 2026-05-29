@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
+import { filterStorefrontMedia } from "../../lib/catalogContent.js";
+import { useCatalogAvailability } from "../../state/catalogAvailability.jsx";
 
 const isVideo = (url) => /\.(mp4|webm|ogg)$/i.test(url || "");
 
 export default function PromoBannerSlider() {
+  const { infrastructureDegraded } = useCatalogAvailability();
   const [index, setIndex] = useState(0);
   const [banners, setBanners] = useState([]);
 
@@ -13,8 +16,7 @@ export default function PromoBannerSlider() {
     const load = async () => {
       try {
         const { data } = await api.get("/banners/promo");
-        const items = data?.data || [];
-        setBanners(items.length ? items : []);
+        setBanners(filterStorefrontMedia(data?.data || []));
       } catch (err) {
         console.warn("[PromoBannerSlider] /banners/promo failed:", err?.response?.status ?? err?.message);
         setBanners([]);
@@ -22,6 +24,8 @@ export default function PromoBannerSlider() {
     };
     load();
   }, []);
+
+  if (infrastructureDegraded) return null;
 
   const slides = useMemo(() => {
     return (banners || []).map((b) => {

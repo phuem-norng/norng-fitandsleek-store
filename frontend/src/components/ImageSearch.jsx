@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import axios from 'axios';
+import { postImageSearch } from '../lib/imageSearch.js';
 
 export default function ImageSearch() {
   const [loading, setLoading] = useState(false);
@@ -24,10 +24,7 @@ export default function ImageSearch() {
     formData.append('image', file);
     setLoading(true);
     try {
-      const res = await axios.post('/api/image-search', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        withCredentials: true,
-      });
+      const res = await postImageSearch(formData);
       setDetectedText(res.data.detected_text || '');
       setMatchReason(res.data.match_reason || '');
       setProducts(res.data.products || []);

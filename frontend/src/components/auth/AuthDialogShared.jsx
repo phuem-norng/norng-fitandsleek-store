@@ -183,6 +183,15 @@ export function AuthNotice({ message }) {
   );
 }
 
+/** User-facing OTP notice — never expose debug_otp on the storefront. */
+export function formatOtpNotice({ message, email, fallback }) {
+  return (
+    message ||
+    fallback ||
+    (email ? `We sent a verification code to ${email}` : "We sent a verification code to your email.")
+  );
+}
+
 export function AuthDivider() {
   return (
     <div className="relative my-5">

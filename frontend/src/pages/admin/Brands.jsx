@@ -15,6 +15,14 @@ const emptyForm = {
   logo_url: "",
 };
 
+function slugifyName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 /** Resolve API storage paths; leave blob/data previews unchanged. */
 function brandLogoSrc(url) {
   if (!url) return null;
@@ -125,20 +133,18 @@ export default function AdminBrands() {
     try {
       const fd = new FormData();
       fd.append("name", form.name);
-      if (form.slug) fd.append("slug", form.slug);
+      fd.append("slug", (form.slug || slugifyName(form.name)).trim());
       fd.append("sort_order", String(form.sort_order ?? 0));
       fd.append("is_active", form.is_active ? "1" : "0");
       if (form.logo_source === "url") {
-        if (!form.logo_url?.trim()) throw new Error("Logo URL is required");
-        fd.append("logo_url", form.logo_url.trim());
-      } else {
-        if (!form.logo) throw new Error("Logo is required");
+        if (form.logo_url?.trim()) {
+          fd.append("logo_url", form.logo_url.trim());
+        }
+      } else if (form.logo) {
         fd.append("logo", form.logo);
       }
 
-      const response = await api.post("/admin/brands", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await api.post("/admin/brands", fd);
 
       if (![200, 201].includes(response?.status)) {
         throw new Error("Create failed.");
@@ -191,21 +197,20 @@ export default function AdminBrands() {
     try {
       const fd = new FormData();
       fd.append("name", editing.name);
-      if (editing.slug) fd.append("slug", editing.slug);
+      fd.append("slug", (editing.slug || slugifyName(editing.name)).trim());
       fd.append("sort_order", String(editing.sort_order ?? 0));
       fd.append("is_active", editing.is_active ? "1" : "0");
       if (editing.logo_source === "url") {
-        if (!editing.logo_url?.trim()) throw new Error("Logo URL is required");
-        fd.append("logo_url", editing.logo_url.trim());
+        if (editing.logo_url?.trim()) {
+          fd.append("logo_url", editing.logo_url.trim());
+        }
       } else if (editing.logo) {
         fd.append("logo", editing.logo);
       }
       // Laravel apiResource uses PUT/PATCH. We use POST + _method for multipart.
       fd.append("_method", "PATCH");
 
-      await api.post(`/admin/brands/${editing.id}`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post(`/admin/brands/${editing.id}`, fd);
 
       setEditing(null);
       showSuccess("Brand updated");
@@ -533,7 +538,7 @@ export default function AdminBrands() {
 
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo source</label>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo (optional)</label>
                     <div className="flex items-center gap-4 mb-3">
                       <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                         <input
@@ -571,7 +576,7 @@ export default function AdminBrands() {
                         className="block w-full text-sm text-slate-600 dark:text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border file:border-black file:bg-white file:text-black"
                       />
                     )}
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Choose local upload or paste a public image URL.</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Optional — upload a file or paste a public image URL. The brand name shows on the homepage if no logo is set.</p>
                   </div>
                   <div className="h-24 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                     {previewCreate ? (
@@ -786,7 +791,7 @@ export default function AdminBrands() {
 
               <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo source</label>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Logo (optional)</label>
                   <div className="flex items-center gap-4 mb-3">
                     <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                       <input

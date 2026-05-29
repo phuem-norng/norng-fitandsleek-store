@@ -16,24 +16,44 @@ class OrderAdminController extends Controller
         $compact = $request->boolean('compact');
         $statuses = OrderAdminFilters::parseArrayParam($request, 'statuses');
 
-        $query = Order::query()->with(['user']);
+        $query = Order::query();
 
         if ($compact) {
-            $query->withCount('items');
+            $query->select([
+                'orders.id',
+                'orders.user_id',
+                'orders.order_number',
+                'orders.status',
+                'orders.payment_status',
+                'orders.payment_method',
+                'orders.total',
+                'orders.created_at',
+            ])->with(['user:id,name,email'])
+                ->withCount('items');
         } else {
-            $query->with(['items.product']);
+            $query->with(['user', 'items.product']);
         }
 
         OrderAdminFilters::applyListFilters($query, $request);
 
-        $summaryQuery = clone $query;
-        $revenueQuery = OrderAdminFilters::applyRevenueScope($summaryQuery, $statuses);
+        $includeSummary = $request->boolean('include_summary', ! $compact);
 
         $summary = [
-            'order_count' => (int) (clone $summaryQuery)->count('orders.id'),
-            'total_items' => OrderMetrics::sumItemQtyForOrders(clone $summaryQuery),
-            'total_revenue' => round((float) (clone $revenueQuery)->sum('orders.total'), 2),
+            'order_count' => 0,
+            'total_items' => 0,
+            'total_revenue' => 0.0,
         ];
+
+        if ($includeSummary) {
+            $summaryQuery = clone $query;
+            $revenueQuery = OrderAdminFilters::applyRevenueScope(clone $summaryQuery, $statuses);
+
+            $summary = [
+                'order_count' => (int) (clone $summaryQuery)->count('orders.id'),
+                'total_items' => OrderMetrics::sumItemQtyForOrders(clone $summaryQuery),
+                'total_revenue' => round((float) (clone $revenueQuery)->sum('orders.total'), 2),
+            ];
+        }
 
         $paginator = (clone $query)->orderByDesc('orders.id')->paginate($perPage);
 

@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
-use App\Support\MediaDisk;
+use App\Support\Media;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ProductGalleryImageProcessor
@@ -12,46 +13,68 @@ class ProductGalleryImageProcessor
 
     public const HEIGHT = 1620;
 
+    private function mediaDisk(): string
+    {
+        return Media::disk();
+    }
+
     /**
      * Center-crop and resize to {@see WIDTH}×{@see HEIGHT}, store on the configured media disk.
      * Non-raster types (e.g. SVG) are stored unchanged.
      */
     public function storeNormalized(UploadedFile $file): string
     {
+        $disk = $this->mediaDisk();
         $mime = strtolower((string) $file->getMimeType());
         if (! $this->canProcessWithGd($mime, $file)) {
-            return MediaDisk::storeUploadedFile($file, 'product-gallery');
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         $src = $this->loadImage($file->getRealPath(), $mime, $file);
         if ($src === null) {
-            return MediaDisk::storeUploadedFile($file, 'product-gallery');
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         $dest = imagecreatetruecolor(self::WIDTH, self::HEIGHT);
         if ($dest === false) {
             imagedestroy($src);
 
-            return MediaDisk::storeUploadedFile($file, 'product-gallery');
+            return Media::storeUploaded($file, 'product-gallery', $disk);
         }
 
         $this->fillBackground($dest);
         $this->copyCover($dest, $src);
         imagedestroy($src);
 
-        ob_start();
-        $ok = imagejpeg($dest, null, 90);
-        $jpeg = ob_get_clean();
-        imagedestroy($dest);
+        $relative = 'product-gallery/'.Str::uuid().'.jpg';
 
-        if (! $ok || $jpeg === false || $jpeg === '') {
-            return MediaDisk::storeUploadedFile($file, 'product-gallery');
+        if ($disk === 'public') {
+            $absolute = Storage::disk('public')->path($relative);
+            $dir = dirname($absolute);
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            $ok = imagejpeg($dest, $absolute, 90);
+            imagedestroy($dest);
+
+            if (! $ok) {
+                return Media::storeUploaded($file, 'product-gallery', $disk);
+            }
+
+            return $relative;
         }
 
-        $relative = 'product-gallery/'.Str::uuid().'.jpg';
-        MediaDisk::put($relative, $jpeg, ['visibility' => 'public']);
+        ob_start();
+        $ok = imagejpeg($dest, null, 90);
+        imagedestroy($dest);
+        $bytes = $ok ? ob_get_clean() : ob_end_clean();
 
-        return $relative;
+        if (! $ok || $bytes === false || $bytes === '') {
+            return Media::storeUploaded($file, 'product-gallery', $disk);
+        }
+
+        return Media::put($relative, $bytes, $disk);
     }
 
     private function canProcessWithGd(string $mime, UploadedFile $file): bool
@@ -98,7 +121,6 @@ class ProductGalleryImageProcessor
         }
 
         $ext = strtolower((string) $file->getClientOriginalExtension());
-
         return match ($ext) {
             'jpg', 'jpeg', 'jfif', 'pjpeg' => @imagecreatefromjpeg($path) ?: null,
             'png', 'apng' => @imagecreatefrompng($path) ?: null,

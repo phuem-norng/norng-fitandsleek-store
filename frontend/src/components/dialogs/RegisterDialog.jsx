@@ -10,6 +10,8 @@ import {
   AuthError,
   AuthField,
   AuthFooterLink,
+  AuthNotice,
+  formatOtpNotice,
   AuthPhoneField,
   AuthSocialButtons,
   AuthTextButton,
@@ -28,8 +30,9 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
     password: "",
     password_confirmation: "",
   });
-  const [otpForm, setOtpForm] = useState({ email: "", code: "", purpose: "register" });
+  const [otpForm, setOtpForm] = useState({ email: "", code: "", purpose: "register", challengeToken: "" });
   const [otpMode, setOtpMode] = useState(false);
+  const [otpNotice, setOtpNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { register, verifyOtp, resendOtp } = useAuth();
@@ -81,7 +84,18 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
       });
       if (result?.otp_required || result?.verification_required) {
         setOtpMode(true);
-        setOtpForm({ email: form.email, code: "", purpose: result.purpose || "register" });
+        setOtpForm({
+          email: form.email,
+          code: "",
+          purpose: result.purpose || "register",
+          challengeToken: result.challenge_token || "",
+        });
+        setOtpNotice(
+          formatOtpNotice({
+            message: result.message,
+            email: form.email,
+          }),
+        );
         return;
       }
       finishRegister(result?.user);
@@ -102,9 +116,11 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
         email: otpForm.email,
         code: otpForm.code,
         purpose: otpForm.purpose,
+        challengeToken: otpForm.challengeToken,
       });
       setOtpMode(false);
-      setOtpForm({ email: "", code: "", purpose: "register" });
+      setOtpForm({ email: "", code: "", purpose: "register", challengeToken: "" });
+      setOtpNotice("");
       finishRegister(data?.user);
     } catch (err) {
       setError(err?.response?.data?.message || "Verification failed. Check the code and try again.");
@@ -117,7 +133,18 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
     setError("");
     setLoading(true);
     try {
-      await resendOtp({ email: otpForm.email, purpose: otpForm.purpose });
+      const data = await resendOtp({
+        email: otpForm.email,
+        purpose: otpForm.purpose,
+        challengeToken: otpForm.challengeToken,
+      });
+      setOtpNotice(
+        formatOtpNotice({
+          message: data?.message,
+          email: otpForm.email,
+          fallback: `A new code was sent to ${otpForm.email}`,
+        }),
+      );
     } catch (err) {
       setError(err?.response?.data?.message || "Could not resend code");
     } finally {
@@ -236,9 +263,7 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
             </>
           ) : (
             <form onSubmit={handleVerifyOtp} className="mt-7 flex flex-col gap-6">
-              <p className="text-sm text-slate-600">
-                Enter the verification code we sent to <strong className="text-slate-900">{otpForm.email}</strong>.
-              </p>
+              <AuthNotice message={otpNotice} />
               <AuthField id="register-otp-code" label="Verification code" icon={Lock}>
                 <input
                   id="register-otp-code"

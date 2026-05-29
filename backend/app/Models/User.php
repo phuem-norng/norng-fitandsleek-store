@@ -141,48 +141,13 @@ class User extends Authenticatable
     /**
      * Get the profile image URL
      */
-    public function getProfileImageUrlAttribute()
+    public function getProfileImageUrlAttribute(): ?string
     {
-        $rawPath = trim((string) $this->profile_image_path);
-        if ($rawPath === '') {
-            return null;
-        }
-
-        // Legacy rows may store full URLs (including localhost/127.0.0.1). Normalize
-        // storage URLs to relative paths to avoid mixed-content on HTTPS storefronts.
-        if (filter_var($rawPath, FILTER_VALIDATE_URL)) {
-            $parsedPath = (string) (parse_url($rawPath, PHP_URL_PATH) ?? '');
-            $storagePos = strpos($parsedPath, '/storage/');
-            if ($storagePos !== false) {
-                return substr($parsedPath, $storagePos);
-            }
-
-            // Keep external URLs as-is (e.g., Cloudinary CDN URLs).
-            return $rawPath;
-        }
-
-        $normalizedPath = ltrim($rawPath, '/');
-        if ($normalizedPath === '') {
-            return null;
-        }
-
-        if (str_starts_with($normalizedPath, 'storage/')) {
-            return '/' . $normalizedPath;
-        }
-
         try {
-            if (\App\Support\MediaDisk::exists($normalizedPath)) {
-                if (\App\Support\MediaDisk::isRemote()) {
-                    return \App\Support\MediaDisk::url($normalizedPath);
-                }
-
-                return '/storage/' . $normalizedPath;
-            }
+            return \App\Support\Media::url($this->profile_image_path);
         } catch (\Throwable) {
-            // Do not fail /api/me when cloud storage is temporarily unavailable.
+            return null;
         }
-
-        return null;
     }
 
     /**

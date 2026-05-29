@@ -52,14 +52,18 @@ class AuthController extends Controller
     ]);
 
     $challengeToken = $this->verificationChallenge->create($user, 'register');
+    $this->verificationChallenge->setMethod($challengeToken, 'email');
+    $otp = $this->sendOtpCode($user->email, 'register');
 
     return response()->json([
-      'message' => 'Registration pending. Choose how to verify your account.',
+      'message' => 'Registration pending. A verification code was sent to your email.',
       'verification_required' => true,
+      'step' => 'otp',
       'challenge_token' => $challengeToken,
       'verification_methods' => $this->verificationChallenge->availableMethods($user),
       'preferred_method' => $user->two_factor_preferred_method ?? 'email',
       'purpose' => 'register',
+      'debug_otp' => $otp,
     ], 201);
   }
 
@@ -320,12 +324,7 @@ class AuthController extends Controller
       }
 
       $purpose = $this->otpPurposeForChallenge($payload);
-
-      try {
-        $otp = $this->sendOtpCode($user->email, $purpose);
-      } catch (\Throwable $e) {
-        return $this->otpMailFailedResponse($e);
-      }
+      $otp = $this->sendOtpCode($user->email, $purpose);
 
       return response()->json([
         'message' => 'OTP sent to email.',
@@ -335,11 +334,7 @@ class AuthController extends Controller
       ]);
     }
 
-    try {
-      $otp = $this->sendOtpCode($data['email'], $data['purpose']);
-    } catch (\Throwable $e) {
-      return $this->otpMailFailedResponse($e);
-    }
+    $otp = $this->sendOtpCode($data['email'], $data['purpose']);
 
     return response()->json([
       'message' => 'OTP sent to email.',
@@ -632,32 +627,19 @@ class AuthController extends Controller
     try {
       Mail::to($email)->send(new OtpCodeMail($code, $purpose, $expiresMinutes));
     } catch (\Throwable $e) {
-      Log::error('[OTP] Failed to send verification email', [
+      Log::warning('OTP email delivery failed', [
         'email' => $email,
         'purpose' => $purpose,
         'error' => $e->getMessage(),
       ]);
 
-      if ($this->otpDebugEnabled()) {
-        return $code;
+      // Local/dev: still allow login flow; OTP is returned via debug_otp when OTP_DEBUG=true.
+      if (! filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) && ! app()->environment('local')) {
+        throw $e;
       }
-
-      throw $e;
     }
 
-    return $this->otpDebugEnabled() ? $code : null;
-  }
-
-  private function otpDebugEnabled(): bool
-  {
-    return filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOLEAN);
-  }
-
-  private function otpMailFailedResponse(\Throwable $e)
-  {
-    return response()->json([
-      'message' => 'Unable to send verification email. Please check mail configuration and try again.',
-    ], 503);
+    return filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) ? $code : null;
   }
 
   private function issueDeviceBoundToken(
@@ -684,9 +666,16 @@ class AuthController extends Controller
       ]);
 
       if ($binding['is_new_device']) {
-        Mail::to($user->email)->send(new NewDeviceLoginAlertMail(
-          $this->securityAudit->mailContextFromDevice($binding['context'])
-        ));
+        try {
+          Mail::to($user->email)->send(new NewDeviceLoginAlertMail(
+            $this->securityAudit->mailContextFromDevice($binding['context'])
+          ));
+        } catch (\Throwable $e) {
+          Log::warning('New device login alert email failed', [
+            'email' => $user->email,
+            'error' => $e->getMessage(),
+          ]);
+        }
       }
     }
 

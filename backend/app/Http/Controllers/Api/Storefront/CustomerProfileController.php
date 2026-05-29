@@ -6,9 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Order;
 use App\Models\Address;
+use App\Support\Media;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class CustomerProfileController extends Controller
 {
@@ -84,13 +83,14 @@ class CustomerProfileController extends Controller
         ]);
 
         $user = auth()->user();
+
         if ($user->profile_image_path) {
-            \App\Support\MediaDisk::delete($user->profile_image_path);
+            Media::delete($user->profile_image_path);
         }
 
         $file = $request->file('profile_image');
         $filename = 'profile_'.$user->id.'_'.time().'.'.$file->getClientOriginalExtension();
-        $path = $file->storeAs('profile_images', $filename, \App\Support\MediaDisk::name());
+        $path = Media::storeUploadedAs($file, 'profile_images', $filename);
 
         // Update user
         $user->update(['profile_image_path' => $path]);
@@ -335,7 +335,7 @@ class CustomerProfileController extends Controller
     }
 
     /**
-     * Get user's wishlist — returns the product IDs saved in localStorage-compatible format
+     * Get user's wishlist ??? returns the product IDs saved in localStorage-compatible format
      */
     public function getWishlist()
     {

@@ -1,8 +1,8 @@
 
 
 import React, { useRef, useState, useEffect } from 'react';
-import { resolveImageUrl } from '../lib/images';
-import { formatImageSearchError, postImageSearch } from '../lib/imageSearchApi';
+import api from '../lib/api.js';
+import { IMAGE_SEARCH_REQUEST_TIMEOUT_MS, postImageSearch } from '../lib/imageSearch.js';
 
 export default function ImageSearchModal({ isOpen, onClose }) {
   // State machine: 'upload' | 'camera' | 'loading' | 'results'
@@ -196,16 +196,23 @@ export default function ImageSearchModal({ isOpen, onClose }) {
     console.log('⏳ [handleUrlSearch] Set step to LOADING');
 
     try {
-      const res = await postImageSearch({ url: urlInput });
+      console.log('🌐 [handleUrlSearch] POST /image-search');
+      const res = await api.post(
+        '/image-search',
+        { url: urlInput },
+        { timeout: IMAGE_SEARCH_REQUEST_TIMEOUT_MS },
+      );
+
+      console.log('✅ [handleUrlSearch] Response:', res.data);
+
       setProducts(res.data.products || []);
       setDetectedText(res.data.detected_text || '');
       setMatchReason(res.data.match_reason || '');
-      if ((res.data.products || []).length === 0 && res.data.hint) {
-        setError(res.data.hint);
-      }
       setStep('results');
+      console.log('✅ [handleUrlSearch] Set step to RESULTS');
     } catch (err) {
-      setError(formatImageSearchError(err));
+      console.error('❌ [handleUrlSearch] Error:', err.message);
+      setError(`URL search failed: ${err.response?.data?.message || err.message}`);
       setStep('upload');
     }
   };
@@ -223,8 +230,9 @@ export default function ImageSearchModal({ isOpen, onClose }) {
     const sizeMB = file.size / (1024 * 1024);
     console.log('📊 [sendImageToBackend] File size:', sizeMB.toFixed(2), 'MB');
 
-    if (sizeMB > 5) {
-      setError('Image must be less than 5MB');
+    if (sizeMB > 2) {
+      console.warn('⚠️ [sendImageToBackend] File too large');
+      setError('Image must be less than 2MB');
       setStep('upload');
       return;
     }
@@ -235,18 +243,41 @@ export default function ImageSearchModal({ isOpen, onClose }) {
     console.log('⏳ [sendImageToBackend] Set step to LOADING');
 
     // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+    console.log('📦 [sendImageToBackend] FormData created');
+
     try {
-      const response = await postImageSearch({ file });
+      console.log('🌐 [sendImageToBackend] POST /image-search');
+      const response = await postImageSearch(formData);
+
+      console.log('✅ [sendImageToBackend] Response received:', response.status);
+      console.log('📋 [sendImageToBackend] Data:', response.data);
+
+      // Extract results
       const prods = response.data.products || [];
+      const text = response.data.detected_text || '';
+      const reason = response.data.match_reason || '';
+
+      console.log('📊 [sendImageToBackend] Results:', {
+        productCount: prods.length,
+        detected_text: text,
+        match_reason: reason
+      });
+
+      // Update state
       setProducts(prods);
-      setDetectedText(response.data.detected_text || '');
-      setMatchReason(response.data.match_reason || '');
-      if (prods.length === 0 && response.data.hint) {
-        setError(response.data.hint);
-      }
+      setDetectedText(text);
+      setMatchReason(reason);
       setStep('results');
+      console.log('✅ [sendImageToBackend] Set step to RESULTS');
     } catch (err) {
-      setError(formatImageSearchError(err));
+      console.error('❌ [sendImageToBackend] Error:', err.message);
+      if (err.response) {
+        console.error('Status:', err.response.status);
+        console.error('Data:', err.response.data);
+      }
+      setError(`Upload failed: ${err.response?.data?.message || err.message}`);
       setStep('upload');
     }
   };
@@ -451,7 +482,7 @@ export default function ImageSearchModal({ isOpen, onClose }) {
                   >
                     <div className="relative bg-gray-100 aspect-square overflow-hidden">
                       <img 
-                        src={resolveImageUrl(p.image_url)} 
+                        src={p.image_url} 
                         alt={p.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition"
                       />

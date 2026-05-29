@@ -195,7 +195,8 @@ export default function AdminPayments() {
 
  const accentColor = primaryColor;
 
- if (loading) return <AdminContentSkeleton title="Payments" />;
+ const showInitialSkeleton = loading && payments.length === 0;
+ if (showInitialSkeleton) return <AdminContentSkeleton title="Payments" />;
 
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
