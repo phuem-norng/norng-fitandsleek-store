@@ -1,0 +1,21 @@
+# Fly.io — deploy from ai-service/:  fly launch && fly deploy
+# Free allowance may require card; use 1GB RAM minimum for CLIP.
+# https://fly.io/docs/about/pricing/
+
+app = 'fitandsleek-vectorize'
+primary_region = 'sin'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '1024mb'

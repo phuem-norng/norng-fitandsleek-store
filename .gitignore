@@ -23,6 +23,8 @@ fitandsleekpro-*.json
 **/vendor/
 **/dist/
 backend/neondb
+# Hugging Face Space clone (separate git repo — push via scripts/push-hf-space.sh)
+fitandsleek-ai-vectorize/
 **/build/
 **/.next/
 **/__pycache__/
