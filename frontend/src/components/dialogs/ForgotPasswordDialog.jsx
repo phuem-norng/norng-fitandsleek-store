@@ -84,7 +84,6 @@ export default function ForgotPasswordDialog({ isOpen, onClose }) {
             message: data.message,
             email,
             emailSent: data.email_sent,
-            debugOtp: data.debug_otp,
           }),
         );
         if (data.step === "otp") {

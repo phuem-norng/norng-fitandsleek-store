@@ -95,7 +95,6 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
             message: result.message,
             email: form.email,
             emailSent: result.email_sent,
-            debugOtp: result.debug_otp,
           }),
         );
         return;
@@ -145,7 +144,6 @@ export default function RegisterDialog({ isOpen, onClose, onSwitchToLogin }) {
           message: data?.message,
           email: otpForm.email,
           emailSent: data?.email_sent,
-          debugOtp: data?.debug_otp,
           fallback: `A new code was sent to ${otpForm.email}`,
         }),
       );

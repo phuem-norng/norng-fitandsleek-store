@@ -608,7 +608,7 @@ class AuthController extends Controller
     return in_array($purpose, ['register', 'login', 'forgot'], true) ? $purpose : 'login';
   }
 
-  /** @return array{email_sent: bool, debug_otp: ?string} */
+  /** @return array{email_sent: bool} */
   private function sendOtpCode(string $email, string $purpose): array
   {
     $expiresMinutes = (int) (config('auth.otp_expires_minutes') ?? 10);
@@ -642,15 +642,28 @@ class AuthController extends Controller
         'error' => $e->getMessage(),
       ]);
 
-      if (! filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) && ! app()->environment('local')) {
+      if (! $this->otpDebugEnabled() && ! app()->environment('local')) {
         throw $e;
       }
     }
 
+    if ($this->otpDebugEnabled()) {
+      Log::debug('OTP code (OTP_DEBUG; not exposed to API clients)', [
+        'email' => $email,
+        'purpose' => $purpose,
+        'code' => $code,
+        'email_sent' => $emailSent,
+      ]);
+    }
+
     return [
       'email_sent' => $emailSent,
-      'debug_otp' => filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) ? $code : null,
     ];
+  }
+
+  private function otpDebugEnabled(): bool
+  {
+    return filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL);
   }
 
   private function otpSentMessage(bool $emailSent): string
@@ -659,25 +672,19 @@ class AuthController extends Controller
       return 'A verification code was sent to your email.';
     }
 
-    if (filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) || app()->environment('local')) {
-      return 'Email delivery failed. Use the dev code below or tap Resend after fixing mail settings.';
+    if ($this->otpDebugEnabled() || app()->environment('local')) {
+      return 'Email delivery failed. Check your inbox and spam, or tap Resend after fixing mail settings.';
     }
 
     return 'We could not send the verification email. Please try again in a few minutes.';
   }
 
-  /** @param array{email_sent: bool, debug_otp: ?string} $delivery */
+  /** @param array{email_sent: bool} $delivery */
   private function otpDeliveryPayload(array $delivery): array
   {
-    $payload = [
+    return [
       'email_sent' => $delivery['email_sent'],
     ];
-
-    if ($delivery['debug_otp'] !== null) {
-      $payload['debug_otp'] = $delivery['debug_otp'];
-    }
-
-    return $payload;
   }
 
   private function issueDeviceBoundToken(

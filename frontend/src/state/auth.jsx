@@ -104,7 +104,6 @@ export function AuthProvider({ children }) {
           email,
           purpose: data.purpose || "login",
           email_sent: data.email_sent,
-          debug_otp: data.debug_otp,
         };
       }
 
@@ -117,7 +116,6 @@ export function AuthProvider({ children }) {
           email,
           purpose: data.purpose || "login",
           email_sent: data.email_sent,
-          debug_otp: data.debug_otp,
         };
       }
       // Normalize error shape so callers can show a friendly message
