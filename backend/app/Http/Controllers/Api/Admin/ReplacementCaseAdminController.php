@@ -14,7 +14,11 @@ class ReplacementCaseAdminController extends BaseAdminController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = ReplacementCase::with(['order.user', 'order.items.product', 'handledBy']);
+        $query = ReplacementCase::with([
+            'order:id,user_id,total,status',
+            'order.user:id,name,email',
+            'handledBy:id,name',
+        ]);
 
         // Filter by status
         if ($request->has('status')) {

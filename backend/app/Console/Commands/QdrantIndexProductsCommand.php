@@ -14,6 +14,7 @@ class QdrantIndexProductsCommand extends Command
                             {--product_id= : Index a single product by id}
                             {--limit=0 : Max products to process (0 = no limit)}
                             {--only-missing : Only products with is_vector_indexed = false}
+                            {--force : Re-index even when is_vector_indexed is already true}
                             {--include-inactive : Include inactive products}
                             {--queue : Dispatch a SyncProductToQdrant job per product instead of indexing inline (requires queue worker)}';
 
@@ -37,7 +38,7 @@ class QdrantIndexProductsCommand extends Command
             $query->where('is_active', true);
         }
 
-        if ($this->option('only-missing')) {
+        if ($this->option('only-missing') && ! $this->option('force')) {
             $query->where('is_vector_indexed', false);
         }
 

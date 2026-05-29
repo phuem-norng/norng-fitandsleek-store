@@ -66,6 +66,8 @@ class QdrantDiagnoseCommand extends Command
             $this->error('  Unreachable: '.$e->getMessage());
         }
 
+        $pointsCount = null;
+
         $this->newLine();
         $this->info('Qdrant collection');
         $metaUrl = $qdrant.'/collections/'.rawurlencode($collection);
@@ -74,7 +76,8 @@ class QdrantDiagnoseCommand extends Command
             $c = Http::timeout(min(15, $timeout))->withHeaders($qdrantHeaders)->get($metaUrl);
             if ($c->successful()) {
                 $result = $c->json('result', []);
-                $this->line('  points_count: '.(string) (data_get($result, 'points_count') ?? 'n/a'));
+                $pointsCount = (int) (data_get($result, 'points_count') ?? 0);
+                $this->line('  points_count: '.$pointsCount);
                 $this->line('  status: '.(string) (data_get($result, 'status') ?? 'n/a'));
                 $configuredSize = data_get($result, 'config.params.vectors.size');
                 if ($configuredSize !== null) {
@@ -91,6 +94,7 @@ class QdrantDiagnoseCommand extends Command
 
         $this->newLine();
         $this->info('PostgreSQL (products)');
+        $indexed = 0;
         try {
             $eligible = Product::query()
                 ->where('is_active', true)
@@ -119,6 +123,12 @@ class QdrantDiagnoseCommand extends Command
             }
         } catch (\Throwable $e) {
             $this->error('  '.$e->getMessage());
+        }
+
+        if ($pointsCount === 0 && $indexed > 0) {
+            $this->newLine();
+            $this->error('Image search returns 0 matches: Qdrant has no vectors but '.$indexed.' product(s) are marked indexed in PostgreSQL.');
+            $this->comment('  php artisan qdrant:index-products --force');
         }
 
         $driver = (string) config('queue.default');

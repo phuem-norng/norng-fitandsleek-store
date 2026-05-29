@@ -53,7 +53,9 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI'),
+        'redirect' => env('APP_ENV') === 'local' && ($local = env('GOOGLE_REDIRECT_URI_LOCAL'))
+            ? $local
+            : env('GOOGLE_REDIRECT_URI'),
         'guzzle' => $socialiteGuzzle,
     ],
 
@@ -66,7 +68,9 @@ return [
     'facebook' => [
         'client_id' => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect' => env('FACEBOOK_REDIRECT_URI'),
+        'redirect' => env('APP_ENV') === 'local' && ($local = env('FACEBOOK_REDIRECT_URI_LOCAL'))
+            ? $local
+            : env('FACEBOOK_REDIRECT_URI'),
         'guzzle' => $socialiteGuzzle,
     ],
 

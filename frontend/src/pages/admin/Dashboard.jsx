@@ -301,10 +301,9 @@ export default function AdminDashboard() {
 
     (async () => {
       try {
-        const [dashRes, salesRes, ordersRes] = await Promise.all([
+        const [dashRes, salesRes] = await Promise.all([
           api.get("/admin/reports/dashboard", { params: { period: periodDays } }),
           api.get("/admin/reports/sales", { params: { period: periodDays } }),
-          api.get("/admin/orders?limit=8"),
         ]);
         const d = dashRes.data || {};
         const ordersByStatus = Array.isArray(d.orders_by_status) ? d.orders_by_status : [];
@@ -321,11 +320,9 @@ export default function AdminDashboard() {
             customers: d.customers || { total: 0, new_this_month: 0 },
           });
           setSalesSeriesRaw(salesArr);
-          setRecentOrders(ordersRes.data?.data?.slice(0, 8) || []);
         }
       } catch {
         if (!cancelled) {
-          setRecentOrders([]);
           setSalesSeriesRaw([]);
           setStats((prev) => ({ ...prev, ordersByStatus: [] }));
         }
@@ -334,6 +331,16 @@ export default function AdminDashboard() {
           setLoading(false);
           hasLoadedOnceRef.current = true;
         }
+      }
+
+      if (cancelled) return;
+      try {
+        const ordersRes = await api.get("/admin/orders", { params: { per_page: 8, compact: 1 } });
+        if (!cancelled) {
+          setRecentOrders(ordersRes.data?.data?.slice(0, 8) || []);
+        }
+      } catch {
+        if (!cancelled) setRecentOrders([]);
       }
     })();
     return () => {

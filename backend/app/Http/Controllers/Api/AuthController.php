@@ -14,6 +14,7 @@ use App\Services\TwoFactorService;
 use App\Services\VerificationChallengeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -51,14 +52,18 @@ class AuthController extends Controller
     ]);
 
     $challengeToken = $this->verificationChallenge->create($user, 'register');
+    $this->verificationChallenge->setMethod($challengeToken, 'email');
+    $otp = $this->sendOtpCode($user->email, 'register');
 
     return response()->json([
-      'message' => 'Registration pending. Choose how to verify your account.',
+      'message' => 'Registration pending. A verification code was sent to your email.',
       'verification_required' => true,
+      'step' => 'otp',
       'challenge_token' => $challengeToken,
       'verification_methods' => $this->verificationChallenge->availableMethods($user),
       'preferred_method' => $user->two_factor_preferred_method ?? 'email',
       'purpose' => 'register',
+      'debug_otp' => $otp,
     ], 201);
   }
 
@@ -619,9 +624,22 @@ class AuthController extends Controller
       'expires_at' => now()->addMinutes($expiresMinutes),
     ]);
 
-    Mail::to($email)->send(new OtpCodeMail($code, $purpose, $expiresMinutes));
+    try {
+      Mail::to($email)->send(new OtpCodeMail($code, $purpose, $expiresMinutes));
+    } catch (\Throwable $e) {
+      Log::warning('OTP email delivery failed', [
+        'email' => $email,
+        'purpose' => $purpose,
+        'error' => $e->getMessage(),
+      ]);
 
-    return env('OTP_DEBUG', false) ? $code : null;
+      // Local/dev: still allow login flow; OTP is returned via debug_otp when OTP_DEBUG=true.
+      if (! filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) && ! app()->environment('local')) {
+        throw $e;
+      }
+    }
+
+    return filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) ? $code : null;
   }
 
   private function issueDeviceBoundToken(
@@ -648,9 +666,16 @@ class AuthController extends Controller
       ]);
 
       if ($binding['is_new_device']) {
-        Mail::to($user->email)->send(new NewDeviceLoginAlertMail(
-          $this->securityAudit->mailContextFromDevice($binding['context'])
-        ));
+        try {
+          Mail::to($user->email)->send(new NewDeviceLoginAlertMail(
+            $this->securityAudit->mailContextFromDevice($binding['context'])
+          ));
+        } catch (\Throwable $e) {
+          Log::warning('New device login alert email failed', [
+            'email' => $user->email,
+            'error' => $e->getMessage(),
+          ]);
+        }
       }
     }
 

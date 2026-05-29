@@ -60,7 +60,18 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      sourcemap: true,
+      sourcemap: mode !== "production",
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("recharts")) return "recharts";
+            if (id.includes("html5-qrcode")) return "html5-qrcode";
+            if (id.includes("@radix-ui") || id.includes("framer-motion")) return "ui-vendor";
+            return "vendor";
+          },
+        },
+      },
     },
     preview: {
       // `vite preview` does not inherit `server.*`; set proxy + allowedHosts here too.

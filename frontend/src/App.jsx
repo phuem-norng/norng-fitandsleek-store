@@ -26,44 +26,45 @@ import BrandDetail from "./pages/BrandDetail.jsx";
 import CategoryPage from "./pages/CategoryPage.jsx";
 import CustomerProfile from "./pages/CustomerProfile.jsx";
 import AdminLayout from "./pages/admin/AdminLayout.jsx";
-import AdminProducts from "./pages/admin/Products.jsx";
-import AdminCategories from "./pages/admin/Categories.jsx";
-import AdminBrands from "./pages/admin/Brands.jsx";
-import AdminBarcodeQR from "./pages/admin/StockInventory.jsx";
-import InventoryIntegrity from "./pages/admin/InventoryIntegrity.jsx";
-import AdminPosScan from "./pages/admin/Checkout.jsx";
-import AdminOrders from "./pages/admin/Orders.jsx";
-import AdminInvoicePage from "./pages/admin/Invoice.jsx";
-import AdminCustomers from "./pages/admin/Customers.jsx";
-import AdminAdministrators from "./pages/admin/Administrators.jsx";
-import AdminDashboard from "./pages/admin/Dashboard.jsx";
-import AdminHome from "./pages/admin/AdminHome.jsx";
-import HomePageManager from "./pages/admin/HomePageManager.jsx";
-import CompleteHomepageManager from "./pages/admin/CompleteHomepageManager.jsx";
+import {
+  AdminHome,
+  Reports,
+  AdminProducts,
+  AdminCategories,
+  AdminBrands,
+  AdminBarcodeQR,
+  InventoryIntegrity,
+  AdminPosScan,
+  AdminOrders,
+  AdminInvoicePage,
+  AdminCustomers,
+  AdminAdministrators,
+  HomePageManager,
+  CompleteHomepageManager,
+  Contacts,
+  Messages,
+  ChatbotSettings,
+  Notifications,
+  Profile,
+  Settings,
+  AdminDiscounts,
+  UserManagement,
+  AdminManagement,
+  AdminPayments,
+  SaleHistory,
+  AdminReplacementCases,
+  PaymentSettings,
+} from "./pages/admin/adminLazy.js";
 import { CatalogAvailabilityProvider } from "./state/catalogAvailability.jsx";
 import { HomepageSettingsProvider, useHomepageSettings } from "./state/homepageSettings.jsx";
 import { useLanguage } from "./lib/i18n.jsx";
-import Reports from "./pages/admin/Reports.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
-import Settings from "./pages/admin/Settings.jsx";
-import Contacts from "./pages/admin/Contacts.jsx";
-import Messages from "./pages/admin/Messages.jsx";
-import ChatbotSettings from "./pages/admin/ChatbotSettings.jsx";
-import Notifications from "./pages/admin/Notifications.jsx";
-import Profile from "./pages/admin/Profile.jsx";
-import AdminDiscounts from "./pages/admin/Discounts.jsx";
-import UserManagement from "./pages/admin/UserManagement.jsx";
-import AdminManagement from "./pages/admin/AdminManagement.jsx";
-import AdminPayments from "./pages/admin/Payments.jsx";
-import SaleHistory from "./pages/admin/SaleHistory.jsx";
 import HomepageSettingsTest from "./pages/HomepageSettingsTest.jsx";
 import PublicHomepageManager from "./pages/PublicHomepageManager.jsx";
 import ExtendedHomepageManager from "./pages/ExtendedHomepageManager.jsx";
-import AdminReplacementCases from "./pages/admin/ReplacementCases.jsx";
-import PaymentSettings from "./pages/admin/PaymentSettings.jsx";
 import DriverScanPage from "./pages/driver/Scan.jsx";
-import { useAuth } from "./state/auth.jsx";
+import { useAuth, TOKEN_KEY } from "./state/auth.jsx";
 import { useTheme } from "./state/theme.jsx";
 import { AdminContentSkeleton } from "./components/admin/AdminLoading.jsx";
 
@@ -129,11 +130,14 @@ function isAdminUser(user) {
 
 function RequireAdmin({ children }) {
   const { user, booted } = useAuth();
-  if (!booted) return (
-    <div className="flex min-h-[100dvh] w-full flex-col p-6">
-      <AdminContentSkeleton lines={2} imageHeight={140} className="mx-auto w-full max-w-4xl flex-1" />
-    </div>
-  );
+  const hasToken = typeof window !== "undefined" && !!localStorage.getItem(TOKEN_KEY);
+
+  if (!booted && !hasToken) {
+    return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
+  }
+  if (!booted && hasToken) {
+    return children;
+  }
   if (!user) return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
   if (!isAdminUser(user)) return <Navigate to="/" replace />;
   return children;

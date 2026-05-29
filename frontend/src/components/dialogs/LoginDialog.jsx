@@ -11,6 +11,7 @@ import {
   AuthField,
   AuthFooterLink,
   AuthNotice,
+  formatOtpNotice,
   AUTH_PRIMARY_BTN,
   AuthSocialButtons,
   AuthTextButton,
@@ -70,7 +71,12 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
           purpose: result.purpose || "login",
           challengeToken: result.challenge_token || "",
         });
-        setOtpNotice(result.message || `We sent a verification code to ${form.email}`);
+        setOtpNotice(
+          formatOtpNotice({
+            message: result.message,
+            email: form.email,
+          }),
+        );
         return;
       }
       finishLogin(result?.user || result);
@@ -124,12 +130,18 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
     setError("");
     setLoading(true);
     try {
-      await resendOtp({
+      const data = await resendOtp({
         email: otpForm.email,
         purpose: otpForm.purpose,
         challengeToken: otpForm.challengeToken,
       });
-      setOtpNotice(`A new code was sent to ${otpForm.email}`);
+      setOtpNotice(
+        formatOtpNotice({
+          message: data?.message,
+          email: otpForm.email,
+          fallback: `A new code was sent to ${otpForm.email}`,
+        }),
+      );
     } catch (err) {
       setError(err?.response?.data?.message || "Could not resend code");
     } finally {

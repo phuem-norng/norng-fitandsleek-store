@@ -58,15 +58,39 @@ class SocialAuthController extends Controller
         );
     }
 
-    protected function resolveProviderRedirectUri(Request $request, string $provider): string
+    protected function isLoopbackHost(?string $host): bool
     {
-        $configured = trim((string) config("services.{$provider}.redirect", ''));
-        if ($configured !== '' && filter_var($configured, FILTER_VALIDATE_URL)) {
-            return rtrim($configured, '/');
+        if ($host === null || $host === '') {
+            return false;
         }
 
+        $host = strtolower($host);
+
+        return in_array($host, ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'], true);
+    }
+
+    protected function resolveProviderRedirectUri(Request $request, string $provider): string
+    {
         $origin = rtrim($request->getSchemeAndHttpHost(), '/');
-        return "{$origin}/api/auth/{$provider}/callback";
+        $fromRequest = "{$origin}/api/auth/{$provider}/callback";
+
+        $configured = trim((string) config("services.{$provider}.redirect", ''));
+        if ($configured === '' || ! filter_var($configured, FILTER_VALIDATE_URL)) {
+            return $fromRequest;
+        }
+
+        $configured = rtrim($configured, '/');
+
+        // Local dev: match the host the browser used (localhost vs 127.0.0.1) for Google redirect_uri.
+        if (app()->environment('local') && $this->isLoopbackHost($request->getHost())) {
+            $configuredHost = parse_url($configured, PHP_URL_HOST);
+            if ($this->isLoopbackHost(is_string($configuredHost) ? $configuredHost : null)
+                && strtolower((string) $configuredHost) !== strtolower($request->getHost())) {
+                return $fromRequest;
+            }
+        }
+
+        return $configured;
     }
 
     protected function providerRedirectUriFromCookieOrRequest(Request $request, string $provider): string
@@ -102,47 +126,85 @@ class SocialAuthController extends Controller
         ]);
     }
 
+    protected function allowedFrontendOrigins(): array
+    {
+        return (array) config('oauth.allowed_frontend_origins', []);
+    }
+
+    protected function isAllowedFrontendCallbackUrl(string $url): bool
+    {
+        $url = rtrim(trim($url), '/');
+
+        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $parts = parse_url($url);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $path = (string) ($parts['path'] ?? '');
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $port = isset($parts['port']) ? (int) $parts['port'] : null;
+
+        if (! in_array($scheme, ['http', 'https'], true) || $path !== '/oauth/callback') {
+            return false;
+        }
+
+        $origin = $scheme.'://'.$host.($port ? ':'.$port : '');
+
+        foreach ($this->allowedFrontendOrigins() as $allowed) {
+            $allowed = rtrim((string) $allowed, '/');
+            if ($allowed === '') {
+                continue;
+            }
+            if (strcasecmp($origin, $allowed) === 0) {
+                return true;
+            }
+        }
+
+        // Local SPA on any loopback port (e.g. Vite 5173).
+        if (app()->environment('local') && $this->isLoopbackHost($host)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function normalizeFrontendCallbackUrl(string $candidate): string
+    {
+        $candidate = rtrim(trim($candidate), '/');
+
+        if ($candidate !== '' && $this->isAllowedFrontendCallbackUrl($candidate)) {
+            return $candidate;
+        }
+
+        return $this->frontendUrl().'/oauth/callback';
+    }
+
     protected function resolveFrontendCallbackUrl(Request $request): string
     {
         $candidate = trim((string) $request->query('frontend_callback', ''));
 
         if ($candidate === '') {
-            return $this->frontendUrl() . '/oauth/callback';
+            return $this->frontendUrl().'/oauth/callback';
         }
 
-        if (!filter_var($candidate, FILTER_VALIDATE_URL)) {
-            return $this->frontendUrl() . '/oauth/callback';
-        }
-
-        $parts = parse_url($candidate);
-        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-        $path = (string) ($parts['path'] ?? '');
-
-        if (!in_array($scheme, ['http', 'https'], true)) {
-            return $this->frontendUrl() . '/oauth/callback';
-        }
-
-        if ($path !== '/oauth/callback') {
-            return $this->frontendUrl() . '/oauth/callback';
-        }
-
-        return rtrim($candidate, '/');
+        return $this->normalizeFrontendCallbackUrl($candidate);
     }
 
     protected function callbackUrlFromCookieOrDefault(Request $request): string
     {
         $candidate = trim((string) $request->cookie('oauth_frontend_callback', ''));
 
-        if ($candidate === '' || !filter_var($candidate, FILTER_VALIDATE_URL)) {
-            return $this->frontendUrl() . '/oauth/callback';
+        if ($candidate === '') {
+            return $this->frontendUrl().'/oauth/callback';
         }
 
-        return rtrim($candidate, '/');
+        return $this->normalizeFrontendCallbackUrl($candidate);
     }
 
     protected function frontendUrl(): string
     {
-        return rtrim(env('FRONTEND_URL', 'http://localhost:5173'), '/');
+        return rtrim((string) config('app.frontend_url', 'http://localhost:5173'), '/');
     }
 
     protected function isValidProvider(string $provider): bool

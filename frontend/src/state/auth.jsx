@@ -8,19 +8,47 @@ if (!globalThis[AUTH_CONTEXT_KEY]) {
   globalThis[AUTH_CONTEXT_KEY] = AuthCtx;
 }
 const TOKEN_KEY = "fs_token";
+const USER_CACHE_KEY = "fs_user_snapshot";
+
+function readCachedUser() {
+  try {
+    const raw = sessionStorage.getItem(USER_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(user) {
+  if (!user) {
+    try {
+      sessionStorage.removeItem(USER_CACHE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [booted, setBooted] = useState(false);
-  const [token, setToken] = useState(null);
-
-  // Initialize token from localStorage on mount
-  useEffect(() => {
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    if (storedToken) {
-      setToken(storedToken);
-    }
-  }, []);
+  const [user, setUser] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(TOKEN_KEY) ? readCachedUser() : null;
+  });
+  const [booted, setBooted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const token = localStorage.getItem(TOKEN_KEY);
+    return !token || !!readCachedUser();
+  });
+  const [token, setToken] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(TOKEN_KEY);
+  });
 
   const loadMe = async () => {
     const currentToken = localStorage.getItem(TOKEN_KEY);
@@ -28,21 +56,22 @@ export function AuthProvider({ children }) {
       setBooted(true);
       setToken(null);
       setUser(null);
+      writeCachedUser(null);
       return;
     }
 
-    // Ensure token state is synced
     setToken(currentToken);
 
     try {
       const { data } = await api.get("/me");
       setUser(data);
+      writeCachedUser(data);
     } catch (err) {
-      // If 404 or 401, token might be invalid - clear it
       if (err.response?.status === 404 || err.response?.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
         setUser(null);
+        writeCachedUser(null);
       }
     } finally {
       setBooted(true);
@@ -66,6 +95,7 @@ export function AuthProvider({ children }) {
         localStorage.setItem(TOKEN_KEY, newToken);
         setToken(newToken);
         setUser(data.user);
+        writeCachedUser(data.user);
       }
 
       return data;
@@ -97,6 +127,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem(TOKEN_KEY, newToken);
       setToken(newToken);
       setUser(data.user);
+      writeCachedUser(data.user);
     }
     return data;
   };
@@ -125,6 +156,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem(TOKEN_KEY, newToken);
       setToken(newToken);
       setUser(data.user);
+      writeCachedUser(data.user);
     }
     return data;
   };
@@ -140,6 +172,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem(TOKEN_KEY, newToken);
       setToken(newToken);
       setUser(data.user);
+      writeCachedUser(data.user);
     }
     return data;
   };
@@ -163,6 +196,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
+    writeCachedUser(null);
   };
 
   const value = useMemo(
