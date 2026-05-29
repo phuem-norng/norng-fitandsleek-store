@@ -212,6 +212,55 @@ class SocialAuthController extends Controller
         return in_array($provider, ['google', 'facebook'], true);
     }
 
+    protected function findOrCreateSocialUser($socialUser, string $provider, string $email): User
+    {
+        $name = $socialUser->getName() ?: $socialUser->getNickname() ?: 'Customer';
+        $avatar = trim((string) $socialUser->getAvatar());
+        $providerId = trim((string) $socialUser->getId());
+
+        $user = User::where('email', $email)->first();
+
+        if (! $user) {
+            return User::create([
+                'name' => $name,
+                'email' => $email,
+                'password' => Hash::make(Str::random(24)),
+                'role' => 'customer',
+                'status' => 'active',
+                'email_verified_at' => now(),
+                'social_type' => $provider,
+                'facebook_id' => $provider === 'facebook' && $providerId !== '' ? $providerId : null,
+                'profile_image_path' => $avatar !== '' ? $avatar : null,
+                'profile_image_updated_at' => $avatar !== '' ? now() : null,
+            ]);
+        }
+
+        $updates = [
+            'social_type' => $provider,
+        ];
+
+        if ($provider === 'facebook' && $providerId !== '' && empty($user->facebook_id)) {
+            $updates['facebook_id'] = $providerId;
+        }
+
+        if ($avatar !== '' && empty($user->profile_image_path)) {
+            $updates['profile_image_path'] = $avatar;
+            $updates['profile_image_updated_at'] = now();
+        }
+
+        if (! $user->email_verified_at) {
+            $updates['email_verified_at'] = now();
+        }
+
+        if ($user->status !== 'active') {
+            $updates['status'] = 'active';
+        }
+
+        $user->update($updates);
+
+        return $user->fresh();
+    }
+
     public function redirect(Request $request, string $provider)
     {
         if (!$this->isValidProvider($provider)) {
@@ -269,15 +318,7 @@ class SocialAuthController extends Controller
             return $this->redirectWithFallback($redirectUrl, $forgetCallbackCookie, $forgetProviderRedirectCookie);
         }
 
-        $user = User::where('email', $email)->first();
-        if (!$user) {
-            $user = User::create([
-                'name' => $socialUser->getName() ?: $socialUser->getNickname() ?: 'Customer',
-                'email' => $email,
-                'password' => Hash::make(Str::random(24)),
-                'role' => 'customer',
-            ]);
-        }
+        $user = $this->findOrCreateSocialUser($socialUser, $provider, $email);
 
         $token = $user->createToken('fitandsleekpro')->plainTextToken;
 
