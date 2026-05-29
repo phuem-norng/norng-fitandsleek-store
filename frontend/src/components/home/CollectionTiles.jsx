@@ -1,80 +1,56 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
+import CatalogSectionUnavailable from "../catalog/CatalogSectionUnavailable.jsx";
+import { useLanguage } from "../../lib/i18n.jsx";
+import { useCatalogAvailability } from "../../state/catalogAvailability.jsx";
 
-// Helper to get subtitle based on gender
 const getGenderSubtitle = (gender) => {
-  const g = (gender || '').toLowerCase();
-  if (g === 'women') return 'Discover';
-  if (g === 'men') return 'Explore';
-  if (g === 'boys') return 'Play';
-  if (g === 'girls') return 'Style';
-  return 'Shop Now';
+  const g = (gender || "").toLowerCase();
+  if (g === "women") return "Discover";
+  if (g === "men") return "Explore";
+  if (g === "boys") return "Play";
+  if (g === "girls") return "Style";
+  return "Shop Now";
 };
 
 const toParentCategoryLink = (gender) => {
-  const g = String(gender || '').toLowerCase();
-  if (!g) return '/search';
+  const g = String(gender || "").toLowerCase();
+  if (!g) return "/search";
   const parent = g.charAt(0).toUpperCase() + g.slice(1);
   return `/search?parent_category=${encodeURIComponent(parent)}`;
 };
 
-// Fallback tiles in case API is empty
-const fallbackTiles = [
-  {
-    id: "fallback-women",
-    name: "Women Collection",
-    subtitle: "Discover",
-    link: "/search?parent_category=Women",
-    image: "https://images.unsplash.com/photo-1520975661595-6453be3f7070?auto=format&fit=crop&w=1200&q=70",
-  },
-  {
-    id: "fallback-men",
-    name: "Men Collection",
-    subtitle: "Explore",
-    link: "/search?parent_category=Men",
-    image: "https://images.unsplash.com/photo-1520975693411-b4d02a2be7d1?auto=format&fit=crop&w=1200&q=70",
-  },
-  {
-    id: "fallback-boys",
-    name: "Boys Collection",
-    subtitle: "Play",
-    link: "/search?parent_category=Boys",
-    image: "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?auto=format&fit=crop&w=1200&q=70",
-  },
-  {
-    id: "fallback-girls",
-    name: "Girls Collection",
-    subtitle: "Style",
-    link: "/search?parent_category=Girls",
-    image: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=70",
-  },
-];
-
-const FALLBACK_TILE_IMAGE = "/placeholder.svg";
-
 function Tile({ title, subtitle, to, image }) {
-  const [imgSrc, setImgSrc] = useState(image || FALLBACK_TILE_IMAGE);
+  const resolved = image ? resolveImageUrl(image) : "";
+  const [imageFailed, setImageFailed] = useState(!resolved);
 
   useEffect(() => {
-    setImgSrc(image || FALLBACK_TILE_IMAGE);
-  }, [image]);
+    setImageFailed(!resolved);
+  }, [resolved]);
+
+  const showImage = Boolean(resolved) && !imageFailed;
 
   return (
     <Link
       to={to}
       className="group block relative overflow-hidden rounded-2xl bg-white border border-zinc-100 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
     >
-      <div className="h-[240px] sm:h-auto sm:aspect-[4/5] bg-zinc-100 overflow-hidden">
-        <img
-          src={imgSrc}
-          alt={title}
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            setImgSrc(FALLBACK_TILE_IMAGE);
-          }}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
-        />
+      <div className="h-[240px] sm:h-auto sm:aspect-[4/5] overflow-hidden relative">
+        {showImage ? (
+          <img
+            src={resolved}
+            alt={title}
+            onError={() => setImageFailed(true)}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <div
+            className="w-full h-full bg-gradient-to-br from-zinc-200 via-zinc-100 to-zinc-50"
+            aria-hidden
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent opacity-90" />
       </div>
       <div className="absolute inset-0 flex flex-col justify-between text-white p-3 sm:p-5 md:p-6">
@@ -112,32 +88,30 @@ function Tile({ title, subtitle, to, image }) {
 }
 
 export default function CollectionTiles() {
+  const { t } = useLanguage();
+  const { infrastructureDegraded } = useCatalogAvailability();
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     const fetchCollections = async () => {
+      setFetchFailed(false);
       try {
         const { data } = await api.get("/collections");
         const items = data?.data || [];
-        
-        if (items.length > 0) {
-          // Transform API data to tile format
-          const tiles = items.map((c) => ({
-            id: c.id,
-            name: c.name,
-            subtitle: getGenderSubtitle(c.gender),
-            link: c.link || toParentCategoryLink(c.gender),
-            image: c.image_url,
-          }));
-          setCollections(tiles);
-        } else {
-          // Use fallback if no collections from API
-          setCollections(fallbackTiles);
-        }
+        const tiles = items.map((c) => ({
+          id: c.id,
+          name: c.name,
+          subtitle: getGenderSubtitle(c.gender),
+          link: c.link || toParentCategoryLink(c.gender),
+          image: c.image_url,
+        }));
+        setCollections(tiles);
       } catch (error) {
-        console.warn("Failed to fetch collections, using fallback:", error);
-        setCollections(fallbackTiles);
+        console.warn("Failed to fetch collections:", error);
+        setCollections([]);
+        setFetchFailed(true);
       } finally {
         setLoading(false);
       }
@@ -150,15 +124,36 @@ export default function CollectionTiles() {
     return (
       <section className="container-safe mt-8">
         <div className="grid grid-cols-2 gap-4 md:gap-6">
-          <div className="h-[240px] sm:h-auto sm:aspect-[4/5] bg-zinc-100 animate-pulse rounded-3xl"></div>
-          <div className="h-[240px] sm:h-auto sm:aspect-[4/5] bg-zinc-100 animate-pulse rounded-3xl"></div>
+          <div className="h-[240px] sm:h-auto sm:aspect-[4/5] bg-zinc-100 animate-pulse rounded-3xl" />
+          <div className="h-[240px] sm:h-auto sm:aspect-[4/5] bg-zinc-100 animate-pulse rounded-3xl" />
         </div>
       </section>
     );
   }
 
+  const unavailable = infrastructureDegraded || fetchFailed;
+
+  if (unavailable) {
+    return (
+      <section className="container-safe mt-10 max-w-[1600px] mx-auto">
+        <CatalogSectionUnavailable
+          message={t("sectionLoadUnavailable")}
+          minHeight="min-h-[200px] sm:min-h-[240px]"
+        />
+      </section>
+    );
+  }
+
   if (collections.length === 0) {
-    return null;
+    return (
+      <section className="container-safe mt-10 max-w-[1600px] mx-auto">
+        <CatalogSectionUnavailable
+          message={t("collectionsEmpty")}
+          hint={t("collectionsEmptyHint")}
+          minHeight="min-h-[200px] sm:min-h-[240px]"
+        />
+      </section>
+    );
   }
 
   return (

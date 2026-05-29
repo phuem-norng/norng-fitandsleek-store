@@ -692,16 +692,34 @@ export default function AdminBarcodeQR() {
             if (dateRange?.from) catParams.from_date = dateRange.from;
             if (dateRange?.to) catParams.to_date = dateRange.to;
 
-            const [catRes, brandRes, productRes] = await Promise.all([
+            const [catResult, brandResult, productResult] = await Promise.allSettled([
                 api.get("/admin/categories", { params: catParams }),
                 api.get("/admin/brands"),
                 api.get("/admin/products", { params: { per_page: 500 } }),
             ]);
+
+            if (catResult.status !== "fulfilled") {
+                throw catResult.reason;
+            }
+
+            const catRes = catResult.value;
             const all = catRes?.data?.data || [];
             const labels = stockLabelRows(all);
             setRows(labels);
             setCategories(all.filter((c) => !labels.some((l) => l.id === c.id)));
-            setBrands(brandRes?.data?.data || []);
+
+            if (brandResult.status === "fulfilled") {
+                setBrands(brandResult.value?.data?.data || []);
+            } else {
+                console.warn("[StockInventory] brands load failed", brandResult.reason);
+                setBrands([]);
+            }
+
+            if (productResult.status !== "fulfilled") {
+                throw productResult.reason;
+            }
+
+            const productRes = productResult.value;
             const productPayload = productRes?.data;
             const productList = Array.isArray(productPayload?.data)
                 ? productPayload.data

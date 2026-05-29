@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\BakongApi;
 use App\Services\BakongKhqrService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,33 +41,57 @@ class BakongPaymentController extends Controller
             return response()->json(['message' => 'Order already paid.'], 409);
         }
 
-        $activePayment = Payment::where('order_id', $order->id)
-            ->where('provider', 'bakong')
-            ->where('status', 'pending')
-            ->where(function ($query) {
-                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
-            })
-            ->latest('id')
-            ->first();
-
-        if ($activePayment && $activePayment->qr_string && $activePayment->md5) {
-            return response()->json($this->formatPaymentResponse($activePayment));
-        }
-
         Payment::where('order_id', $order->id)
             ->where('provider', 'bakong')
             ->where('status', 'pending')
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', now())
             ->update(['status' => 'expired']);
-        $payment = Payment::create([
-            'order_id' => $order->id,
-            'provider' => 'bakong',
-            'method' => 'bakong_khqr',
-            'status' => 'pending',
-            'amount' => $order->total,
-            'currency' => config('services.bakong.currency', 'KHR'),
-        ]);
+
+        $activePayment = Payment::where('order_id', $order->id)
+            ->where('provider', 'bakong')
+            ->where('status', 'pending')
+            ->whereNotNull('qr_string')
+            ->whereNotNull('md5')
+            ->where(function ($query) {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->latest('id')
+            ->first();
+
+        if ($activePayment) {
+            return response()->json($this->formatPaymentResponse($activePayment));
+        }
+
+        $payment = Payment::where('order_id', $order->id)
+            ->where('provider', 'bakong')
+            ->whereIn('status', ['pending', 'failed'])
+            ->latest('id')
+            ->first();
+
+        if ($payment) {
+            $payment->update([
+                'status' => 'pending',
+                'amount' => $order->total,
+                'currency' => config('services.bakong.currency', 'KHR'),
+                'bill_number' => null,
+                'md5' => null,
+                'qr_string' => null,
+                'khqr_payload' => null,
+                'qr_image_base64' => null,
+                'expires_at' => null,
+                'paid_at' => null,
+            ]);
+        } else {
+            $payment = Payment::create([
+                'order_id' => $order->id,
+                'provider' => 'bakong',
+                'method' => 'bakong_khqr',
+                'status' => 'pending',
+                'amount' => $order->total,
+                'currency' => config('services.bakong.currency', 'KHR'),
+            ]);
+        }
 
         try {
             $result = $this->khqr->generate($order, $payment);
@@ -85,14 +110,17 @@ class BakongPaymentController extends Controller
             return response()->json($response, 500);
         }
 
-        $payment->update([
-            'bill_number' => $result['bill_number'],
-            'md5' => $result['md5'],
-            'khqr_payload' => $result['payload'],
-            'qr_string' => $result['qr_string'],
-            'qr_image_base64' => null,
-            'expires_at' => $result['expires_at'],
-        ]);
+        try {
+            $this->persistKhqrResult($payment, $result);
+        } catch (UniqueConstraintViolationException $e) {
+            if (! str_contains($e->getMessage(), 'bill_number')) {
+                throw $e;
+            }
+
+            $payment->update(['bill_number' => null]);
+            $result = $this->khqr->generate($order, $payment->fresh());
+            $this->persistKhqrResult($payment, $result);
+        }
 
         return response()->json($this->formatPaymentResponse($payment->fresh()));
     }
@@ -113,12 +141,6 @@ class BakongPaymentController extends Controller
                 $this->formatPaymentResponse($payment),
                 ['status' => 'paid']
             ));
-        }
-
-        if ($payment->expires_at && now()->greaterThan($payment->expires_at)) {
-            $payment->update(['status' => 'expired']);
-
-            return response()->json(['status' => 'expired']);
         }
 
         // If we somehow have a payment without an md5 (older records), regenerate a fresh KHQR
@@ -226,9 +248,11 @@ class BakongPaymentController extends Controller
             $pendingPayload['verification_note'] =
                 'Payment verification is blocked from this server region. Set BAKONG_PROXY_URL to a Cambodia-hosted proxy (see backend/bakong-proxy).';
             $pendingPayload['bakong_error_code'] = 15;
-        } elseif ((int) $responseCode === 1) {
-            $pendingPayload['verification_note'] =
-                'Waiting for Bakong to confirm your transfer. Keep this screen open after paying.';
+        }
+
+        if ($payment->expires_at && now()->greaterThan($payment->expires_at)) {
+            $payment->update(['status' => 'expired']);
+            $pendingPayload['status'] = 'expired';
         }
 
         return response()->json($pendingPayload);
@@ -311,6 +335,21 @@ class BakongPaymentController extends Controller
         $locked->loadMissing('items.product');
 
         PaidOrderInventory::applyForOrder($locked);
+    }
+
+    /**
+     * @param  array{bill_number: string, md5: string, payload: array, qr_string: string, expires_at: \Illuminate\Support\Carbon}  $result
+     */
+    private function persistKhqrResult(Payment $payment, array $result): void
+    {
+        $payment->update([
+            'bill_number' => $result['bill_number'],
+            'md5' => $result['md5'],
+            'khqr_payload' => $result['payload'],
+            'qr_string' => $result['qr_string'],
+            'qr_image_base64' => null,
+            'expires_at' => $result['expires_at'],
+        ]);
     }
 
     private function formatPaymentResponse(Payment $payment): array

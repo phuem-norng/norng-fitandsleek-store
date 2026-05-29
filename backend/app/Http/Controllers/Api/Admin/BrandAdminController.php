@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class BrandAdminController extends BaseAdminController
@@ -36,6 +37,34 @@ class BrandAdminController extends BaseAdminController
 
     private function resolveLogoUrl(?string $path): ?string
     {
+        $path = trim((string) $path);
+        if ($path === '') {
+            return null;
+        }
+
+        if ($this->isExternalUrl($path)) {
+            return $path;
+        }
+
+        if (str_starts_with($path, '/storage/')) {
+            return $path;
+        }
+
+        if (str_starts_with($path, 'storage/')) {
+            return '/'.$path;
+        }
+
+        $key = Media::storageKey($path);
+        if ($key) {
+            try {
+                if (Storage::disk('public')->exists($key)) {
+                    return '/storage/'.$key;
+                }
+            } catch (\Throwable) {
+                // Fall through to Media::publicUrl.
+            }
+        }
+
         try {
             return Media::publicUrl($path);
         } catch (\Throwable) {
@@ -97,6 +126,22 @@ class BrandAdminController extends BaseAdminController
         return response()->json(['data' => $items]);
     }
 
+    public function show(Brand $brand)
+    {
+        return response()->json([
+            'data' => [
+                'id' => $brand->id,
+                'name' => $brand->name,
+                'slug' => $brand->slug,
+                'logo_path' => $brand->logo_path,
+                'logo_url' => $this->resolveLogoUrl($brand->logo_path),
+                'sort_order' => $brand->sort_order,
+                'is_active' => (bool) $brand->is_active,
+                'created_at' => $brand->created_at,
+            ],
+        ]);
+    }
+
     public function store(Request $request)
     {
         $this->normalizeBrandRequest($request);
@@ -110,20 +155,15 @@ class BrandAdminController extends BaseAdminController
             'logo_url' => ['nullable','url','max:2048'],
         ]);
 
-        if (!$request->hasFile('logo') && empty($validated['logo_url'])) {
-            return response()->json([
-                'message' => 'Validation failed.',
-                'errors' => ['logo' => ['Please upload a logo or provide a logo URL.']],
-            ], 422);
-        }
+        $path = null;
 
         if ($request->hasFile('logo')) {
             $stored = $this->storeLogoFromRequest($request);
             if ($stored instanceof \Illuminate\Http\JsonResponse) {
                 return $stored;
             }
-            $path = $stored;
-        } else {
+            $path = $stored !== '' ? $stored : null;
+        } elseif (! empty($validated['logo_url'] ?? null)) {
             $path = $validated['logo_url'];
         }
 

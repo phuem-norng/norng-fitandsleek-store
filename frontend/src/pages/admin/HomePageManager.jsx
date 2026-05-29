@@ -74,7 +74,7 @@ export default function HomePageManager() {
  const [bannerFile, setBannerFile] = useState(null);
  const [bannerPreview, setBannerPreview] = useState(""); // preview URL (either from server or local blob)
 
- const [bannerForm, setBannerForm] = useState({
+ const defaultBannerForm = {
  title: "",
  subtitle: "",
  link_url: "",
@@ -82,7 +82,13 @@ export default function HomePageManager() {
  is_active: true,
  order: 0,
  media_url: "",
- });
+ show_badge: true,
+ show_title: true,
+ show_subtitle: true,
+ show_cta: true,
+ };
+
+ const [bannerForm, setBannerForm] = useState(defaultBannerForm);
 
  // ----- Collection form -----
  const [collectionEditingId, setCollectionEditingId] = useState(null);
@@ -112,13 +118,8 @@ export default function HomePageManager() {
  setBannerFile(null);
  setBannerPreview("");
  setBannerForm({
- title: "",
- subtitle: "",
- link_url: "",
- position: "hero",
- is_active: true,
+ ...defaultBannerForm,
  order: banners.length,
- media_url: "",
  });
  };
 
@@ -197,6 +198,10 @@ export default function HomePageManager() {
  fd.append("position", bannerForm.position || "hero");
  fd.append("is_active", bannerForm.is_active ? "1" : "0");
  fd.append("order", String(bannerForm.order ?? 0));
+ fd.append("show_badge", bannerForm.show_badge ? "1" : "0");
+ fd.append("show_title", bannerForm.show_title ? "1" : "0");
+ fd.append("show_subtitle", bannerForm.show_subtitle ? "1" : "0");
+ fd.append("show_cta", bannerForm.show_cta ? "1" : "0");
  if (bannerForm.media_url) fd.append("media_url", bannerForm.media_url);
 
  // backend usually expects: image (file). If your backend uses "image", keep "image".
@@ -308,6 +313,10 @@ export default function HomePageManager() {
  is_active: !!b.is_active,
  order: b.order ?? 0,
  media_url: b.image_url || "",
+ show_badge: b.show_badge !== false,
+ show_title: b.show_title !== false,
+ show_subtitle: b.show_subtitle !== false,
+ show_cta: b.show_cta !== false,
  });
  };
 
@@ -397,13 +406,8 @@ export default function HomePageManager() {
  setBannerFile(null);
  setBannerPreview("");
  setBannerForm({
- title: "",
- subtitle: "",
- link_url: "",
- position: "hero",
- is_active: true,
+ ...defaultBannerForm,
  order: banners.length,
- media_url: "",
  });
  }}
  className="h-11 px-4 rounded-xl bg-[color:var(--admin-primary)] text-white text-sm font-semibold hover:brightness-110"
@@ -462,6 +466,59 @@ export default function HomePageManager() {
  className="w-full h-11 rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm focus:border-[var(--admin-primary)] focus:ring-1 focus:ring-[rgba(var(--admin-primary-rgb),0.18)] outline-none bg-white dark:bg-slate-900/60 text-slate-900 dark:text-slate-100"
  placeholder="Banner subtitle"
  />
+ </div>
+
+ <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-3">
+ <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Show on homepage banner</p>
+ <p className="text-xs text-slate-500 dark:text-slate-400">Control which text appears over the hero image on the storefront.</p>
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+ {[
+ { key: "show_badge", label: "Top badge (title)" },
+ { key: "show_title", label: "Main heading" },
+ { key: "show_subtitle", label: "Subtitle" },
+ { key: "show_cta", label: "Shop button" },
+ ].map(({ key, label }) => (
+ <label key={key} className="flex items-center gap-2 cursor-pointer">
+ <input
+ type="checkbox"
+ checked={!!bannerForm[key]}
+ onChange={(e) => setBannerForm((s) => ({ ...s, [key]: e.target.checked }))}
+ className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-[color:var(--admin-primary)] focus:ring-[rgba(var(--admin-primary-rgb),0.35)]"
+ />
+ <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{label}</span>
+ </label>
+ ))}
+ </div>
+ <button
+ type="button"
+ onClick={() =>
+ setBannerForm((s) => ({
+ ...s,
+ show_badge: false,
+ show_title: false,
+ show_subtitle: false,
+ show_cta: false,
+ }))
+ }
+ className="text-xs font-semibold text-slate-600 dark:text-slate-300 underline hover:text-slate-900 dark:hover:text-white"
+ >
+ Hide all text
+ </button>
+ <button
+ type="button"
+ onClick={() =>
+ setBannerForm((s) => ({
+ ...s,
+ show_badge: true,
+ show_title: true,
+ show_subtitle: true,
+ show_cta: true,
+ }))
+ }
+ className="ml-3 text-xs font-semibold text-slate-600 dark:text-slate-300 underline hover:text-slate-900 dark:hover:text-white"
+ >
+ Show all text
+ </button>
  </div>
 
  <div>

@@ -2,28 +2,24 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
+import { useCatalogAvailability } from "../../state/catalogAvailability.jsx";
+import { filterStorefrontMedia } from "../../lib/catalogContent.js";
 
-// Fallback slides in case API is empty
-const fallbackSlides = [
-  {
-    badge: "SALE",
-    title: "Up to 50% Off",
-    desc: "Limited-time discounts on selected items.",
-    cta: { label: "Shop Sale", to: "/search?gender=sale" },
-    bg: "from-rose-400 via-red-500 to-red-600",
-    image:
-      "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=70",
-  },
-  {
-    badge: "NEW IN",
-    title: "Fresh street-ready drops",
-    desc: "New arrivals curated for daily wear.",
-    cta: { label: "Shop New", to: "/search?tab=new" },
-    bg: "from-zinc-200 via-zinc-100 to-white",
-    image:
-      "https://images.unsplash.com/photo-1520975916090-3105956dac38?auto=format&fit=crop&w=1200&q=70",
-  },
-];
+function HeroPlaceholder() {
+  return (
+    <section
+      className="container-safe pt-4 md:pt-6 max-w-[1600px] mx-auto"
+      aria-label="Hero banner"
+    >
+      <div
+        className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-zinc-200/80 bg-gradient-to-br from-zinc-300 via-zinc-200 to-zinc-100 shadow-sm aspect-video md:aspect-auto md:min-h-[400px] lg:min-h-[560px]"
+        aria-hidden
+      />
+      <span className="sr-only">Hero banner area</span>
+    </section>
+  );
+}
 
 // High-End Animation Variants (3 Styles for Random Selection)
 const imageVariants = {
@@ -196,9 +192,12 @@ const buttonVariants = {
 };
 
 export default function Hero() {
+  const { infrastructureDegraded } = useCatalogAvailability();
   const [i, setI] = useState(0);
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [animationStyle, setAnimationStyle] = useState("fadeIn");
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
@@ -214,34 +213,14 @@ export default function Hero() {
 
   useEffect(() => {
     const fetchBanners = async () => {
+      setFetchFailed(false);
       try {
         const { data } = await api.get("/banners/hero");
-        const items = data?.data || [];
-        if (items.length > 0) {
-          setBanners(items);
-        } else {
-          // Use fallback if no banners from API
-          setBanners(fallbackSlides.map((slide, idx) => ({
-            id: `fallback-${idx}`,
-            badge: slide.badge,
-            title: slide.title,
-            subtitle: slide.desc,
-            image_url: slide.image,
-            link_url: slide.cta.to,
-            bg: slide.bg,
-          })));
-        }
+        setBanners(filterStorefrontMedia(data?.data || []));
       } catch (error) {
-        console.warn("Failed to fetch banners, using fallback:", error);
-        setBanners(fallbackSlides.map((slide, idx) => ({
-          id: `fallback-${idx}`,
-          badge: slide.badge,
-          title: slide.title,
-          subtitle: slide.desc,
-          image_url: slide.image,
-          link_url: slide.cta.to,
-          bg: slide.bg,
-        })));
+        console.warn("Failed to fetch banners:", error);
+        setBanners([]);
+        setFetchFailed(true);
       } finally {
         setLoading(false);
       }
@@ -257,15 +236,23 @@ export default function Hero() {
       title: b.title || b.badge,
       subtitle: b.subtitle,
       desc: b.subtitle,
-      cta: { 
-        label: b.title || "Shop Now", 
-        to: b.link_url || "/search" 
+      cta: {
+        label: b.title || "Shop Now",
+        to: b.link_url || "/search",
       },
-      image: b.image_url,
+      show_badge: b.show_badge !== false,
+      show_title: b.show_title !== false,
+      show_subtitle: b.show_subtitle !== false,
+      show_cta: b.show_cta !== false,
+      image: b.image_url ? resolveImageUrl(b.image_url) : "",
       link_url: b.link_url,
       bg: b.bg || "from-rose-400 via-red-500 to-red-600",
     }));
   }, [banners]);
+
+  useEffect(() => {
+    setHeroImageFailed(false);
+  }, [i, slides]);
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -293,12 +280,17 @@ export default function Hero() {
     );
   }
 
-  if (slides.length === 0) {
-    return null;
+  if (infrastructureDegraded || fetchFailed || slides.length === 0) {
+    return <HeroPlaceholder />;
   }
 
   const active = slides[i];
-  const fallbackHeroImage = "/placeholder.svg";
+  const showHeroImage = Boolean(active.image) && !heroImageFailed;
+  const showAnyOverlayText =
+    (active.show_badge && active.badge) ||
+    (active.show_title && active.title) ||
+    (active.show_subtitle && active.desc) ||
+    active.show_cta;
 
   // Touch/Swipe handlers
   const handleTouchStart = (e) => {
@@ -356,73 +348,80 @@ export default function Hero() {
               variants={imageVariants}
               className="absolute inset-0"
             >
-              <img
-                src={active.image || fallbackHeroImage}
-                alt={active.title}
-                onError={(e) => {
-                  if (!fallbackHeroImage) return;
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src = fallbackHeroImage;
-                }}
-                className="absolute inset-0 w-full h-full object-cover object-center"
-              />
+              {showHeroImage ? (
+                <img
+                  src={active.image}
+                  alt={active.title}
+                  onError={() => setHeroImageFailed(true)}
+                  className="absolute inset-0 w-full h-full object-cover object-center"
+                />
+              ) : (
+                <div
+                  className="absolute inset-0 bg-gradient-to-br from-zinc-400 via-zinc-300 to-zinc-200"
+                  aria-hidden
+                />
+              )}
               
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
             </motion.div>
           </AnimatePresence>
 
           {/* Animated Text Content - Paragon Style */}
-          <div className="relative z-10 h-full flex items-end pointer-events-none">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={`text-${i}`}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                variants={textContainerVariants}
-                className="p-4 md:p-6 lg:p-10 max-w-xl text-white w-full"
-              >
-                {/* Badge with spring animation */}
-                <motion.span 
-                  variants={badgeVariants}
-                  className="inline-flex items-center rounded-full bg-white/15 backdrop-blur-sm border border-white/25 px-2 py-0.5 md:px-3 md:py-1 text-[9px] md:text-[10px] lg:text-xs font-semibold uppercase tracking-[0.2em]"
+          {showAnyOverlayText ? (
+            <div className="relative z-10 h-full flex items-end pointer-events-none">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`text-${i}`}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  variants={textContainerVariants}
+                  className="p-4 md:p-6 lg:p-10 max-w-xl text-white w-full"
                 >
-                  {active.badge || "Featured"}
-                </motion.span>
-                
-                {/* Title slides down - Responsive sizing */}
-                <motion.h1 
-                  variants={titleVariants}
-                  className="mt-2 md:mt-3 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black tracking-tight leading-tight"
-                >
-                  {active.title}
-                </motion.h1>
-                
-                {/* Subtitle fades in - Hide on very small screens */}
-                {active.desc && (
-                  <motion.p 
-                    variants={subtitleVariants}
-                    className="mt-1.5 md:mt-2 text-xs sm:text-sm md:text-base text-white/90 line-clamp-2"
-                  >
-                    {active.desc}
-                  </motion.p>
-                )}
-                
-                {/* Button scales up - Compact on mobile */}
-                <motion.div 
-                  variants={buttonVariants}
-                  className="mt-3 md:mt-4 pointer-events-auto"
-                >
-                  <Link
-                    to={active.cta?.to || active.link_url || "/search"}
-                    className="inline-flex items-center h-8 md:h-10 px-4 md:px-6 rounded-full bg-white text-zinc-900 text-xs md:text-sm font-semibold shadow-lg hover:shadow-xl hover:bg-zinc-100 transition-all duration-300"
-                  >
-                    {active.cta?.label || "Shop now"}
-                  </Link>
+                  {active.show_badge && active.badge ? (
+                    <motion.span
+                      variants={badgeVariants}
+                      className="inline-flex items-center rounded-full bg-white/15 backdrop-blur-sm border border-white/25 px-2 py-0.5 md:px-3 md:py-1 text-[9px] md:text-[10px] lg:text-xs font-semibold uppercase tracking-[0.2em]"
+                    >
+                      {active.badge}
+                    </motion.span>
+                  ) : null}
+
+                  {active.show_title && active.title ? (
+                    <motion.h1
+                      variants={titleVariants}
+                      className="mt-2 md:mt-3 text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black tracking-tight leading-tight"
+                    >
+                      {active.title}
+                    </motion.h1>
+                  ) : null}
+
+                  {active.show_subtitle && active.desc ? (
+                    <motion.p
+                      variants={subtitleVariants}
+                      className="mt-1.5 md:mt-2 text-xs sm:text-sm md:text-base text-white/90 line-clamp-2"
+                    >
+                      {active.desc}
+                    </motion.p>
+                  ) : null}
+
+                  {active.show_cta ? (
+                    <motion.div
+                      variants={buttonVariants}
+                      className="mt-3 md:mt-4 pointer-events-auto"
+                    >
+                      <Link
+                        to={active.cta?.to || active.link_url || "/search"}
+                        className="inline-flex items-center h-8 md:h-10 px-4 md:px-6 rounded-full bg-white text-zinc-900 text-xs md:text-sm font-semibold shadow-lg hover:shadow-xl hover:bg-zinc-100 transition-all duration-300"
+                      >
+                        {active.cta?.label || "Shop now"}
+                      </Link>
+                    </motion.div>
+                  ) : null}
                 </motion.div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
+              </AnimatePresence>
+            </div>
+          ) : null}
 
           {/* Elegant Progress Dots */}
           {slides.length > 1 && (

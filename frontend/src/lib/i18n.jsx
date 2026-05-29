@@ -627,6 +627,8 @@ const translations = {
     sectionLoadUnavailable:
       "We couldn't load products for this section. Please try again in a moment.",
     sectionDegradedVisibleHint: "Couldn't load this section right now.",
+    collectionsEmpty: "No collections to show yet.",
+    collectionsEmptyHint: "Add collections in admin when your store is ready.",
   },
   km: {
     // Header
@@ -1253,6 +1255,8 @@ const translations = {
     sectionLoadUnavailable:
       'មិនអាចផ្ទុកផលិតផលសម្រាប់ផ្នែកនេះបានទេ។ សូមព្យាយាមម្តងទៀតក្នុងរយៈពេលបន្តិចទៀត។',
     sectionDegradedVisibleHint: 'មិនអាចផ្ទុកផ្នែកនេះបានទេនៅពេលនេះ។',
+    collectionsEmpty: 'មិនមានការប្រមូលផលបង្ហាញទេនៅពេលនេះ។',
+    collectionsEmptyHint: 'បន្ថែមការប្រមូលផលក្នុងផ្ទាំងគ្រប់គ្រង នៅពេលហាងរបស់អ្នករួចរាល់។',
   }
 };
 

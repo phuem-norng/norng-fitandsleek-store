@@ -16,6 +16,38 @@ class Media
         return (string) config('filesystems.default', 'public');
     }
 
+    /**
+     * Cloudinary disk is configured in .env but credentials are missing (common in local dev).
+     */
+    public static function cloudinaryIsConfigured(): bool
+    {
+        $creds = self::cloudinaryCredentials();
+
+        if ($creds['cloudName'] === '') {
+            return false;
+        }
+
+        if ($creds['preset'] !== '') {
+            return true;
+        }
+
+        return $creds['apiKey'] !== '' && $creds['apiSecret'] !== '';
+    }
+
+    /**
+     * Disk used for URL resolution and uploads — never a broken cloudinary driver.
+     */
+    public static function effectiveDisk(?string $preferred = null): string
+    {
+        $disk = $preferred ?? self::disk();
+
+        if ($disk === 'cloudinary' && ! self::cloudinaryIsConfigured()) {
+            return 'public';
+        }
+
+        return $disk;
+    }
+
     public static function fallbackToPublic(): bool
     {
         return filter_var(
@@ -112,22 +144,25 @@ class Media
             return self::placeholderUrl();
         }
 
-        $disk = self::disk();
-
-        if ($disk !== 'public') {
-            try {
-                return Storage::disk($disk)->url($normalized);
-            } catch (\Throwable) {
-                // Continue to local fallback for legacy paths.
-            }
-        }
-
         try {
             if (Storage::disk('public')->exists($normalized)) {
                 return '/storage/'.$normalized;
             }
         } catch (\Throwable) {
             // ignore
+        }
+
+        $disk = self::effectiveDisk();
+
+        if ($disk !== 'public') {
+            try {
+                $remoteUrl = Storage::disk($disk)->url($normalized);
+                if (is_string($remoteUrl) && $remoteUrl !== '') {
+                    return $remoteUrl;
+                }
+            } catch (\Throwable) {
+                // Continue to placeholder for legacy paths.
+            }
         }
 
         return self::placeholderUrl();
@@ -227,7 +262,7 @@ class Media
         ?string $filename,
         ?string $disk
     ): string {
-        $disk = $disk ?? self::disk();
+        $disk = self::effectiveDisk($disk);
         $directory = trim($directory, '/');
 
         if (self::usesCloudinaryDisk($disk)) {
