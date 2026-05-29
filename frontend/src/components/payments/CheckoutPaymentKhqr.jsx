@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
 import KhqrModal from "./KhqrModal";
 
-const POLL_MS = 2000;
+const POLL_MS = 5000;
+const POLL_MS_SLOW = 10000;
+const BURST_COOLDOWN_MS = 8000;
 
 function pickStatus(payload) {
   if (!payload || typeof payload !== "object") return null;
@@ -28,6 +30,9 @@ export default function CheckoutPaymentKhqr({
   const pollRef = useRef(null);
   const pollFailuresRef = useRef(0);
   const paidNotifiedRef = useRef(false);
+  const backoffUntilRef = useRef(0);
+  const lastBurstAtRef = useRef(0);
+  const pollIntervalMsRef = useRef(POLL_MS);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -35,6 +40,18 @@ export default function CheckoutPaymentKhqr({
       pollRef.current = null;
     }
   }, []);
+
+  const startPolling = useCallback(
+    (intervalMs) => {
+      stopPolling();
+      pollIntervalMsRef.current = intervalMs;
+      pollRef.current = window.setInterval(() => {
+        if (Date.now() < backoffUntilRef.current) return;
+        void checkStatusRef.current?.();
+      }, intervalMs);
+    },
+    [stopPolling],
+  );
 
   const handlePaid = useCallback(
     (payload) => {
@@ -82,6 +99,53 @@ export default function CheckoutPaymentKhqr({
     [handlePaid],
   );
 
+  const checkStatusRef = useRef(null);
+
+  const checkStatus = useCallback(async () => {
+    const targetId = paymentId;
+    if (!targetId || paidNotifiedRef.current) return null;
+    if (Date.now() < backoffUntilRef.current) return null;
+
+    try {
+      const { data } = await api.get(`/payments/bakong/status/${targetId}`);
+      pollFailuresRef.current = 0;
+      backoffUntilRef.current = 0;
+      setError("");
+      if (pollIntervalMsRef.current !== POLL_MS) {
+        startPolling(POLL_MS);
+      }
+      return applyStatusPayload(data);
+    } catch (e) {
+      const httpStatus = e?.response?.status;
+
+      if (httpStatus === 429) {
+        const retryAfterSec = Number(e?.response?.headers?.["retry-after"] || 60);
+        const waitMs = Math.min(Math.max(retryAfterSec, 15), 120) * 1000;
+        backoffUntilRef.current = Date.now() + waitMs;
+        startPolling(POLL_MS_SLOW);
+        setVerificationNote("Checking payment… please wait a moment.");
+        return null;
+      }
+
+      pollFailuresRef.current += 1;
+      if (httpStatus === 403) {
+        setError(e?.response?.data?.message || "Unauthorized.");
+        setStatus("error");
+        stopPolling();
+        return "error";
+      }
+      if (pollFailuresRef.current >= 3) {
+        setError(
+          e?.response?.data?.message ||
+            "Unable to verify payment status. Keep this screen open after paying in your banking app.",
+        );
+      }
+      return "error";
+    }
+  }, [applyStatusPayload, paymentId, startPolling, stopPolling]);
+
+  checkStatusRef.current = checkStatus;
+
   const createKhqr = useCallback(async () => {
     if (!orderId) return;
     setLoading(true);
@@ -89,6 +153,8 @@ export default function CheckoutPaymentKhqr({
     paidNotifiedRef.current = false;
     setVerificationNote("");
     setAwaitingConfirmation(false);
+    backoffUntilRef.current = 0;
+    lastBurstAtRef.current = 0;
 
     try {
       const { data } = await api.post("/payments/bakong/create", { order_id: orderId });
@@ -108,44 +174,20 @@ export default function CheckoutPaymentKhqr({
     }
   }, [handlePaid, orderId]);
 
-  const checkStatus = useCallback(async () => {
-    const targetId = paymentId;
-    if (!targetId || paidNotifiedRef.current) return null;
-
-    try {
-      const { data } = await api.get(`/payments/bakong/status/${targetId}`);
-      pollFailuresRef.current = 0;
-      setError("");
-      return applyStatusPayload(data);
-    } catch (e) {
-      pollFailuresRef.current += 1;
-      if (e?.response?.status === 403) {
-        setError(e?.response?.data?.message || "Unauthorized.");
-        setStatus("error");
-        stopPolling();
-        return "error";
-      }
-      if (pollFailuresRef.current >= 3) {
-        setError(
-          e?.response?.data?.message ||
-            "Unable to verify payment status. Keep this screen open after paying in your banking app.",
-        );
-      }
-      return "error";
-    }
-  }, [applyStatusPayload, paymentId, stopPolling]);
-
-  /** After user returns from banking app, poll quickly so success modal appears right away. */
   const burstCheckStatus = useCallback(() => {
     if (paidNotifiedRef.current || !paymentId) return;
+    const now = Date.now();
+    if (now - lastBurstAtRef.current < BURST_COOLDOWN_MS) {
+      void checkStatus();
+      return;
+    }
+    lastBurstAtRef.current = now;
     setAwaitingConfirmation(true);
     void checkStatus();
-    window.setTimeout(() => void checkStatus(), 400);
-    window.setTimeout(() => void checkStatus(), 1200);
     window.setTimeout(() => {
       void checkStatus();
       setAwaitingConfirmation(false);
-    }, 2500);
+    }, 1200);
   }, [checkStatus, paymentId]);
 
   useEffect(() => {
@@ -159,14 +201,12 @@ export default function CheckoutPaymentKhqr({
     if (!paymentId) return;
 
     void checkStatus();
-    pollRef.current = window.setInterval(() => {
-      void checkStatus();
-    }, POLL_MS);
+    startPolling(POLL_MS);
 
     return () => {
       stopPolling();
     };
-  }, [open, status, checkStatus, paymentId, stopPolling]);
+  }, [open, status, checkStatus, paymentId, startPolling, stopPolling]);
 
   useEffect(() => {
     if (!open || status !== "pending") return undefined;
@@ -198,6 +238,9 @@ export default function CheckoutPaymentKhqr({
       paidNotifiedRef.current = false;
       setVerificationNote("");
       setAwaitingConfirmation(false);
+      backoffUntilRef.current = 0;
+      lastBurstAtRef.current = 0;
+      pollIntervalMsRef.current = POLL_MS;
       stopPolling();
     }
   }, [open, stopPolling]);

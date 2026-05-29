@@ -209,7 +209,7 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
     Route::post('/payments/bakong/create', [BakongPaymentController::class, 'create']);
     Route::get('/payments/bakong/status/{payment}', [BakongPaymentController::class, 'status'])
         ->whereNumber('payment')
-        ->middleware('throttle:30,1');
+        ->middleware('throttle:bakong-status');
 
     // User Notifications
     Route::get('/notifications', [NotificationController::class, 'index']);

@@ -66,5 +66,17 @@ class RateLimitingServiceProvider extends ServiceProvider
         RateLimiter::for('auth-two-factor', function (Request $request) {
             return Limit::perMinute(10)->by($request->ip());
         });
+
+        // KHQR status polling while customer waits on checkout (was throttle:30,1 → 429 errors).
+        RateLimiter::for('bakong-status', function (Request $request) {
+            $paymentId = (string) $request->route('payment');
+            $userId = $request->user()?->id;
+
+            $key = $userId
+                ? 'user:'.$userId.':payment:'.($paymentId !== '' ? $paymentId : 'x')
+                : 'ip:'.$request->ip().':payment:'.($paymentId !== '' ? $paymentId : 'x');
+
+            return Limit::perMinute(90)->by($key);
+        });
     }
 }
