@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
 import KhqrModal from "./KhqrModal";
 
+const POLL_MS = 2000;
+
 function pickStatus(payload) {
   if (!payload || typeof payload !== "object") return null;
   return payload.status ?? payload.payment?.status ?? null;
@@ -20,10 +22,9 @@ export default function CheckoutPaymentKhqr({
   const [paymentId, setPaymentId] = useState(null);
   const [status, setStatus] = useState("idle");
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const [verificationNote, setVerificationNote] = useState("");
-  const [verifySlideResult, setVerifySlideResult] = useState(null);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const pollRef = useRef(null);
   const pollFailuresRef = useRef(0);
   const paidNotifiedRef = useRef(false);
@@ -40,8 +41,8 @@ export default function CheckoutPaymentKhqr({
       if (paidNotifiedRef.current) return;
       paidNotifiedRef.current = true;
       setStatus("paid");
-      setVerifySlideResult("paid");
       setError("");
+      setAwaitingConfirmation(false);
       stopPolling();
       onPaid?.(payload);
     },
@@ -49,13 +50,13 @@ export default function CheckoutPaymentKhqr({
   );
 
   const applyStatusPayload = useCallback(
-    (data, { fromManualCheck = false } = {}) => {
+    (data) => {
       const nextPayment = data?.payment && typeof data.payment === "object" ? data.payment : data;
       const nextStatus = pickStatus(data) ?? pickStatus(nextPayment);
 
       if (data?.verification_note) {
         setVerificationNote(String(data.verification_note));
-      } else if (fromManualCheck && nextStatus !== "paid") {
+      } else if (nextStatus === "paid") {
         setVerificationNote("");
       }
 
@@ -76,14 +77,6 @@ export default function CheckoutPaymentKhqr({
         setStatus(nextStatus);
       }
 
-      if (fromManualCheck) {
-        if (nextStatus === "expired") {
-          setVerifySlideResult("error");
-        } else {
-          setVerifySlideResult("pending");
-        }
-      }
-
       return nextStatus;
     },
     [handlePaid],
@@ -94,7 +87,8 @@ export default function CheckoutPaymentKhqr({
     setLoading(true);
     setError("");
     paidNotifiedRef.current = false;
-    setVerifySlideResult(null);
+    setVerificationNote("");
+    setAwaitingConfirmation(false);
 
     try {
       const { data } = await api.post("/payments/bakong/create", { order_id: orderId });
@@ -114,52 +108,45 @@ export default function CheckoutPaymentKhqr({
     }
   }, [handlePaid, orderId]);
 
-  const checkStatus = useCallback(
-    async ({ manual = false } = {}) => {
-      const targetId = paymentId;
-      if (!targetId || paidNotifiedRef.current) return null;
+  const checkStatus = useCallback(async () => {
+    const targetId = paymentId;
+    if (!targetId || paidNotifiedRef.current) return null;
 
-      if (manual) {
-        setChecking(true);
-        setVerifySlideResult(null);
-      }
-
-      try {
-        const { data } = await api.get(`/payments/bakong/status/${targetId}`);
-        pollFailuresRef.current = 0;
-        if (!manual) {
-          setError("");
-        }
-
-        const result = applyStatusPayload(data, { fromManualCheck: manual });
-        return result;
-      } catch (e) {
-        pollFailuresRef.current += 1;
-        if (e?.response?.status === 403) {
-          setError(e?.response?.data?.message || "Unauthorized.");
-          setStatus("error");
-          if (manual) setVerifySlideResult("error");
-          stopPolling();
-          return "error";
-        }
-        if (manual || pollFailuresRef.current >= 3) {
-          setError(
-            e?.response?.data?.message ||
-              "Unable to verify payment status. Slide to check again after paying.",
-          );
-          if (manual) setVerifySlideResult("error");
-        }
+    try {
+      const { data } = await api.get(`/payments/bakong/status/${targetId}`);
+      pollFailuresRef.current = 0;
+      setError("");
+      return applyStatusPayload(data);
+    } catch (e) {
+      pollFailuresRef.current += 1;
+      if (e?.response?.status === 403) {
+        setError(e?.response?.data?.message || "Unauthorized.");
+        setStatus("error");
+        stopPolling();
         return "error";
-      } finally {
-        if (manual) setChecking(false);
       }
-    },
-    [applyStatusPayload, paymentId, stopPolling],
-  );
+      if (pollFailuresRef.current >= 3) {
+        setError(
+          e?.response?.data?.message ||
+            "Unable to verify payment status. Keep this screen open after paying in your banking app.",
+        );
+      }
+      return "error";
+    }
+  }, [applyStatusPayload, paymentId, stopPolling]);
 
-  const handleSlideVerify = useCallback(async () => {
-    await checkStatus({ manual: true });
-  }, [checkStatus]);
+  /** After user returns from banking app, poll quickly so success modal appears right away. */
+  const burstCheckStatus = useCallback(() => {
+    if (paidNotifiedRef.current || !paymentId) return;
+    setAwaitingConfirmation(true);
+    void checkStatus();
+    window.setTimeout(() => void checkStatus(), 400);
+    window.setTimeout(() => void checkStatus(), 1200);
+    window.setTimeout(() => {
+      void checkStatus();
+      setAwaitingConfirmation(false);
+    }, 2500);
+  }, [checkStatus, paymentId]);
 
   useEffect(() => {
     if (!open) return;
@@ -171,10 +158,10 @@ export default function CheckoutPaymentKhqr({
     if (status === "paid" || status === "expired" || status === "error") return;
     if (!paymentId) return;
 
-    checkStatus();
-    pollRef.current = setInterval(() => {
-      checkStatus();
-    }, 3000);
+    void checkStatus();
+    pollRef.current = window.setInterval(() => {
+      void checkStatus();
+    }, POLL_MS);
 
     return () => {
       stopPolling();
@@ -182,15 +169,24 @@ export default function CheckoutPaymentKhqr({
   }, [open, status, checkStatus, paymentId, stopPolling]);
 
   useEffect(() => {
-    if (!open) return undefined;
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && status === "pending") {
-        checkStatus();
+    if (!open || status !== "pending") return undefined;
+
+    const onResume = () => {
+      if (document.visibilityState === "visible") {
+        burstCheckStatus();
       }
     };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [checkStatus, open, status]);
+
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+    window.addEventListener("pageshow", onResume);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
+      window.removeEventListener("pageshow", onResume);
+    };
+  }, [burstCheckStatus, open, status]);
 
   useEffect(() => {
     if (!open) {
@@ -198,11 +194,10 @@ export default function CheckoutPaymentKhqr({
       setPaymentId(null);
       setStatus("idle");
       setError("");
-      setChecking(false);
       pollFailuresRef.current = 0;
       paidNotifiedRef.current = false;
       setVerificationNote("");
-      setVerifySlideResult(null);
+      setAwaitingConfirmation(false);
       stopPolling();
     }
   }, [open, stopPolling]);
@@ -220,12 +215,10 @@ export default function CheckoutPaymentKhqr({
       loading={loading}
       error={error}
       verificationNote={verificationNote}
+      awaitingConfirmation={awaitingConfirmation}
       amount={amount}
       currency={payment?.currency || currency}
       onRegenerate={createKhqr}
-      onSlideVerify={handleSlideVerify}
-      slideVerifyBusy={checking}
-      slideVerifyResult={verifySlideResult}
     />
   );
 }

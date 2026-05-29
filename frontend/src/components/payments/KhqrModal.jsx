@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode.react";
 import ModalPortal from "./ModalPortal";
-import SlideToVerifyPayment from "./SlideToVerifyPayment";
 
 /* ─── KHQR official brand colours ────────────────────── */
 const KHQR_RED   = "#C0272D";
@@ -59,12 +58,10 @@ export default function KhqrModal({
   loading,
   error,
   verificationNote,
+  awaitingConfirmation = false,
   amount,
   currency,
   onRegenerate,
-  onSlideVerify,
-  slideVerifyBusy = false,
-  slideVerifyResult = null,
 }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [copied, setCopied] = useState(null);
@@ -94,9 +91,6 @@ export default function KhqrModal({
   }, []);
 
   if (!open) return null;
-
-  const showSlideVerify =
-    !loading && status !== "paid" && status !== "expired" && typeof onSlideVerify === "function";
 
   return (
     <ModalPortal>
@@ -233,21 +227,16 @@ export default function KhqrModal({
             {error}
           </div>
         )}
+        {awaitingConfirmation && status === "pending" && (
+          <div className="mx-5 mt-3 flex items-center justify-center gap-2 rounded-xl border border-[#6E8B7E]/30 bg-[#6E8B7E]/10 px-3 py-2.5 text-sm font-medium text-[#38554a] dark:text-emerald-100">
+            <span className="inline-block h-4 w-4 rounded-full border-2 border-[#6E8B7E] border-t-transparent animate-spin" aria-hidden />
+            Confirming your payment…
+          </div>
+        )}
         {status === "paid" && (
           <div className="mx-5 mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm border border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
             <span className="text-xl">🎉</span>
-            <span className="font-semibold">Payment received! Finishing your order…</span>
-          </div>
-        )}
-
-        {showSlideVerify && (
-          <div className="px-5 pt-3">
-            <SlideToVerifyPayment
-              disabled={loading}
-              busy={slideVerifyBusy}
-              result={slideVerifyResult}
-              onVerify={onSlideVerify}
-            />
+            <span className="font-semibold">Payment received! Opening confirmation…</span>
           </div>
         )}
         {status === "expired" && (
