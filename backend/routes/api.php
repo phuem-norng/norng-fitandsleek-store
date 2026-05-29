@@ -71,6 +71,7 @@ use App\Http\Controllers\Api\Admin\DriverAdminController;
 use App\Http\Controllers\Api\Admin\AdminAiChatController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
+Route::get('/payments/bakong/readiness', [BakongPaymentController::class, 'readiness']);
 
 Route::middleware(['throttle:api'])->group(function () {
 
@@ -146,8 +147,9 @@ Route::get('/brands/{slug}', [StorefrontBrandController::class, 'show']);
 Route::post('/chatbot/message', [ChatbotController::class, 'message'])->middleware('throttle:api-sensitive');
 Route::get('/chatbot/settings', [ChatbotController::class, 'settings']);
 
-// Bakong KHQR webhook (optional)
+// Bakong KHQR webhook (NBC → Render; no Cambodia proxy needed)
 Route::post('/payments/khqr/webhook', [PaymentController::class, 'khqrWebhook']);
+Route::post('/payments/bakong/webhook', [PaymentController::class, 'khqrWebhook']);
 
 // Public notifications (guests)
 Route::get('/notifications/public', [NotificationController::class, 'index']);

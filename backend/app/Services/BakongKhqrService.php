@@ -14,6 +14,43 @@ class BakongKhqrService
     {
     }
 
+    /** Render / US hosts cannot call NBC Bakong MD5 API without a Cambodia egress proxy. */
+    public static function hostingRequiresProxy(): bool
+    {
+        return ! app()->environment(['local', 'testing']);
+    }
+
+    public static function proxyConfigured(): bool
+    {
+        return filled(config('services.bakong.proxy_url'));
+    }
+
+    public static function checkoutReady(): bool
+    {
+        if (! filled(config('services.bakong.token')) || ! filled(config('services.bakong.receive_account'))) {
+            return false;
+        }
+
+        if (self::hostingRequiresProxy() && ! self::proxyConfigured()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static function hostingBlockedUserMessage(): string
+    {
+        return 'Payment was sent but this server cannot confirm it yet. '
+            . 'The store must enable Bakong proxy on Render (BAKONG_PROXY_URL). '
+            . 'Keep this page open — it will update when configured.';
+    }
+
+    public static function hostingBlockedAdminMessage(): string
+    {
+        return 'Render cannot call Bakong NBC directly (errorCode 15). '
+            . 'Set BAKONG_PROXY_URL to a Cloudflare Worker (worker-forward.js) and BAKONG_PROXY_STYLE=forward, then redeploy.';
+    }
+
     public function generate(Order $order, Payment $payment): array
     {
         $bakong = $this->resolvedBakongOptions();

@@ -1,60 +1,105 @@
-# Bakong NBC Proxy
+# Bakong NBC Proxy & Hosted Checkout
 
-NBC blocks `check_transaction_by_md5` from outside Cambodia (**errorCode 15**). Render (US) needs a Cambodia egress proxy for status polling.
+NBC blocks `check_transaction_by_md5` from outside Cambodia (**errorCode 15**). Render (US) cannot poll NBC directly.
 
-| Option | File | Render env |
-|--------|------|------------|
-| **Cloudflare Worker** (recommended) | [`worker-forward.js`](./worker-forward.js) | `BAKONG_PROXY_STYLE=forward` |
-| **PHP on Cambodia VPS** | [`index.php`](./index.php) | `BAKONG_PROXY_STYLE=legacy` |
+## Recommended for Render: Webhook (no proxy)
 
-Webhook (`/api/payments/khqr/webhook`) does **not** need this proxy.
+See **[docs/BAKONG-WEBHOOK-RENDER.md](../docs/BAKONG-WEBHOOK-RENDER.md)** — NBC POSTs to Render when paid; checkout polling reads `paid` from the database.
+
+```
+https://norng-fitandsleek-backend.onrender.com/api/payments/bakong/webhook
+```
+
+Set `BAKONG_WEBHOOK_SECRET` on Render to match NBC Developer Dashboard.
 
 ---
 
-## Option A — Cloudflare Worker (path relay)
+## Optional: proxy for status polling
+
+| Option | File | Render env |
+|--------|------|------------|
+| **Cloudflare Worker (token on worker)** | [`worker.js`](./worker.js) | `BAKONG_PROXY_STYLE=legacy` |
+| **Cloudflare Worker (token on Render)** | [`worker-forward.js`](./worker-forward.js) | `BAKONG_PROXY_STYLE=forward` |
+| **PHP on Cambodia VPS** | [`index.php`](./index.php) | `BAKONG_PROXY_STYLE=legacy` |
+
+If Worker returns **CloudFront 403 HTML**, use **webhook** or **Cambodia VPS** instead.
+
+---
+
+## Option A — Cloudflare Worker (`worker.js` + legacy)
 
 ### Step 1 — Paste & Deploy
 
-1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create Worker**
-2. **Edit code** → paste [`worker-forward.js`](./worker-forward.js) → **Deploy**
-3. Copy Worker URL (e.g. `https://aged-hill-ac57.teamvcnh.workers.dev`)
-
-No Worker secrets needed — `BAKONG_TOKEN` stays on Render.
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers** → **fitandsleek-bakong-proxy** → **Edit code**
+2. Paste [`worker.js`](./worker.js) (not Hello World)
+3. **Settings → Variables → Secrets:** `BAKONG_TOKEN` = same JWT as Render
+4. **Deploy**
 
 ### Step 2 — Render env
 
 ```ini
-BAKONG_PROXY_URL=https://aged-hill-ac57.teamvcnh.workers.dev
-BAKONG_PROXY_STYLE=forward
+BAKONG_PROXY_URL=https://fitandsleek-bakong-proxy.po29112001.workers.dev
+BAKONG_PROXY_STYLE=legacy
 ```
 
-Save → **Manual Deploy**.
-
-### Test
+### Test (must be JSON, not HTML)
 
 ```bash
-curl -X POST "https://aged-hill-ac57.teamvcnh.workers.dev/v1/check_transaction_by_md5" \
+curl -X POST "https://fitandsleek-bakong-proxy.po29112001.workers.dev" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_BAKONG_TOKEN" \
-  -d '{"md5":"known_md5_here"}'
+  -d '{}'
 ```
 
-Expect NBC JSON — not errorCode 15.
+Expect: `{"message":"md5 is required"}` (422)
+
+```bash
+curl -X POST "https://fitandsleek-bakong-proxy.po29112001.workers.dev" \
+  -H "Content-Type: application/json" \
+  -d '{"md5":"test"}'
+```
+
+Expect: NBC JSON (`responseCode`, etc.) — not CloudFront 403 HTML.
 
 ---
 
-## Option B — PHP on Cambodia VPS
+## Option B — Cloudflare Worker (path relay / forward)
+
+1. Paste [`worker-forward.js`](./worker-forward.js) → Deploy
+2. Render:
+
+```ini
+BAKONG_PROXY_URL=https://your-worker.workers.dev
+BAKONG_PROXY_STYLE=forward
+```
+
+Token stays on Render (`Authorization` header forwarded).
+
+Test:
+
+```bash
+curl -X POST "https://your-worker.workers.dev/v1/check_transaction_by_md5" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_BAKONG_TOKEN" \
+  -d '{"md5":"test"}'
+```
+
+---
+
+## Option C — PHP on Cambodia VPS
 
 See [`index.php`](./index.php) header comments.
 
 ```ini
 BAKONG_PROXY_URL=https://your-cambodia-host.example.com/bakong-proxy/index.php
+BAKONG_PROXY_STYLE=legacy
 ```
 
 ---
 
-## How Laravel uses it
+## How Laravel uses the proxy
 
-`BakongApi::checkByMd5()` POSTs `{"md5":"..."}` to `BAKONG_PROXY_URL` with optional `X-Bakong-Proxy-Secret`. The proxy adds `Authorization: Bearer` and calls NBC from a Cambodia IP.
+- **legacy:** POST `{"md5":"..."}` to `BAKONG_PROXY_URL` root; proxy adds Bearer token.
+- **forward:** POST to `BAKONG_PROXY_URL/v1/check_transaction_by_md5` with Render’s Bearer token.
 
-**Do not** use a generic path-forwarding worker — the backend expects this dedicated MD5 proxy API.
+Webhook (`/api/payments/bakong/webhook`) does **not** use the proxy.
+

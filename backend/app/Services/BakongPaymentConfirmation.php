@@ -105,7 +105,8 @@ class BakongPaymentConfirmation
     {
         $md5 = data_get($data, 'md5')
             ?? data_get($data, 'data.md5')
-            ?? data_get($data, 'payload.md5');
+            ?? data_get($data, 'payload.md5')
+            ?? data_get($data, 'data.hash');
 
         if (! filled($md5)) {
             return null;
@@ -153,7 +154,9 @@ class BakongPaymentConfirmation
     private function amountsMatch(float $expected, float $actual, string $currency): bool
     {
         if (strtoupper($currency) === 'KHR') {
-            return (int) round($expected) === (int) round($actual);
+            $expectedKh = (int) BakongKhqrService::resolveKhqrAmount($expected, 'KHR');
+
+            return $expectedKh === (int) round($actual);
         }
 
         return abs($expected - $actual) < 0.01;

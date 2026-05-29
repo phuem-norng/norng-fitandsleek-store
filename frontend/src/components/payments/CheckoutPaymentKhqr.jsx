@@ -190,6 +190,23 @@ export default function CheckoutPaymentKhqr({
   }, [open, orderId]);
 
   useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void api
+      .get("/payments/bakong/readiness")
+      .then(({ data }) => {
+        if (cancelled || paidNotifiedRef.current) return;
+        if (!data?.checkout_ready && data?.message) {
+          setVerificationNote(String(data.message));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open || !paymentId) return;
     if (status === "paid" || status === "expired" || status === "error") return;
 

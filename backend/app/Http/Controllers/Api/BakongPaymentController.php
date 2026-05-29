@@ -24,6 +24,26 @@ class BakongPaymentController extends Controller
     ) {
     }
 
+    public function readiness(): JsonResponse
+    {
+        $requiresProxy = BakongKhqrService::hostingRequiresProxy();
+        $proxyConfigured = BakongKhqrService::proxyConfigured();
+        $ready = BakongKhqrService::checkoutReady();
+
+        return response()->json([
+            'checkout_ready' => $ready,
+            'requires_proxy' => $requiresProxy,
+            'proxy_configured' => $proxyConfigured,
+            'token_configured' => filled(config('services.bakong.token')),
+            'receive_account_configured' => filled(config('services.bakong.receive_account')),
+            'message' => $ready
+                ? null
+                : ($requiresProxy && ! $proxyConfigured
+                    ? BakongKhqrService::hostingBlockedAdminMessage()
+                    : 'Bakong payment is not fully configured on the server.'),
+        ]);
+    }
+
     public function create(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -135,6 +155,19 @@ class BakongPaymentController extends Controller
         }
 
         $this->ensureOrderOwner($order, $request);
+
+        if (BakongKhqrService::hostingRequiresProxy() && ! BakongKhqrService::proxyConfigured()) {
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment),
+                [
+                    'status' => 'pending',
+                    'verification_note' => BakongKhqrService::hostingBlockedUserMessage(),
+                    'admin_note' => BakongKhqrService::hostingBlockedAdminMessage(),
+                    'bakong_error_code' => 15,
+                    'checkout_blocked' => true,
+                ]
+            ));
+        }
 
         if ($payment->status === 'paid' || $order->payment_status === 'paid') {
             return response()->json(array_merge(
@@ -255,8 +288,10 @@ class BakongPaymentController extends Controller
         );
 
         if ((int) $responseCode === 1 && $errorCode === 15) {
-            $pendingPayload['verification_note'] =
-                'Payment verification is blocked from this server region. Set BAKONG_PROXY_URL to a Cambodia-hosted proxy (see backend/bakong-proxy).';
+            $pendingPayload['verification_note'] = BakongKhqrService::proxyConfigured()
+                ? 'Bakong blocked this check (region). Try a Cambodia VPS proxy or contact support with your bill number.'
+                : BakongKhqrService::hostingBlockedUserMessage();
+            $pendingPayload['admin_note'] = BakongKhqrService::hostingBlockedAdminMessage();
             $pendingPayload['bakong_error_code'] = 15;
         }
 
