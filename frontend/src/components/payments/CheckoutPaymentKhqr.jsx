@@ -6,6 +6,8 @@ import KhqrModal from "./KhqrModal";
 /** ~24 checks/min — under backend bakong-status limit (90/min). */
 const POLL_MS = 2500;
 
+const CLIENT_PROXY_URL = (import.meta.env.VITE_BAKONG_PROXY_URL || "").replace(/\/$/, "");
+
 function pickStatus(payload) {
   if (!payload || typeof payload !== "object") return null;
   if (payload.order_payment_status === "paid" || payload.payment_status === "paid") {
@@ -47,7 +49,11 @@ export default function CheckoutPaymentKhqr({
   const paymentIdRef = useRef(paymentId);
   paymentIdRef.current = paymentId;
 
+  const paymentRef = useRef(payment);
+  paymentRef.current = payment;
+
   const runStatusCheckRef = useRef(null);
+  const runClientProxyCheckRef = useRef(null);
   const onPaidRef = useRef(onPaid);
   onPaidRef.current = onPaid;
   const createInFlightRef = useRef(false);
@@ -113,6 +119,11 @@ export default function CheckoutPaymentKhqr({
     if (!targetId || paidNotifiedRef.current) return;
     if (Date.now() < backoffUntilRef.current) return;
 
+    if (CLIENT_PROXY_URL) {
+      const clientPaid = await runClientProxyCheckRef.current?.();
+      if (clientPaid || paidNotifiedRef.current) return;
+    }
+
     try {
       const { data } = await api.get(`/payments/bakong/status/${targetId}`);
       pollFailuresRef.current = 0;
@@ -146,6 +157,42 @@ export default function CheckoutPaymentKhqr({
       }
     }
   }, [applyStatusPayload, stopPolling]);
+
+  const runClientProxyCheck = useCallback(async () => {
+    const md5 = paymentRef.current?.md5;
+    const targetId = paymentIdRef.current;
+    if (!CLIENT_PROXY_URL || !md5 || !targetId || paidNotifiedRef.current) return false;
+
+    try {
+      const res = await fetch(CLIENT_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ md5 }),
+      });
+      const raw = await res.text();
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        return false;
+      }
+      if (Number(data?.responseCode) === 0 && data?.data && typeof data.data === "object") {
+        const { data: confirmed } = await api.post(`/payments/bakong/confirm/${targetId}`, {
+          responseCode: data.responseCode,
+          responseMessage: data.responseMessage,
+          data: data.data,
+          errorCode: data.errorCode,
+        });
+        applyStatusPayload(confirmed);
+        return isPaidPayload(confirmed);
+      }
+    } catch {
+      /* Worker unreachable from this browser */
+    }
+    return false;
+  }, [applyStatusPayload]);
+
+  runClientProxyCheckRef.current = runClientProxyCheck;
 
   runStatusCheckRef.current = runStatusCheck;
 

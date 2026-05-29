@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\BakongApi;
 use App\Services\BakongKhqrService;
+use App\Services\BakongPaymentConfirmation;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,8 @@ class BakongPaymentController extends Controller
 {
     public function __construct(
         private readonly BakongApi $bakong,
-        private readonly BakongKhqrService $khqr
+        private readonly BakongKhqrService $khqr,
+        private readonly BakongPaymentConfirmation $confirmation,
     ) {
     }
 
@@ -36,12 +38,61 @@ class BakongPaymentController extends Controller
             'proxy_configured' => $proxyConfigured,
             'token_configured' => filled(config('services.bakong.token')),
             'receive_account_configured' => filled(config('services.bakong.receive_account')),
+            'client_proxy_poll' => $requiresProxy,
             'message' => $ready
                 ? null
                 : ($requiresProxy && ! $proxyConfigured
                     ? BakongKhqrService::hostingBlockedAdminMessage()
                     : 'Bakong payment is not fully configured on the server.'),
         ]);
+    }
+
+    /**
+     * Customer browser (Cambodia) polls Cloudflare worker; server marks paid after validating payload.
+     */
+    public function confirmFromClient(Payment $payment, Request $request): JsonResponse
+    {
+        $payment->load('order');
+        $order = $payment->order;
+
+        if (! $order) {
+            return response()->json(['message' => 'Payment order not found'], 404);
+        }
+
+        $this->ensureOrderOwner($order, $request);
+
+        if ($payment->status === 'paid' || $order->payment_status === 'paid') {
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment),
+                ['status' => 'paid', 'payment_status' => 'paid']
+            ));
+        }
+
+        $payload = $request->validate([
+            'responseCode' => ['required'],
+            'data' => ['required', 'array'],
+            'responseMessage' => ['nullable', 'string'],
+            'errorCode' => ['nullable'],
+        ]);
+
+        if ($this->confirmation->payloadIndicatesPaid($payload, $payment)) {
+            $transaction = is_array($payload['data']) ? $payload['data'] : [];
+            $this->confirmation->markPaid($payment, $payload, $transaction);
+
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment->fresh()),
+                [
+                    'status' => 'paid',
+                    'payment_status' => 'paid',
+                    'order_payment_status' => $order->fresh()->payment_status,
+                ]
+            ));
+        }
+
+        return response()->json([
+            'status' => 'pending',
+            'message' => 'Payment not confirmed yet.',
+        ], 422);
     }
 
     public function create(Request $request): JsonResponse

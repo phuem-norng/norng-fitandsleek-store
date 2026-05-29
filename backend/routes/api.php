@@ -147,7 +147,19 @@ Route::get('/brands/{slug}', [StorefrontBrandController::class, 'show']);
 Route::post('/chatbot/message', [ChatbotController::class, 'message'])->middleware('throttle:api-sensitive');
 Route::get('/chatbot/settings', [ChatbotController::class, 'settings']);
 
-// Bakong KHQR webhook (NBC → Render; no Cambodia proxy needed)
+// Bakong KHQR webhook (optional; NBC usually does not push — prefer client proxy poll)
+Route::get('/payments/bakong/webhook', function () {
+    return response()->json([
+        'ok' => true,
+        'method' => 'POST',
+        'note' => 'Open in browser shows this help JSON. NBC must POST payment notifications here.',
+        'webhook_secret_configured' => filled(config('services.bakong.webhook_secret')),
+        'urls' => [
+            'https://norng-fitandsleek-backend.onrender.com/api/payments/bakong/webhook',
+            'https://norng-fitandsleek-backend.onrender.com/api/payments/khqr/webhook',
+        ],
+    ]);
+});
 Route::post('/payments/khqr/webhook', [PaymentController::class, 'khqrWebhook']);
 Route::post('/payments/bakong/webhook', [PaymentController::class, 'khqrWebhook']);
 
@@ -209,6 +221,8 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
 
     // Bakong KHQR (Node generated)
     Route::post('/payments/bakong/create', [BakongPaymentController::class, 'create']);
+    Route::post('/payments/bakong/confirm/{payment}', [BakongPaymentController::class, 'confirmFromClient'])
+        ->whereNumber('payment');
     Route::get('/payments/bakong/status/{payment}', [BakongPaymentController::class, 'status'])
         ->whereNumber('payment')
         ->middleware('throttle:bakong-status');

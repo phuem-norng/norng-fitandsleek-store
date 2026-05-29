@@ -13,14 +13,20 @@
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' };
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Bakong-Proxy-Secret',
+};
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204 });
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
     if (request.method !== 'POST') {
-      return json(405, { message: 'Method not allowed' });
+      return json(405, { message: 'Method not allowed. POST {"md5":"..."} to check Bakong payment.' });
     }
 
     const proxySecret = (env.BAKONG_PROXY_SECRET || '').trim();
@@ -67,7 +73,7 @@ export default {
       const body = await upstream.text();
       return new Response(body, {
         status: upstream.status,
-        headers: JSON_HEADERS,
+        headers: { ...JSON_HEADERS, ...CORS_HEADERS },
       });
     } catch (error) {
       return json(502, {
@@ -81,6 +87,6 @@ export default {
 function json(status, data) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, ...CORS_HEADERS },
   });
 }
