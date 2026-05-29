@@ -81,10 +81,8 @@ export default function ForgotPasswordDialog({ isOpen, onClose }) {
         setPreferredMethod(data.preferred_method || "email");
         setNotice(
           formatOtpNotice({
-            message: data.message,
             email,
             emailSent: data.email_sent,
-            debugOtp: data.debug_otp,
           }),
         );
         if (data.step === "otp") {
@@ -112,7 +110,7 @@ export default function ForgotPasswordDialog({ isOpen, onClose }) {
       const data = await selectVerificationMethod({ challengeToken, method });
       if (data?.step === "otp") {
         setVerifyKind("otp");
-        setNotice(data.message || "Code sent to your email.");
+        setNotice(formatOtpNotice({ email, emailSent: data?.email_sent }));
         setStep("verify");
         return;
       }
@@ -287,8 +285,8 @@ export default function ForgotPasswordDialog({ isOpen, onClose }) {
                 <button type="button" onClick={async () => {
                   setLoading(true);
                   try {
-                    await resendOtpWithChallenge({ email, purpose: "forgot", challengeToken });
-                    setNotice("A new code was sent to your email.");
+                    const data = await resendOtpWithChallenge({ email, purpose: "forgot", challengeToken });
+                    setNotice(formatOtpNotice({ email, emailSent: data?.email_sent, resent: true }));
                   } catch (err) {
                     setError(err?.response?.data?.message || "Resend failed.");
                   } finally {

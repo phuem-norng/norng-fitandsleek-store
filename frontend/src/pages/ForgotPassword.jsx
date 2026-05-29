@@ -13,6 +13,7 @@ import {
     verifyAuthenticatorChallenge,
     verifyOtpWithChallenge,
 } from "../lib/auth-api";
+import { formatOtpNotice } from "../components/auth/AuthDialogShared";
 import { getDeviceMeta } from "../lib/device";
 
 const INPUT_CLASS =
@@ -113,10 +114,8 @@ export default function ForgotPassword() {
                 setPreferredMethod(data.preferred_method || "email");
                 setNotice(
                     formatOtpNotice({
-                        message: data.message,
                         email,
                         emailSent: data.email_sent,
-                        debugOtp: data.debug_otp,
                     }),
                 );
                 if (data.step === "otp") {
@@ -145,7 +144,7 @@ export default function ForgotPassword() {
             const data = await selectVerificationMethod({ challengeToken, method });
             if (data?.step === "otp") {
                 setVerifyKind("otp");
-                setNotice(data.message || "Code sent to your email.");
+                setNotice(formatOtpNotice({ email, emailSent: data?.email_sent }));
                 setStep("verify");
                 return;
             }
@@ -198,11 +197,9 @@ export default function ForgotPassword() {
             const data = await resendOtpWithChallenge({ email, purpose: "forgot", challengeToken });
             setNotice(
                 formatOtpNotice({
-                    message: data?.message,
                     email,
                     emailSent: data?.email_sent,
-                    debugOtp: data?.debug_otp,
-                    fallback: "A new code was sent to your email.",
+                    resent: true,
                 }),
             );
         } catch (err) {

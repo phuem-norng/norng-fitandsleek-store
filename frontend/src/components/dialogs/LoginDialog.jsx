@@ -73,10 +73,8 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
         });
         setOtpNotice(
           formatOtpNotice({
-            message: result.message,
             email: form.email,
             emailSent: result.email_sent,
-            debugOtp: result.debug_otp,
           }),
         );
         return;
@@ -139,11 +137,9 @@ export default function LoginDialog({ isOpen, onClose, onSwitchToRegister }) {
       });
       setOtpNotice(
         formatOtpNotice({
-          message: data?.message,
           email: otpForm.email,
           emailSent: data?.email_sent,
-          debugOtp: data?.debug_otp,
-          fallback: `A new code was sent to ${otpForm.email}`,
+          resent: true,
         }),
       );
     } catch (err) {

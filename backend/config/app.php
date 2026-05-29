@@ -62,6 +62,12 @@ return [
 
     'logo_url' => env('APP_LOGO_URL', '/logo.png'),
 
+    /** Wide banner in OTP verification email header (APP_EMAIL_LOGO_URL). */
+    'email_logo_url' => env('APP_EMAIL_LOGO_URL', ''),
+
+    /** Circular logo for Gmail sender avatar — BIMI/Gravatar only (APP_MAIL_SENDER_LOGO_URL). */
+    'email_sender_logo_url' => env('APP_MAIL_SENDER_LOGO_URL', ''),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

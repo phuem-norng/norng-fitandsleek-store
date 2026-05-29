@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Facebook, X } from "lucide-react";
+import { CheckCircle2, Facebook, X } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Logo from "../Logo.jsx";
 import { DialogPopup, DialogTitle, DialogDescription } from "../ui/Dialog";
@@ -176,28 +176,34 @@ export function AuthError({ message }) {
 export function AuthNotice({ message }) {
   if (!message) return null;
   return (
-    <div className="auth-dialog-notice flex items-start gap-2 border border-[#6E8B7E]/30 bg-[#6E8B7E]/10 px-3 py-2.5 text-sm text-[#38554a]">
-      <span className="mt-px shrink-0 text-base leading-none">✓</span>
+    <div className="auth-dialog-notice flex items-start gap-2.5 border border-[#6E8B7E]/30 bg-[#6E8B7E]/10 px-3 py-2.5 text-sm text-[#38554a]">
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#6E8B7E]" aria-hidden />
       <span>{message}</span>
     </div>
   );
 }
 
-/** User-facing OTP notice — code is email-only; never show OTP in the UI. */
-export function formatOtpNotice({ message, email, fallback, emailSent }) {
+const OTP_INBOX_HINT =
+  "If you don't see it within a few minutes, check your spam or Promotions folder.";
+
+/** User-facing OTP notice — consistent copy; code is email-only and never shown in the UI. */
+export function formatOtpNotice({ email, emailSent, resent = false }) {
   if (emailSent === false) {
-    return (
-      message ||
-      `We could not deliver the email${email ? ` to ${email}` : ""}. Check spam or Promotions, or tap Resend.`
-    );
+    if (email) {
+      return `We couldn't deliver the email to ${email}. Check your spam or Promotions folder, or tap Resend.`;
+    }
+    return `We couldn't deliver the verification email. Check your spam or Promotions folder, or tap Resend.`;
   }
 
-  const base =
-    message ||
-    fallback ||
-    (email ? `We sent a verification code to ${email}` : "We sent a verification code to your email.");
+  const lead = resent
+    ? email
+      ? `We sent a new verification code to ${email}.`
+      : "We sent a new verification code to your email."
+    : email
+      ? `We sent a 6-digit verification code to ${email}.`
+      : "We sent a 6-digit verification code to your email.";
 
-  return `${base} If you do not see it within a few minutes, check spam and Promotions.`;
+  return `${lead} ${OTP_INBOX_HINT}`;
 }
 
 export function AuthDivider() {

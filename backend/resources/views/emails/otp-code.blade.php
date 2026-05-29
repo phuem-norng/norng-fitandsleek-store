@@ -10,11 +10,19 @@
 	<tr>
 		<td align="center" style="padding:0;">
 			<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background-color:#ffffff;border:1px solid #dbe4f0;border-radius:12px;">
+				@if(!empty($logoUrl))
+				<tr>
+					<td align="center" style="padding:20px;">
+						<img src="{{ $logoUrl }}" alt="{{ $appName }}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;outline:none;text-decoration:none;border-radius:10px;" />
+					</td>
+				</tr>
+				@else
 				<tr>
 					<td style="padding:28px 24px 8px 24px;font-family:Arial,Helvetica,sans-serif;color:#38554a;text-align:center;">
 						<div style="font-size:22px;line-height:28px;font-weight:700;letter-spacing:0.5px;">{{ $appName }}</div>
 					</td>
 				</tr>
+				@endif
 				<tr>
 					<td style="padding:8px 24px 6px 24px;font-family:Arial,Helvetica,sans-serif;color:#10233f;text-align:center;">
 						<div style="font-size:20px;line-height:28px;font-weight:700;">Your verification code</div>

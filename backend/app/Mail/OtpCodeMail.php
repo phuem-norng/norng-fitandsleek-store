@@ -63,7 +63,25 @@ class OtpCodeMail extends Mailable
                 'purposeAction' => $this->purposeAction,
                 'expiresMinutes' => $this->expiresMinutes,
                 'appName' => config('app.name', 'Fit and Sleek'),
+                'logoUrl' => $this->resolveEmailLogoUrl(),
             ],
         );
+    }
+
+    private function resolveEmailLogoUrl(): ?string
+    {
+        $logoUrl = trim((string) config('app.email_logo_url', ''));
+
+        if ($logoUrl === '') {
+            return null;
+        }
+
+        if (str_starts_with($logoUrl, 'http://') || str_starts_with($logoUrl, 'https://')) {
+            return $logoUrl;
+        }
+
+        $base = rtrim((string) config('app.url', ''), '/');
+
+        return $base !== '' ? $base.'/'.ltrim($logoUrl, '/') : null;
     }
 }
