@@ -7,7 +7,6 @@ import { useAuth } from "../state/auth";
 import { useLanguage } from "../lib/i18n.jsx";
 import CheckoutPaymentKhqr from "../components/payments/CheckoutPaymentKhqr";
 import CheckoutPaymentCard from "../components/payments/CheckoutPaymentCard";
-import KhqrSuccessModal from "../components/alerts/KhqrSuccessModal";
 import { setupTelegramBackButton, setupTelegramMainButton, triggerTelegramHaptic } from "../lib/telegramWebApp";
 import { requestDeliveryPin } from "../lib/geolocation";
 
@@ -27,14 +26,6 @@ export default function Checkout() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [khqrOpen, setKhqrOpen] = useState(false);
   const [khqrOrder, setKhqrOrder] = useState(null);
-  const [khqrSuccessOpen, setKhqrSuccessOpen] = useState(false);
-
-  useEffect(() => {
-    if (!khqrSuccessOpen) return;
-    const t = setTimeout(() => nav("/orders"), KHQR_REDIRECT_SECONDS * 1000);
-    return () => clearTimeout(t);
-  }, [khqrSuccessOpen, nav]);
-
   const [cardDetails, setCardDetails] = useState({
     name: user?.name || "",
     number: "",
@@ -821,28 +812,15 @@ export default function Checkout() {
           </div>{/* end right column */}
         </div>{/* end grid */}
       </div>
-      <KhqrSuccessModal
-        open={khqrSuccessOpen}
-        orderNumber={khqrOrder?.order_number}
-        total={khqrOrder?.total}
-        currency="KHR"
-        redirectSeconds={KHQR_REDIRECT_SECONDS}
-        onClose={() => {
-          setKhqrSuccessOpen(false);
-          nav("/orders");
-        }}
-      />
       <CheckoutPaymentKhqr
         open={khqrOpen}
         orderId={khqrOrder?.id}
         orderNumber={khqrOrder?.order_number}
         amount={khqrOrder?.total}
-        currency={"KHR"}
+        currency="KHR"
+        redirectSeconds={KHQR_REDIRECT_SECONDS}
         onClose={() => setKhqrOpen(false)}
-        onPaid={() => {
-          setKhqrOpen(false);
-          setKhqrSuccessOpen(true);
-        }}
+        onDone={() => nav("/orders")}
       />
     </>
   );

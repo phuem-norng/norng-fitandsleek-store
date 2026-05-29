@@ -25,10 +25,9 @@ class BakongKhqrService
 
         $currency = strtoupper($payment->currency ?: config('services.bakong.currency', 'KHR'));
         $rawAmount = (float) ($payment->amount ?: $order->total ?: 0);
-        // ts-khqr: KHR must be a whole number (see generate.js — non-integers throw "Amount is invalid").
-        $amount = $currency === 'KHR'
-            ? max(0, (int) round($rawAmount))
-            : round($rawAmount, 2);
+        // KHR < 1 (e.g. 0.01 test orders) must encode as ≥1 in the QR or ts-khqr emits a *static*
+        // QR (POI 11). Bakong check_transaction_by_md5 only works for dynamic QR (POI 12).
+        $amount = self::resolveKhqrAmount($rawAmount, $currency);
         $billNumber = $payment->bill_number ?: $this->makeBillNumber($order);
         $billNumber = $this->ensureUniqueBillNumber($billNumber, $payment->id);
 
@@ -54,7 +53,35 @@ class BakongKhqrService
             'md5' => $result['md5'],
             'expires_at' => $expiresAt,
             'payload' => $payload,
+            'amount' => $amount,
+            'currency' => $currency,
         ];
+    }
+
+    /**
+     * Amount encoded into the EMV KHQR payload (whole KHR; min 1 when order total is positive).
+     */
+    public static function resolveKhqrAmount(float $rawAmount, string $currency): float
+    {
+        if (strtoupper($currency) !== 'KHR') {
+            return round(max(0, $rawAmount), 2);
+        }
+
+        if ($rawAmount <= 0) {
+            return 0;
+        }
+
+        return (float) max(1, (int) round($rawAmount));
+    }
+
+    /** True when QR uses static point-of-initiation (Bakong MD5 check will fail with errorCode 2). */
+    public static function qrStringIsStatic(?string $qrString): bool
+    {
+        if (! filled($qrString)) {
+            return false;
+        }
+
+        return (bool) preg_match('/010211/', (string) $qrString);
     }
 
     /**

@@ -59,7 +59,7 @@ class BakongPaymentController extends Controller
             ->latest('id')
             ->first();
 
-        if ($activePayment) {
+        if ($activePayment && ! BakongKhqrService::qrStringIsStatic($activePayment->qr_string)) {
             return response()->json($this->formatPaymentResponse($activePayment));
         }
 
@@ -139,7 +139,11 @@ class BakongPaymentController extends Controller
         if ($payment->status === 'paid' || $order->payment_status === 'paid') {
             return response()->json(array_merge(
                 $this->formatPaymentResponse($payment),
-                ['status' => 'paid']
+                [
+                    'status' => 'paid',
+                    'payment_status' => 'paid',
+                    'order_payment_status' => $order->payment_status,
+                ]
             ));
         }
 
@@ -167,6 +171,10 @@ class BakongPaymentController extends Controller
                     'message' => 'Unable to refresh KHQR, please try again.',
                 ], 500);
             }
+        }
+
+        if (BakongKhqrService::qrStringIsStatic($payment->qr_string)) {
+            return $this->regenerateKhqrResponse($order, $payment);
         }
 
         try {
@@ -225,6 +233,8 @@ class BakongPaymentController extends Controller
                 $this->formatPaymentResponse($payment->fresh()),
                 [
                     'status' => 'paid',
+                    'payment_status' => 'paid',
+                    'order_payment_status' => $order->fresh()->payment_status,
                     'data' => $transaction,
                 ]
             ));
@@ -248,6 +258,10 @@ class BakongPaymentController extends Controller
             $pendingPayload['verification_note'] =
                 'Payment verification is blocked from this server region. Set BAKONG_PROXY_URL to a Cambodia-hosted proxy (see backend/bakong-proxy).';
             $pendingPayload['bakong_error_code'] = 15;
+        }
+
+        if ((int) $responseCode === 1 && $errorCode === 2) {
+            return $this->regenerateKhqrResponse($order, $payment);
         }
 
         if ($payment->expires_at && now()->greaterThan($payment->expires_at)) {
@@ -304,10 +318,38 @@ class BakongPaymentController extends Controller
     private function amountsMatch(float $expected, float $actual, string $currency): bool
     {
         if (strtoupper($currency) === 'KHR') {
-            return (int) round($expected) === (int) round($actual);
+            $expectedKh = (int) BakongKhqrService::resolveKhqrAmount($expected, 'KHR');
+
+            return $expectedKh === (int) round($actual);
         }
 
         return abs($expected - $actual) < 0.01;
+    }
+
+    private function regenerateKhqrResponse(Order $order, Payment $payment): JsonResponse
+    {
+        try {
+            $result = $this->khqr->generate($order, $payment);
+            $this->persistKhqrResult($payment, $result);
+
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment->fresh()),
+                [
+                    'status' => 'pending',
+                    'verification_note' => 'QR code refreshed — scan again and pay the amount shown.',
+                ]
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment),
+                [
+                    'status' => 'pending',
+                    'message' => 'Unable to refresh KHQR. Please close and try checkout again.',
+                ]
+            ), 500);
+        }
     }
 
     private function ensureOrderOwner(Order $order, Request $request): void
@@ -349,6 +391,8 @@ class BakongPaymentController extends Controller
             'qr_string' => $result['qr_string'],
             'qr_image_base64' => null,
             'expires_at' => $result['expires_at'],
+            'amount' => $result['amount'] ?? $payment->amount,
+            'currency' => $result['currency'] ?? $payment->currency,
         ]);
     }
 
