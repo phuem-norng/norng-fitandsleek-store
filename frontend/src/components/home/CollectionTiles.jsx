@@ -2,18 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
-import CatalogSectionUnavailable from "../catalog/CatalogSectionUnavailable.jsx";
-import { useLanguage } from "../../lib/i18n.jsx";
 import { useCatalogAvailability } from "../../state/catalogAvailability.jsx";
-
-const getGenderSubtitle = (gender) => {
-  const g = (gender || "").toLowerCase();
-  if (g === "women") return "Discover";
-  if (g === "men") return "Explore";
-  if (g === "boys") return "Play";
-  if (g === "girls") return "Style";
-  return "Shop Now";
-};
 
 const toParentCategoryLink = (gender) => {
   const g = String(gender || "").toLowerCase();
@@ -22,7 +11,7 @@ const toParentCategoryLink = (gender) => {
   return `/search?parent_category=${encodeURIComponent(parent)}`;
 };
 
-function Tile({ title, subtitle, to, image }) {
+function Tile({ title, to, image }) {
   const resolved = image ? resolveImageUrl(image) : "";
   const [imageFailed, setImageFailed] = useState(!resolved);
 
@@ -51,44 +40,18 @@ function Tile({ title, subtitle, to, image }) {
             aria-hidden
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent opacity-90" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent opacity-100 transition-opacity duration-300 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100" />
       </div>
-      <div className="absolute inset-0 flex flex-col justify-between text-white p-3 sm:p-5 md:p-6">
-        <div>
-          <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] md:text-xs font-semibold uppercase tracking-[0.14em] sm:tracking-[0.2em] text-white/80 bg-white/15 border border-white/25 rounded-full px-2 sm:px-3 py-1">
-            {subtitle}
-          </span>
-        </div>
-        <div>
-          <h3 className="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight drop-shadow leading-tight">
-            {title}
-          </h3>
-          <div className="mt-2 sm:mt-3 inline-flex items-center gap-2 text-[10px] sm:text-xs font-semibold text-white/90">
-            Explore Collection
-            <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 border border-white/30 transition-transform duration-300 group-hover:translate-x-1">
-              <svg
-                className="w-3 h-3 sm:w-4 sm:h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 8l4 4m0 0l-4 4m4-4H3"
-                />
-              </svg>
-            </span>
-          </div>
-        </div>
+      <div className="absolute inset-0 flex flex-col justify-end text-white p-3 sm:p-5 md:p-6 pointer-events-none">
+        <h3 className="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight drop-shadow leading-tight opacity-100 translate-y-0 transition-all duration-300 ease-out [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:translate-y-3 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-focus-visible:opacity-100 [@media(hover:hover)]:group-focus-visible:translate-y-0">
+          {title}
+        </h3>
       </div>
     </Link>
   );
 }
 
 export default function CollectionTiles() {
-  const { t } = useLanguage();
   const { infrastructureDegraded } = useCatalogAvailability();
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +66,6 @@ export default function CollectionTiles() {
         const tiles = items.map((c) => ({
           id: c.id,
           name: c.name,
-          subtitle: getGenderSubtitle(c.gender),
           link: c.link || toParentCategoryLink(c.gender),
           image: c.image_url,
         }));
@@ -131,29 +93,8 @@ export default function CollectionTiles() {
     );
   }
 
-  const unavailable = infrastructureDegraded || fetchFailed;
-
-  if (unavailable) {
-    return (
-      <section className="container-safe mt-10 max-w-[1600px] mx-auto">
-        <CatalogSectionUnavailable
-          message={t("sectionLoadUnavailable")}
-          minHeight="min-h-[200px] sm:min-h-[240px]"
-        />
-      </section>
-    );
-  }
-
-  if (collections.length === 0) {
-    return (
-      <section className="container-safe mt-10 max-w-[1600px] mx-auto">
-        <CatalogSectionUnavailable
-          message={t("collectionsEmpty")}
-          hint={t("collectionsEmptyHint")}
-          minHeight="min-h-[200px] sm:min-h-[240px]"
-        />
-      </section>
-    );
+  if (infrastructureDegraded || fetchFailed || collections.length === 0) {
+    return null;
   }
 
   return (
@@ -163,7 +104,6 @@ export default function CollectionTiles() {
           <Tile
             key={tile.id}
             title={tile.name}
-            subtitle={tile.subtitle || "Discover"}
             to={tile.link || "/search"}
             image={tile.image}
           />

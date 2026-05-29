@@ -98,6 +98,16 @@ export function AuthProvider({ children }) {
         writeCachedUser(data.user);
       }
 
+      if (data?.otp_required || data?.verification_required) {
+        return {
+          ...data,
+          email,
+          purpose: data.purpose || "login",
+          email_sent: data.email_sent,
+          debug_otp: data.debug_otp,
+        };
+      }
+
       return data;
     } catch (err) {
       const data = err?.response?.data;
@@ -106,6 +116,8 @@ export function AuthProvider({ children }) {
           ...data,
           email,
           purpose: data.purpose || "login",
+          email_sent: data.email_sent,
+          debug_otp: data.debug_otp,
         };
       }
       // Normalize error shape so callers can show a friendly message

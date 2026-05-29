@@ -9,13 +9,18 @@ export default function IntegrityBreakdownCard({ row, className = "" }) {
     const onHand = Math.max(0, Number(row.on_hand) || 0);
     const sold = Math.max(0, Number(row.implied_sold_or_issued) || 0);
     const total = Math.max(0, Number(row.total_received) || 0);
+    const expectedOnHand =
+        row.corrected_on_hand != null
+            ? Math.max(0, Number(row.corrected_on_hand) || 0)
+            : Math.max(0, total - sold);
+    const onHandMismatch = onHand !== expectedOnHand;
     const breakdown = Array.isArray(row.receive_breakdown) ? row.receive_breakdown : [];
-    const stackTotal = onHand + sold;
-    const stockPct = stackTotal > 0 ? (onHand / stackTotal) * 100 : 50;
+    const stackTotal = expectedOnHand + sold;
+    const stockPct = stackTotal > 0 ? (expectedOnHand / stackTotal) * 100 : 50;
     const soldPct = stackTotal > 0 ? (sold / stackTotal) * 100 : 50;
     const minSectionPct = stackTotal > 0 ? 18 : 50;
 
-    const adjustedStockPct = onHand > 0 && stockPct < minSectionPct ? minSectionPct : stockPct;
+    const adjustedStockPct = expectedOnHand > 0 && stockPct < minSectionPct ? minSectionPct : stockPct;
     const adjustedSoldPct = sold > 0 && soldPct < minSectionPct ? minSectionPct : soldPct;
     const sumPct = adjustedStockPct + adjustedSoldPct;
     const normStock = sumPct > 0 ? (adjustedStockPct / sumPct) * 100 : 50;
@@ -55,13 +60,13 @@ export default function IntegrityBreakdownCard({ row, className = "" }) {
                     className="flex min-h-[140px] flex-col"
                     style={{ height: "168px" }}
                 >
-                    {onHand > 0 && (
+                    {expectedOnHand > 0 && (
                         <div
                             className="flex flex-1 flex-col items-center justify-center bg-emerald-100/90 px-3 text-center dark:bg-emerald-500/20"
-                            style={{ flexBasis: `${normStock}%`, minHeight: onHand > 0 ? "3.5rem" : 0 }}
+                            style={{ flexBasis: `${normStock}%`, minHeight: expectedOnHand > 0 ? "3.5rem" : 0 }}
                         >
                             <span className="text-2xl font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
-                                {onHand}
+                                {expectedOnHand}
                             </span>
                             <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700/90 dark:text-emerald-300/90">
                                 In Stock
@@ -109,10 +114,15 @@ export default function IntegrityBreakdownCard({ row, className = "" }) {
                     {" "}
                     Sold
                     <span className="mx-1 text-slate-400">=</span>
-                    <span className="text-emerald-700 dark:text-emerald-400">{onHand}</span>
+                    <span className="text-emerald-700 dark:text-emerald-400">{expectedOnHand}</span>
                     {" "}
                     Stock
                 </p>
+                {onHandMismatch ? (
+                    <p className="mt-2 text-center text-[11px] text-red-600 dark:text-red-400">
+                        Current sellable on-hand is {onHand} (should be {expectedOnHand}). Use Fix to correct.
+                    </p>
+                ) : null}
             </div>
         </div>
     );

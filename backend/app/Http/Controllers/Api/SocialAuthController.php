@@ -69,28 +69,61 @@ class SocialAuthController extends Controller
         return in_array($host, ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'], true);
     }
 
-    protected function resolveProviderRedirectUri(Request $request, string $provider): string
+    protected function allowedApiOrigins(): array
+    {
+        return (array) config('oauth.allowed_api_origins', []);
+    }
+
+    protected function trustsOnrenderApiHosts(): bool
+    {
+        return (bool) config('oauth.trust_onrender_api_hosts', false);
+    }
+
+    protected function isOnrenderApiHost(?string $host): bool
+    {
+        if ($host === null || $host === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/\.onrender\.com$/i', $host);
+    }
+
+    protected function isAllowedApiOrigin(Request $request): bool
     {
         $origin = rtrim($request->getSchemeAndHttpHost(), '/');
-        $fromRequest = "{$origin}/api/auth/{$provider}/callback";
+
+        foreach ($this->allowedApiOrigins() as $allowed) {
+            $allowed = rtrim((string) $allowed, '/');
+            if ($allowed !== '' && strcasecmp($origin, $allowed) === 0) {
+                return true;
+            }
+        }
+
+        if ($this->trustsOnrenderApiHosts() && $this->isOnrenderApiHost($request->getHost())) {
+            return $request->getScheme() === 'https';
+        }
+
+        // Local Laravel on any loopback port (8000, 8001, docker, etc.).
+        return app()->environment('local') && $this->isLoopbackHost($request->getHost());
+    }
+
+    protected function resolveProviderRedirectUri(Request $request, string $provider): string
+    {
+        $fromRequest = rtrim($request->getSchemeAndHttpHost(), '/')."/api/auth/{$provider}/callback";
+        $requestPort = $request->getPort();
+
+        // Avoid generating redirect_uri like http://localhost/api/... (no explicit port),
+        // because Google requires an exact URI match and local dev usually runs on :8001.
+        if ($this->isAllowedApiOrigin($request) && ! ($this->isLoopbackHost($request->getHost()) && $requestPort === 80)) {
+            return $fromRequest;
+        }
 
         $configured = trim((string) config("services.{$provider}.redirect", ''));
         if ($configured === '' || ! filter_var($configured, FILTER_VALIDATE_URL)) {
             return $fromRequest;
         }
 
-        $configured = rtrim($configured, '/');
-
-        // Local dev: match the host the browser used (localhost vs 127.0.0.1) for Google redirect_uri.
-        if (app()->environment('local') && $this->isLoopbackHost($request->getHost())) {
-            $configuredHost = parse_url($configured, PHP_URL_HOST);
-            if ($this->isLoopbackHost(is_string($configuredHost) ? $configuredHost : null)
-                && strtolower((string) $configuredHost) !== strtolower($request->getHost())) {
-                return $fromRequest;
-            }
-        }
-
-        return $configured;
+        return rtrim($configured, '/');
     }
 
     protected function providerRedirectUriFromCookieOrRequest(Request $request, string $provider): string

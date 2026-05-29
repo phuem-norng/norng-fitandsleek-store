@@ -86,6 +86,11 @@ export default function BrandRow() {
   }, [items]);
 
   const viewAllHref = useMemo(() => "/search", []);
+
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
     <section className="container-safe mt-8 max-w-[1600px] mx-auto">
       <div className="mt-4 relative">

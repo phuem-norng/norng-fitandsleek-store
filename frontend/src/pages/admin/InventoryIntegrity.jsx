@@ -130,8 +130,9 @@ export default function InventoryIntegrity() {
                         Inventory Integrity Monitor
                     </h1>
                     <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-                        Compares Stock &amp; Inventory on-hand with Stock Received totals.
-                        Formula: on-hand = sum(received) − sold/issued (implied from the gap).
+                        Total received matches the Stock Received log (does not change when you sell).
+                        Sold / issued = total received − on-hand (plus paid order history when linked).
+                        If on-hand is higher than received, use Fix to correct sellable stock — not the receive log.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -53,18 +53,17 @@ class AuthController extends Controller
 
     $challengeToken = $this->verificationChallenge->create($user, 'register');
     $this->verificationChallenge->setMethod($challengeToken, 'email');
-    $otp = $this->sendOtpCode($user->email, 'register');
+    $otpDelivery = $this->sendOtpCode($user->email, 'register');
 
-    return response()->json([
-      'message' => 'Registration pending. A verification code was sent to your email.',
+    return response()->json(array_merge([
+      'message' => $this->otpSentMessage($otpDelivery['email_sent']),
       'verification_required' => true,
       'step' => 'otp',
       'challenge_token' => $challengeToken,
       'verification_methods' => $this->verificationChallenge->availableMethods($user),
       'preferred_method' => $user->two_factor_preferred_method ?? 'email',
       'purpose' => 'register',
-      'debug_otp' => $otp,
-    ], 201);
+    ], $this->otpDeliveryPayload($otpDelivery)), 201);
   }
 
   public function login(Request $request)
@@ -150,10 +149,10 @@ class AuthController extends Controller
     ];
     $challengeToken = $this->verificationChallenge->create($user, $purpose, $deviceMeta);
     $this->verificationChallenge->setMethod($challengeToken, 'email');
-    $otp = $this->sendOtpCode($user->email, $purpose);
+    $otpDelivery = $this->sendOtpCode($user->email, $purpose);
 
-    return [
-      'message' => $message,
+    return array_merge([
+      'message' => $otpDelivery['email_sent'] ? $message : $this->otpSentMessage(false),
       'verification_required' => true,
       'step' => 'otp',
       'challenge_token' => $challengeToken,
@@ -161,8 +160,7 @@ class AuthController extends Controller
       'preferred_method' => $user->two_factor_preferred_method ?? 'email',
       'purpose' => $purpose,
       'device_verification_required' => $purpose === 'login',
-      'debug_otp' => $otp,
-    ];
+    ], $this->otpDeliveryPayload($otpDelivery));
   }
 
   public function selectVerificationMethod(Request $request)
@@ -195,15 +193,14 @@ class AuthController extends Controller
 
     if ($data['method'] === 'email') {
       $purpose = $this->otpPurposeForChallenge($payload);
-      $otp = $this->sendOtpCode($user->email, $purpose);
+      $otpDelivery = $this->sendOtpCode($user->email, $purpose);
 
-      return response()->json([
+      return response()->json(array_merge([
         'step' => 'otp',
         'email' => $user->email,
         'purpose' => $purpose,
-        'message' => 'A verification code was sent to your email.',
-        'debug_otp' => $otp,
-      ]);
+        'message' => $this->otpSentMessage($otpDelivery['email_sent']),
+      ], $this->otpDeliveryPayload($otpDelivery)));
     }
 
     return response()->json([
@@ -324,24 +321,22 @@ class AuthController extends Controller
       }
 
       $purpose = $this->otpPurposeForChallenge($payload);
-      $otp = $this->sendOtpCode($user->email, $purpose);
+      $otpDelivery = $this->sendOtpCode($user->email, $purpose);
 
-      return response()->json([
-        'message' => 'OTP sent to email.',
+      return response()->json(array_merge([
+        'message' => $this->otpSentMessage($otpDelivery['email_sent']),
         'otp_required' => true,
         'purpose' => $purpose,
-        'debug_otp' => $otp,
-      ]);
+      ], $this->otpDeliveryPayload($otpDelivery)));
     }
 
-    $otp = $this->sendOtpCode($data['email'], $data['purpose']);
+    $otpDelivery = $this->sendOtpCode($data['email'], $data['purpose']);
 
-    return response()->json([
-      'message' => 'OTP sent to email.',
+    return response()->json(array_merge([
+      'message' => $this->otpSentMessage($otpDelivery['email_sent']),
       'otp_required' => true,
       'purpose' => $data['purpose'],
-      'debug_otp' => $otp,
-    ]);
+    ], $this->otpDeliveryPayload($otpDelivery)));
   }
 
   public function me(Request $request)
@@ -469,15 +464,18 @@ class AuthController extends Controller
       }
 
       $challengeToken = $this->verificationChallenge->create($user, 'forgot');
+      $this->verificationChallenge->setMethod($challengeToken, 'email');
+      $otpDelivery = $this->sendOtpCode($user->email, 'forgot');
 
-      return response()->json([
-        'message' => 'Choose how to verify your identity to reset your password.',
+      return response()->json(array_merge([
+        'message' => $this->otpSentMessage($otpDelivery['email_sent']),
         'verification_required' => true,
+        'step' => 'otp',
         'challenge_token' => $challengeToken,
         'verification_methods' => $this->verificationChallenge->availableMethods($user),
         'preferred_method' => $user->two_factor_preferred_method ?? 'email',
         'purpose' => 'forgot',
-      ], 200);
+      ], $this->otpDeliveryPayload($otpDelivery)), 200);
     }
 
     public function resetPasswordOtp(Request $request)
@@ -610,7 +608,8 @@ class AuthController extends Controller
     return in_array($purpose, ['register', 'login', 'forgot'], true) ? $purpose : 'login';
   }
 
-  private function sendOtpCode(string $email, string $purpose): ?string
+  /** @return array{email_sent: bool, debug_otp: ?string} */
+  private function sendOtpCode(string $email, string $purpose): array
   {
     $expiresMinutes = (int) (config('auth.otp_expires_minutes') ?? 10);
     $code = (string) random_int(100000, 999999);
@@ -624,22 +623,61 @@ class AuthController extends Controller
       'expires_at' => now()->addMinutes($expiresMinutes),
     ]);
 
+    $emailSent = true;
+
     try {
       Mail::to($email)->send(new OtpCodeMail($code, $purpose, $expiresMinutes));
+      Log::info('OTP email accepted by mail transport', [
+        'email' => $email,
+        'purpose' => $purpose,
+        'mailer' => config('mail.default'),
+        'from' => config('mail.from.address'),
+      ]);
     } catch (\Throwable $e) {
+      $emailSent = false;
+
       Log::warning('OTP email delivery failed', [
         'email' => $email,
         'purpose' => $purpose,
         'error' => $e->getMessage(),
       ]);
 
-      // Local/dev: still allow login flow; OTP is returned via debug_otp when OTP_DEBUG=true.
       if (! filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) && ! app()->environment('local')) {
         throw $e;
       }
     }
 
-    return filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) ? $code : null;
+    return [
+      'email_sent' => $emailSent,
+      'debug_otp' => filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) ? $code : null,
+    ];
+  }
+
+  private function otpSentMessage(bool $emailSent): string
+  {
+    if ($emailSent) {
+      return 'A verification code was sent to your email.';
+    }
+
+    if (filter_var(env('OTP_DEBUG', false), FILTER_VALIDATE_BOOL) || app()->environment('local')) {
+      return 'Email delivery failed. Use the dev code below or tap Resend after fixing mail settings.';
+    }
+
+    return 'We could not send the verification email. Please try again in a few minutes.';
+  }
+
+  /** @param array{email_sent: bool, debug_otp: ?string} $delivery */
+  private function otpDeliveryPayload(array $delivery): array
+  {
+    $payload = [
+      'email_sent' => $delivery['email_sent'],
+    ];
+
+    if ($delivery['debug_otp'] !== null) {
+      $payload['debug_otp'] = $delivery['debug_otp'];
+    }
+
+    return $payload;
   }
 
   private function issueDeviceBoundToken(

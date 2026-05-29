@@ -19,8 +19,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
+    'allowed_origins' => array_values(array_unique(array_filter([
         env('FRONTEND_URL', 'http://localhost:5173'),
+        env('FRONTEND_URL_LOCAL', 'http://localhost:5173'),
         'http://localhost:5173',
         'http://127.0.0.1:5173',
         'https://localhost:5173',
@@ -28,10 +29,12 @@ return [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         'https://fitandsleek.kalapak-team.space',
+        'https://www.fitandsleek.kalapak-team.space',
         'https://fitandsleekapp.kalapak-team.space',
         'https://web-fitandsleek.onrender.com',
+        'https://www.web-fitandsleek.onrender.com',
         'https://api-fitandsleek.onrender.com',
-    ],
+    ]))),
 
     'allowed_origins_patterns' => [
         '~^https://[a-z0-9-]+\.onrender\.com$~i',

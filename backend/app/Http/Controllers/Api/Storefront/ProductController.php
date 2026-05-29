@@ -109,18 +109,8 @@ class ProductController extends Controller
         $colors = [];
         $sizes = [];
         foreach ($rows as $row) {
-            foreach ((array) ($row->colors ?? []) as $color) {
-                $c = trim((string) $color);
-                if ($c !== '') {
-                    $colors[$c] = true;
-                }
-            }
-            foreach ((array) ($row->sizes ?? []) as $size) {
-                $s = trim((string) $size);
-                if ($s !== '') {
-                    $sizes[$s] = true;
-                }
-            }
+            $this->collectFilterTokens((array) ($row->colors ?? []), $colors);
+            $this->collectFilterTokens((array) ($row->sizes ?? []), $sizes);
         }
 
         $priceBounds = Product::query()
@@ -134,6 +124,55 @@ class ProductController extends Controller
             'price_min' => $priceBounds?->price_min !== null ? (float) $priceBounds->price_min : null,
             'price_max' => $priceBounds?->price_max !== null ? (float) $priceBounds->price_max : null,
         ]);
+    }
+
+    /**
+     * @param  array<int, mixed>  $items
+     * @param  array<string, true>  $set
+     */
+    private function collectFilterTokens(array $items, array &$set): void
+    {
+        foreach ($items as $item) {
+            $token = $this->normalizeFilterToken($item);
+            if ($token !== null) {
+                $set[$token] = true;
+            }
+        }
+    }
+
+    private function normalizeFilterToken(mixed $value): ?string
+    {
+        if (is_string($value) || is_numeric($value)) {
+            $normalized = trim((string) $value);
+
+            return $normalized !== '' ? $normalized : null;
+        }
+
+        if (! is_array($value)) {
+            return null;
+        }
+
+        foreach (['name', 'label', 'value', 'title', 'size'] as $key) {
+            if (! array_key_exists($key, $value)) {
+                continue;
+            }
+            $field = $value[$key];
+            if (is_string($field) || is_numeric($field)) {
+                $normalized = trim((string) $field);
+                if ($normalized !== '') {
+                    return $normalized;
+                }
+            }
+        }
+
+        foreach ($value as $nested) {
+            $normalized = $this->normalizeFilterToken($nested);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        return null;
     }
 
     private function sortSizeList(array $sizes): array
