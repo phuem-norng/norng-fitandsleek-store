@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Category;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class InventoryIntegrityService
 {
@@ -19,6 +20,8 @@ class InventoryIntegrityService
      */
     public function audit(): array
     {
+        $soldByCode = $this->buildSoldQuantityByBarcode();
+
         $masters = Category::query()
             ->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)
             ->whereNull('parent_id')
@@ -30,7 +33,7 @@ class InventoryIntegrityService
         $counts = ['ok' => 0, 'warning' => 0, 'error' => 0];
 
         foreach ($masters as $master) {
-            $row = $this->auditMaster($master);
+            $row = $this->auditMaster($master, $soldByCode);
             $items[] = $row;
             $counts[$row['status']]++;
         }
@@ -47,10 +50,15 @@ class InventoryIntegrityService
     }
 
     /**
+     * @param  array<string, int>  $soldByCode
      * @return array<string, mixed>
      */
-    public function auditMaster(Category $master): array
+    public function auditMaster(Category $master, ?array $soldByCode = null): array
     {
+        if ($soldByCode === null) {
+            $soldByCode = $this->buildSoldQuantityByBarcode();
+        }
+
         $master->refresh();
 
         $batches = Category::query()
@@ -90,35 +98,42 @@ class InventoryIntegrityService
             }
         }
 
-        if ($receiveBreakdown === [] && $batchCount === 0) {
-            $standaloneQty = $this->stockReceive->totalReceivedQuantity($master);
-            if ($standaloneQty > 0) {
-                $receiveBreakdown[] = [
-                    'key' => 'standalone',
-                    'label' => 'Receipt',
-                    'quantity' => $standaloneQty,
-                ];
-            }
-        }
-
-        $totalReceived = $this->stockReceive->totalReceivedQuantity($master);
+        $loggedReceived = $this->stockReceive->totalReceivedQuantity($master);
         $onHand = max(0, (int) ($master->stock ?? 0));
-        $impliedSold = max(0, $totalReceived - $onHand);
-        $issues = [];
+        $soldFromOrders = $this->soldQuantityForLabel($master, $soldByCode);
 
-        if ($onHand > $totalReceived) {
-            $issues[] = [
-                'code' => 'on_hand_exceeds_received',
-                'severity' => 'error',
-                'message' => 'On-hand stock is higher than total received units.',
+        $reconciled = $this->reconcileTotals($loggedReceived, $onHand, $soldFromOrders);
+        $totalReceived = $reconciled['total_received'];
+        $impliedSold = $reconciled['implied_sold_or_issued'];
+        $inferredTotal = $reconciled['inferred_from_inventory'];
+
+        if ($inferredTotal && $receiveBreakdown === []) {
+            $receiveBreakdown[] = [
+                'key' => 'inferred',
+                'label' => 'Inferred (on-hand + sales)',
+                'quantity' => $totalReceived,
             ];
         }
 
-        if ($impliedSold === 0 && $onHand !== $totalReceived) {
+        $issues = [];
+
+        if ($inferredTotal && $loggedReceived === 0) {
             $issues[] = [
-                'code' => 'on_hand_receive_mismatch',
+                'code' => 'missing_receive_log',
+                'severity' => 'warning',
+                'message' => 'No Stock Received log on file; total is inferred from on-hand plus paid sales.',
+            ];
+        }
+
+        if ($loggedReceived > 0 && $onHand > $totalReceived) {
+            $issues[] = [
+                'code' => 'on_hand_exceeds_received',
                 'severity' => 'error',
-                'message' => 'No sold/issued units recorded, but on-hand does not match total received.',
+                'message' => sprintf(
+                    'Sellable on-hand (%d) is higher than Stock Received total (%d). Use Fix to align on-hand with received minus sold.',
+                    $onHand,
+                    $totalReceived,
+                ),
             ];
         }
 
@@ -130,12 +145,19 @@ class InventoryIntegrityService
             ];
         }
 
-        if ($batchCount === 0 && $master->stock_received !== null && $master->stock !== null
-            && (int) $master->stock_received !== (int) $master->stock) {
+        $stockReceivedField = $master->stock_received !== null ? (int) $master->stock_received : null;
+        if (
+            $batchCount === 0
+            && $stockReceivedField !== null
+            && $master->stock !== null
+            && $stockReceivedField !== (int) $master->stock
+            && $onHand <= $totalReceived
+            && ! $this->isExpectedStockReceiveGap($stockReceivedField, $onHand, $impliedSold)
+        ) {
             $issues[] = [
                 'code' => 'standalone_stock_fields_differ',
                 'severity' => 'warning',
-                'message' => 'Standalone label: stock and stock_received differ.',
+                'message' => 'Sellable stock does not match Stock Received minus sold/issued. Use Fix to sync on-hand.',
             ];
         }
 
@@ -159,15 +181,17 @@ class InventoryIntegrityService
             'opening_receipt' => $openingReceipt,
             'batch_received_total' => $batchReceivedTotal,
             'receive_breakdown' => $receiveBreakdown,
+            'logged_received' => $loggedReceived,
             'total_received' => $totalReceived,
             'on_hand' => $onHand,
+            'sold_from_orders' => $soldFromOrders,
             'implied_sold_or_issued' => $impliedSold,
             'corrected_on_hand' => max(0, $totalReceived - $impliedSold),
             'status' => $status,
             'issues' => $issues,
             'can_repair' => $this->stockReceive->isInventoryMaster($master)
                 && ($master->manage_stock ?? false)
-                && ($status !== 'ok' || $batchCount > 0),
+                && $status !== 'ok',
         ];
     }
 
@@ -185,19 +209,20 @@ class InventoryIntegrityService
             $query->where('id', $masterId);
         }
 
+        $soldByCode = $this->buildSoldQuantityByBarcode();
         $repaired = 0;
         $items = [];
 
-        DB::transaction(function () use ($query, &$repaired, &$items) {
+        DB::transaction(function () use ($query, $soldByCode, &$repaired, &$items) {
             foreach ($query->get() as $master) {
-                $before = $this->auditMaster($master);
-                if ($before['status'] === 'ok' && $before['batch_count'] === 0) {
+                $before = $this->auditMaster($master, $soldByCode);
+                if ($before['status'] === 'ok') {
                     continue;
                 }
 
-                $this->stockReceive->recalculateInventoryStock($master);
+                $this->repairMaster($master, $before);
                 $master->refresh();
-                $after = $this->auditMaster($master);
+                $after = $this->auditMaster($master, $soldByCode);
                 $items[] = [
                     'id' => $master->id,
                     'name' => $master->name,
@@ -214,6 +239,132 @@ class InventoryIntegrityService
         return [
             'repaired' => $repaired,
             'items' => $items,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $audit
+     */
+    private function repairMaster(Category $master, array $audit): void
+    {
+        $total = (int) $audit['total_received'];
+        $sold = (int) $audit['implied_sold_or_issued'];
+        $batchCount = (int) ($audit['batch_count'] ?? 0);
+
+        if ($batchCount === 0 && $total > 0 && $master->stock_received === null) {
+            $master->stock_received = $total;
+        }
+
+        $master->stock = max(0, $total - $sold);
+        $master->save();
+
+        if ($batchCount > 0) {
+            $this->stockReceive->recalculateInventoryStock($master->fresh());
+        }
+    }
+
+    /**
+     * Normal when stock_received is total ever received and stock is on-hand after sales.
+     */
+    private function isExpectedStockReceiveGap(int $stockReceived, int $onHand, int $impliedSold): bool
+    {
+        if ($stockReceived < $onHand) {
+            return false;
+        }
+
+        return ($stockReceived - $onHand) === $impliedSold;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function buildSoldQuantityByBarcode(): array
+    {
+        if (
+            ! Schema::hasTable('order_items')
+            || ! Schema::hasTable('orders')
+            || ! Schema::hasTable('products')
+        ) {
+            return [];
+        }
+
+        $rows = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('products', 'order_items.product_id', '=', 'products.id')
+            ->where('orders.payment_status', 'paid')
+            ->whereNotNull('products.barcode_code')
+            ->where('products.barcode_code', '!=', '')
+            ->groupBy(DB::raw('LOWER(products.barcode_code)'))
+            ->selectRaw('LOWER(products.barcode_code) as code, COALESCE(SUM(order_items.qty), 0) as sold')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string) $row->code] = (int) $row->sold;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, int>  $soldByCode
+     */
+    private function soldQuantityForLabel(Category $master, array $soldByCode): int
+    {
+        $total = 0;
+        foreach ($this->barcodeKeysForLabel($master) as $key) {
+            $total += (int) ($soldByCode[$key] ?? 0);
+        }
+
+        return $total;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function barcodeKeysForLabel(Category $master): array
+    {
+        $keys = [];
+        foreach (['slug', 'sku'] as $field) {
+            $value = strtolower(trim((string) ($master->{$field} ?? '')));
+            if ($value !== '') {
+                $keys[$value] = true;
+            }
+        }
+
+        return array_keys($keys);
+    }
+
+    /**
+     * @return array{
+     *   total_received: int,
+     *   implied_sold_or_issued: int,
+     *   inferred_from_inventory: bool
+     * }
+     */
+    private function reconcileTotals(int $loggedReceived, int $onHand, int $soldFromOrders): array
+    {
+        if ($loggedReceived > 0) {
+            $totalReceived = $loggedReceived;
+            $gapSold = max(0, $totalReceived - $onHand);
+            $soldOrIssued = max($gapSold, $soldFromOrders);
+
+            return [
+                'total_received' => $totalReceived,
+                'implied_sold_or_issued' => $soldOrIssued,
+                'inferred_from_inventory' => false,
+            ];
+        }
+
+        $totalReceived = $onHand + $soldFromOrders;
+        $soldOrIssued = $soldFromOrders > 0
+            ? $soldFromOrders
+            : max(0, $totalReceived - $onHand);
+
+        return [
+            'total_received' => $totalReceived,
+            'implied_sold_or_issued' => $soldOrIssued,
+            'inferred_from_inventory' => $totalReceived > 0,
         ];
     }
 }

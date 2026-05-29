@@ -10,14 +10,16 @@ use Illuminate\Validation\ValidationException;
 class StockReceiveService
 {
     /** Units recorded on a receive batch (Stock Received log). */
-    public function receivedQuantity(Category $batch): int
+    public function receivedQuantity(Category $category): int
     {
-        if ($batch->stock_received !== null) {
-            return max(0, (int) $batch->stock_received);
+        if ($category->stock_received !== null) {
+            return max(0, (int) $category->stock_received);
         }
 
-        if ($batch->stock !== null) {
-            return max(0, (int) $batch->stock);
+        // Receive-batch rows: legacy data may only have `stock` (sellable stock is on the master;
+        // batch `stock` is not decremented at checkout).
+        if ($this->isReceiveBatch($category) && $category->stock !== null) {
+            return max(0, (int) $category->stock);
         }
 
         return 0;
@@ -57,11 +59,6 @@ class StockReceiveService
 
         foreach ($batches as $batch) {
             $total += $this->receivedQuantity($batch);
-        }
-
-        // Standalone label with no batches and no legacy stock_received column yet.
-        if ($batches->isEmpty() && $inventory->stock_received === null && $inventory->stock !== null) {
-            $total += max(0, (int) $inventory->stock);
         }
 
         return $total;

@@ -1,12 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "./ProductCard.jsx";
-import { useLanguage } from "../../lib/i18n.jsx";
-import { useCatalogAvailability } from "../../state/catalogAvailability.jsx";
 
 export default function Section({ title, to, items, loading, showDiscount = false }) {
-  const { t } = useLanguage();
-  const { infrastructureDegraded } = useCatalogAvailability();
+  if (!loading && items.length === 0) {
+    return null;
+  }
+
   return (
     <section className="container-safe mt-8 md:mt-10 lg:mt-12 max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between gap-3">
@@ -28,28 +28,7 @@ export default function Section({ title, to, items, loading, showDiscount = fals
                 </div>
               </div>
             ))
-          : items.length > 0
-            ? items.map((p) => <ProductCard key={p.id} p={p} showDiscount={showDiscount} />)
-            : infrastructureDegraded ? (
-              <div
-                role="status"
-                aria-live="polite"
-                className="col-span-2 sm:col-span-4 rounded-2xl border border-dashed border-zinc-200/80 bg-zinc-50/40 min-h-[88px] md:min-h-[96px] flex flex-col items-center justify-center gap-2.5 px-4 py-5"
-              >
-                <span className="sr-only">{t("sectionLoadUnavailable")}</span>
-                <span
-                  className="inline-block h-1 w-10 rounded-full bg-zinc-300/90 animate-pulse"
-                  aria-hidden
-                />
-                <p className="text-center text-xs sm:text-sm text-zinc-500 max-w-md">
-                  {t("sectionDegradedVisibleHint")}
-                </p>
-              </div>
-            ) : (
-              <div className="col-span-2 sm:col-span-4 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 px-4 py-8 text-center text-sm text-zinc-600">
-                {t("sectionNoProducts")}
-              </div>
-            )}
+          : items.map((p) => <ProductCard key={p.id} p={p} showDiscount={showDiscount} />)}
       </div>
     </section>
   );

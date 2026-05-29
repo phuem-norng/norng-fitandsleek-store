@@ -111,7 +111,19 @@ export default function ForgotPassword() {
                 setChallengeToken(data.challenge_token);
                 setVerificationMethods(data.verification_methods || []);
                 setPreferredMethod(data.preferred_method || "email");
-                setNotice(data.message || "Choose how to verify your identity.");
+                setNotice(
+                    formatOtpNotice({
+                        message: data.message,
+                        email,
+                        emailSent: data.email_sent,
+                        debugOtp: data.debug_otp,
+                    }),
+                );
+                if (data.step === "otp") {
+                    setVerifyKind("otp");
+                    setStep("verify");
+                    return;
+                }
                 setStep("method");
                 return;
             }
@@ -183,8 +195,16 @@ export default function ForgotPassword() {
         setLoading(true);
         setError("");
         try {
-            await resendOtpWithChallenge({ email, purpose: "forgot", challengeToken });
-            setNotice("A new code was sent to your email.");
+            const data = await resendOtpWithChallenge({ email, purpose: "forgot", challengeToken });
+            setNotice(
+                formatOtpNotice({
+                    message: data?.message,
+                    email,
+                    emailSent: data?.email_sent,
+                    debugOtp: data?.debug_otp,
+                    fallback: "A new code was sent to your email.",
+                }),
+            );
         } catch (err) {
             const { message } = getApiErrorDetails(err, "Could not resend code.");
             setError(message);

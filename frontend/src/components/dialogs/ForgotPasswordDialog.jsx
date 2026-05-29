@@ -11,6 +11,7 @@ import {
   verifyOtpWithChallenge,
 } from "../../lib/auth-api";
 import { getDeviceMeta } from "../../lib/device";
+import { formatOtpNotice } from "../auth/AuthDialogShared";
 
 const INPUT_CLASS =
   "h-14 w-full rounded-none border border-slate-200 bg-slate-50/60 pl-11 pr-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#6E8B7E] focus:bg-white focus:ring-2 focus:ring-[#6E8B7E]/20";
@@ -78,7 +79,19 @@ export default function ForgotPasswordDialog({ isOpen, onClose }) {
         setChallengeToken(data.challenge_token);
         setVerificationMethods(data.verification_methods || []);
         setPreferredMethod(data.preferred_method || "email");
-        setNotice(data.message || "Choose how to verify your identity.");
+        setNotice(
+          formatOtpNotice({
+            message: data.message,
+            email,
+            emailSent: data.email_sent,
+            debugOtp: data.debug_otp,
+          }),
+        );
+        if (data.step === "otp") {
+          setVerifyKind("otp");
+          setStep("verify");
+          return;
+        }
         setStep("method");
         return;
       }
