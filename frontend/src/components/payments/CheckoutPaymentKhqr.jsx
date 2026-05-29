@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
 import KhqrModal from "./KhqrModal";
 
+function pickStatus(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  return payload.status ?? payload.payment?.status ?? null;
+}
+
 export default function CheckoutPaymentKhqr({
   open,
   orderId,
@@ -15,8 +20,10 @@ export default function CheckoutPaymentKhqr({
   const [paymentId, setPaymentId] = useState(null);
   const [status, setStatus] = useState("idle");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const [verificationNote, setVerificationNote] = useState("");
+  const [verifySlideResult, setVerifySlideResult] = useState(null);
   const pollRef = useRef(null);
   const pollFailuresRef = useRef(0);
   const paidNotifiedRef = useRef(false);
@@ -33,6 +40,7 @@ export default function CheckoutPaymentKhqr({
       if (paidNotifiedRef.current) return;
       paidNotifiedRef.current = true;
       setStatus("paid");
+      setVerifySlideResult("paid");
       setError("");
       stopPolling();
       onPaid?.(payload);
@@ -40,47 +48,14 @@ export default function CheckoutPaymentKhqr({
     [onPaid, stopPolling],
   );
 
-  const createKhqr = useCallback(async () => {
-    if (!orderId) return;
-    setLoading(true);
-    setError("");
-    paidNotifiedRef.current = false;
-
-    try {
-      const { data } = await api.post("/payments/bakong/create", { order_id: orderId });
-      const nextPayment = data?.payment || data;
-      const nextStatus = nextPayment?.status || data?.status || "pending";
-      setPayment(nextPayment);
-      setPaymentId(nextPayment?.payment_id || nextPayment?.id);
-      setStatus(nextStatus);
-      if (nextStatus === "paid") {
-        handlePaid(nextPayment);
-      }
-    } catch (e) {
-      setError(e?.response?.data?.message || "Failed to create KHQR.");
-      setStatus("error");
-    } finally {
-      setLoading(false);
-    }
-  }, [handlePaid, orderId]);
-
-  const checkStatus = useCallback(async () => {
-    const targetId = paymentId;
-    if (!targetId || paidNotifiedRef.current) return;
-
-    try {
-      const { data } = await api.get(`/payments/bakong/status/${targetId}`);
-      pollFailuresRef.current = 0;
-      setError("");
-
-      const nextPayment = data?.payment || data;
-      const nextStatus = nextPayment?.status || data?.status;
+  const applyStatusPayload = useCallback(
+    (data, { fromManualCheck = false } = {}) => {
+      const nextPayment = data?.payment && typeof data.payment === "object" ? data.payment : data;
+      const nextStatus = pickStatus(data) ?? pickStatus(nextPayment);
 
       if (data?.verification_note) {
         setVerificationNote(String(data.verification_note));
-      } else if (data?.message && nextStatus !== "paid") {
-        setVerificationNote(String(data.message));
-      } else {
+      } else if (fromManualCheck && nextStatus !== "paid") {
         setVerificationNote("");
       }
 
@@ -94,28 +69,97 @@ export default function CheckoutPaymentKhqr({
 
       if (nextStatus === "paid") {
         handlePaid(nextPayment || data);
-        return;
+        return "paid";
       }
 
       if (nextStatus) {
         setStatus(nextStatus);
       }
+
+      if (fromManualCheck) {
+        if (nextStatus === "expired") {
+          setVerifySlideResult("error");
+        } else {
+          setVerifySlideResult("pending");
+        }
+      }
+
+      return nextStatus;
+    },
+    [handlePaid],
+  );
+
+  const createKhqr = useCallback(async () => {
+    if (!orderId) return;
+    setLoading(true);
+    setError("");
+    paidNotifiedRef.current = false;
+    setVerifySlideResult(null);
+
+    try {
+      const { data } = await api.post("/payments/bakong/create", { order_id: orderId });
+      const nextPayment = data?.payment || data;
+      const nextStatus = pickStatus(data) || "pending";
+      setPayment(nextPayment);
+      setPaymentId(nextPayment?.payment_id ?? nextPayment?.id ?? data?.payment_id);
+      setStatus(nextStatus);
+      if (nextStatus === "paid") {
+        handlePaid(nextPayment);
+      }
     } catch (e) {
-      pollFailuresRef.current += 1;
-      if (e?.response?.status === 403) {
-        setError(e?.response?.data?.message || "Unauthorized.");
-        setStatus("error");
-        stopPolling();
-        return;
-      }
-      if (pollFailuresRef.current >= 3) {
-        setError(
-          e?.response?.data?.message ||
-            "Unable to verify payment status. Keep this screen open and try scanning again.",
-        );
-      }
+      setError(e?.response?.data?.message || "Failed to create KHQR.");
+      setStatus("error");
+    } finally {
+      setLoading(false);
     }
-  }, [handlePaid, paymentId, stopPolling]);
+  }, [handlePaid, orderId]);
+
+  const checkStatus = useCallback(
+    async ({ manual = false } = {}) => {
+      const targetId = paymentId;
+      if (!targetId || paidNotifiedRef.current) return null;
+
+      if (manual) {
+        setChecking(true);
+        setVerifySlideResult(null);
+      }
+
+      try {
+        const { data } = await api.get(`/payments/bakong/status/${targetId}`);
+        pollFailuresRef.current = 0;
+        if (!manual) {
+          setError("");
+        }
+
+        const result = applyStatusPayload(data, { fromManualCheck: manual });
+        return result;
+      } catch (e) {
+        pollFailuresRef.current += 1;
+        if (e?.response?.status === 403) {
+          setError(e?.response?.data?.message || "Unauthorized.");
+          setStatus("error");
+          if (manual) setVerifySlideResult("error");
+          stopPolling();
+          return "error";
+        }
+        if (manual || pollFailuresRef.current >= 3) {
+          setError(
+            e?.response?.data?.message ||
+              "Unable to verify payment status. Slide to check again after paying.",
+          );
+          if (manual) setVerifySlideResult("error");
+        }
+        return "error";
+      } finally {
+        if (manual) setChecking(false);
+      }
+    },
+    [applyStatusPayload, paymentId, stopPolling],
+  );
+
+  const handleSlideVerify = useCallback(async () => {
+    await checkStatus({ manual: true });
+  }, [checkStatus]);
 
   useEffect(() => {
     if (!open) return;
@@ -138,14 +182,27 @@ export default function CheckoutPaymentKhqr({
   }, [open, status, checkStatus, paymentId, stopPolling]);
 
   useEffect(() => {
+    if (!open) return undefined;
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && status === "pending") {
+        checkStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [checkStatus, open, status]);
+
+  useEffect(() => {
     if (!open) {
       setPayment(null);
       setPaymentId(null);
       setStatus("idle");
       setError("");
+      setChecking(false);
       pollFailuresRef.current = 0;
       paidNotifiedRef.current = false;
       setVerificationNote("");
+      setVerifySlideResult(null);
       stopPolling();
     }
   }, [open, stopPolling]);
@@ -161,10 +218,14 @@ export default function CheckoutPaymentKhqr({
       expiresAt={payment?.expires_at}
       status={status}
       loading={loading}
-      error={error || verificationNote}
+      error={error}
+      verificationNote={verificationNote}
       amount={amount}
       currency={payment?.currency || currency}
       onRegenerate={createKhqr}
+      onSlideVerify={handleSlideVerify}
+      slideVerifyBusy={checking}
+      slideVerifyResult={verifySlideResult}
     />
   );
 }

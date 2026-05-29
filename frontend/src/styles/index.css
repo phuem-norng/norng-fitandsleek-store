@@ -2192,6 +2192,17 @@ html.admin-dashboard[data-admin-preset="light-muted-palette"]:not([data-admin-th
   border-radius: var(--fs-radius-sm);
 }
 
+@keyframes fsModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /*
   Login / register: scroll the full viewport (Zandokh-style thin blue bar at the
   browser edge), not a scrollbar inside the white modal panel.

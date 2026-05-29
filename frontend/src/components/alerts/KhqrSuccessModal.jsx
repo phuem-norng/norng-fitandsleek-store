@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ModalPortal from "../payments/ModalPortal";
 
 /* ── brand tokens ── */
 const KHQR_RED  = "#C0272D";
@@ -84,6 +85,7 @@ export default function KhqrSuccessModal({
     Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
+    <ModalPortal>
     <div
       className="ks-overlay fixed inset-0 z-[2000] flex items-center justify-center px-4"
       style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
@@ -233,5 +235,6 @@ export default function KhqrSuccessModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

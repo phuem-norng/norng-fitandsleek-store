@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode.react";
+import ModalPortal from "./ModalPortal";
+import SlideToVerifyPayment from "./SlideToVerifyPayment";
 
 /* ─── KHQR official brand colours ────────────────────── */
 const KHQR_RED   = "#C0272D";
@@ -56,9 +58,13 @@ export default function KhqrModal({
   status,
   loading,
   error,
+  verificationNote,
   amount,
   currency,
   onRegenerate,
+  onSlideVerify,
+  slideVerifyBusy = false,
+  slideVerifyResult = null,
 }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [copied, setCopied] = useState(null);
@@ -89,7 +95,11 @@ export default function KhqrModal({
 
   if (!open) return null;
 
+  const showSlideVerify =
+    !loading && status !== "paid" && status !== "expired" && typeof onSlideVerify === "function";
+
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center px-0 sm:px-4">
       {/* backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -213,6 +223,11 @@ export default function KhqrModal({
         )}
 
         {/* ── error / paid / expired ─────────── */}
+        {verificationNote && status !== "paid" && (
+          <div className="mx-5 mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100 text-sm border border-amber-200 dark:border-amber-800">
+            {verificationNote}
+          </div>
+        )}
         {error && (
           <div className="mx-5 mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm border border-red-200 dark:border-red-800">
             {error}
@@ -222,6 +237,17 @@ export default function KhqrModal({
           <div className="mx-5 mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm border border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
             <span className="text-xl">🎉</span>
             <span className="font-semibold">Payment received! Finishing your order…</span>
+          </div>
+        )}
+
+        {showSlideVerify && (
+          <div className="px-5 pt-3">
+            <SlideToVerifyPayment
+              disabled={loading}
+              busy={slideVerifyBusy}
+              result={slideVerifyResult}
+              onVerify={onSlideVerify}
+            />
           </div>
         )}
         {status === "expired" && (
@@ -248,6 +274,7 @@ export default function KhqrModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
