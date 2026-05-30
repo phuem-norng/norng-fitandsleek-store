@@ -115,7 +115,6 @@ return [
         'currency' => env('BAKONG_CURRENCY', 'KHR'),
         'expired_in' => (int) env('BAKONG_EXPIRES_IN', 300),
         'webhook_secret' => env('BAKONG_WEBHOOK_SECRET'),
-        'manual_verify' => env('BAKONG_MANUAL_VERIFY', false),
         'verify' => env('BAKONG_VERIFY_SSL', true),
         'ca_bundle' => env('BAKONG_CA_BUNDLE', env('GEMINI_CA_BUNDLE')),
     ],

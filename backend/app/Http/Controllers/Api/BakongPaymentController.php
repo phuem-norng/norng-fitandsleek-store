@@ -36,8 +36,14 @@ class BakongPaymentController extends Controller
             'checkout_ready' => $ready,
             'requires_proxy' => $requiresProxy,
             'proxy_configured' => $proxyConfigured,
-            'manual_verify' => BakongKhqrService::manualVerifyEnabled(),
-            'client_poll' => $requiresProxy && ! BakongKhqrService::serverShouldPollNbc(),
+            'token_configured' => filled(config('services.bakong.token')),
+            'receive_account_configured' => filled(config('services.bakong.receive_account')),
+            'client_proxy_poll' => $requiresProxy,
+            'message' => $ready
+                ? null
+                : ($requiresProxy && ! $proxyConfigured
+                    ? BakongKhqrService::hostingBlockedAdminMessage()
+                    : 'Bakong payment is not fully configured on the server.'),
         ]);
     }
 
@@ -201,6 +207,19 @@ class BakongPaymentController extends Controller
 
         $this->ensureOrderOwner($order, $request);
 
+        if (BakongKhqrService::hostingRequiresProxy() && ! BakongKhqrService::proxyConfigured()) {
+            return response()->json(array_merge(
+                $this->formatPaymentResponse($payment),
+                [
+                    'status' => 'pending',
+                    'verification_note' => BakongKhqrService::hostingBlockedUserMessage(),
+                    'admin_note' => BakongKhqrService::hostingBlockedAdminMessage(),
+                    'bakong_error_code' => 15,
+                    'checkout_blocked' => true,
+                ]
+            ));
+        }
+
         if ($payment->status === 'paid' || $order->payment_status === 'paid') {
             return response()->json(array_merge(
                 $this->formatPaymentResponse($payment),
@@ -208,27 +227,6 @@ class BakongPaymentController extends Controller
                     'status' => 'paid',
                     'payment_status' => 'paid',
                     'order_payment_status' => $order->payment_status,
-                ]
-            ));
-        }
-
-        if (BakongKhqrService::manualVerifyEnabled()) {
-            return response()->json(array_merge(
-                $this->formatPaymentResponse($payment),
-                [
-                    'status' => 'pending',
-                    'manual_review' => true,
-                    'verification_note' => 'After paying, our team will confirm shortly.',
-                ]
-            ));
-        }
-
-        if (! BakongKhqrService::serverShouldPollNbc()) {
-            return response()->json(array_merge(
-                $this->formatPaymentResponse($payment),
-                [
-                    'status' => 'pending',
-                    'client_poll' => true,
                 ]
             ));
         }

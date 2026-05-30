@@ -62,8 +62,6 @@ export default function KhqrModal({
   amount,
   currency,
   onRegenerate,
-  manualMode = false,
-  onManualPaid,
 }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [copied, setCopied] = useState(null);
@@ -256,30 +254,12 @@ export default function KhqrModal({
           </div>
         )}
 
-        {manualMode && status === "pending" && !loading && onManualPaid && (
-          <div className="mx-5 mt-3 space-y-2">
-            <button
-              type="button"
-              onClick={onManualPaid}
-              className="w-full rounded-2xl py-3.5 text-sm font-bold text-white shadow-lg"
-              style={{ background: `linear-gradient(135deg, ${BAKONG_GOLD}, #a87308)` }}
-            >
-              I&apos;ve paid — submit for confirmation
-            </button>
-            <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-              Pay in your banking app first, then tap above. We will confirm shortly.
-            </p>
-          </div>
-        )}
-
         {/* ── footer tip ─────────────────────── */}
         <div className="px-5 pt-3 pb-6 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
-          {manualMode
-            ? "Scan, pay, then tap “I've paid”. This page updates when our team confirms."
-            : "Keep this screen open while you complete payment on your banking app."}
+          Keep this screen open while you complete payment on your banking app.
         </div>
       </div>
     </div>

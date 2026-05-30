@@ -1,18 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
-import KhqrPendingModal from "../alerts/KhqrPendingModal";
 import KhqrSuccessModal from "../alerts/KhqrSuccessModal";
 import KhqrModal from "./KhqrModal";
 
+/** ~24 checks/min — under backend bakong-status limit (90/min). */
 const POLL_MS = 2500;
-const MANUAL_POLL_MS = 8000;
 
-const DEFAULT_PROD_PROXY = "https://fitandsleek-bakong-proxy.po29112001.workers.dev";
-const CLIENT_PROXY_URL = (
-  import.meta.env.VITE_BAKONG_PROXY_URL ||
-  (import.meta.env.PROD ? DEFAULT_PROD_PROXY : "")
-).replace(/\/$/, "");
-const MANUAL_VERIFY_ENV = import.meta.env.VITE_KHQR_MANUAL_VERIFY === "1";
+const CLIENT_PROXY_URL = (import.meta.env.VITE_BAKONG_PROXY_URL || "").replace(/\/$/, "");
 
 function pickStatus(payload) {
   if (!payload || typeof payload !== "object") return null;
@@ -41,8 +35,6 @@ export default function CheckoutPaymentKhqr({
   const [paymentId, setPaymentId] = useState(null);
   const [status, setStatus] = useState("idle");
   const [successOpen, setSuccessOpen] = useState(false);
-  const [pendingOpen, setPendingOpen] = useState(false);
-  const [manualMode, setManualMode] = useState(MANUAL_VERIFY_ENV);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [verificationNote, setVerificationNote] = useState("");
@@ -64,9 +56,6 @@ export default function CheckoutPaymentKhqr({
   const runClientProxyCheckRef = useRef(null);
   const onPaidRef = useRef(onPaid);
   onPaidRef.current = onPaid;
-  const manualModeRef = useRef(manualMode);
-  manualModeRef.current = manualMode;
-
   const createInFlightRef = useRef(false);
   const createKhqrRef = useRef(null);
 
@@ -87,7 +76,6 @@ export default function CheckoutPaymentKhqr({
       setAwaitingConfirmation(false);
       stopPolling();
       setSuccessOpen(true);
-      setPendingOpen(false);
       onPaidRef.current?.(payload);
     },
     [stopPolling],
@@ -126,48 +114,12 @@ export default function CheckoutPaymentKhqr({
     [handlePaid],
   );
 
-  const runClientProxyCheck = useCallback(async () => {
-    const md5 = paymentRef.current?.md5;
-    const targetId = paymentIdRef.current;
-    if (!CLIENT_PROXY_URL || !md5 || !targetId || paidNotifiedRef.current) return false;
-
-    try {
-      const res = await fetch(CLIENT_PROXY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ md5 }),
-      });
-      const raw = await res.text();
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        return false;
-      }
-      if (Number(data?.responseCode) === 0 && data?.data && typeof data.data === "object") {
-        const { data: confirmed } = await api.post(`/payments/bakong/confirm/${targetId}`, {
-          responseCode: data.responseCode,
-          responseMessage: data.responseMessage,
-          data: data.data,
-          errorCode: data.errorCode,
-        });
-        applyStatusPayload(confirmed);
-        return isPaidPayload(confirmed);
-      }
-    } catch {
-      /* Worker unreachable from this browser */
-    }
-    return false;
-  }, [applyStatusPayload]);
-
-  runClientProxyCheckRef.current = runClientProxyCheck;
-
   const runStatusCheck = useCallback(async () => {
     const targetId = paymentIdRef.current;
     if (!targetId || paidNotifiedRef.current) return;
     if (Date.now() < backoffUntilRef.current) return;
 
-    if (CLIENT_PROXY_URL && !manualModeRef.current) {
+    if (CLIENT_PROXY_URL) {
       const clientPaid = await runClientProxyCheckRef.current?.();
       if (clientPaid || paidNotifiedRef.current) return;
     }
@@ -205,6 +157,42 @@ export default function CheckoutPaymentKhqr({
       }
     }
   }, [applyStatusPayload, stopPolling]);
+
+  const runClientProxyCheck = useCallback(async () => {
+    const md5 = paymentRef.current?.md5;
+    const targetId = paymentIdRef.current;
+    if (!CLIENT_PROXY_URL || !md5 || !targetId || paidNotifiedRef.current) return false;
+
+    try {
+      const res = await fetch(CLIENT_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ md5 }),
+      });
+      const raw = await res.text();
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        return false;
+      }
+      if (Number(data?.responseCode) === 0 && data?.data && typeof data.data === "object") {
+        const { data: confirmed } = await api.post(`/payments/bakong/confirm/${targetId}`, {
+          responseCode: data.responseCode,
+          responseMessage: data.responseMessage,
+          data: data.data,
+          errorCode: data.errorCode,
+        });
+        applyStatusPayload(confirmed);
+        return isPaidPayload(confirmed);
+      }
+    } catch {
+      /* Worker unreachable from this browser */
+    }
+    return false;
+  }, [applyStatusPayload]);
+
+  runClientProxyCheckRef.current = runClientProxyCheck;
 
   runStatusCheckRef.current = runStatusCheck;
 
@@ -248,21 +236,15 @@ export default function CheckoutPaymentKhqr({
     void createKhqrRef.current?.();
   }, [open, orderId]);
 
-  const handleManualPaid = useCallback(() => {
-    if (!MANUAL_VERIFY_ENV) return;
-    setPendingOpen(true);
-    onClose?.();
-  }, [onClose]);
-
   useEffect(() => {
-    if (!open || MANUAL_VERIFY_ENV) return;
+    if (!open) return;
     let cancelled = false;
     void api
       .get("/payments/bakong/readiness")
       .then(({ data }) => {
         if (cancelled || paidNotifiedRef.current) return;
-        if (data?.manual_verify) {
-          setManualMode(true);
+        if (!data?.checkout_ready && data?.message) {
+          setVerificationNote(String(data.message));
         }
       })
       .catch(() => {});
@@ -272,19 +254,17 @@ export default function CheckoutPaymentKhqr({
   }, [open]);
 
   useEffect(() => {
-    const polling = open || (MANUAL_VERIFY_ENV && pendingOpen);
-    if (!polling || !paymentId) return;
+    if (!open || !paymentId) return;
     if (status === "paid" || status === "expired" || status === "error") return;
 
-    const intervalMs = manualMode ? MANUAL_POLL_MS : POLL_MS;
     const tick = () => void runStatusCheckRef.current?.();
     tick();
-    pollRef.current = window.setInterval(tick, intervalMs);
+    pollRef.current = window.setInterval(tick, POLL_MS);
 
     return () => {
       stopPolling();
     };
-  }, [open, pendingOpen, paymentId, status, manualMode, stopPolling]);
+  }, [open, paymentId, status, stopPolling]);
 
   useEffect(() => {
     if (!open || status !== "pending" || !paymentId) return undefined;
@@ -312,7 +292,7 @@ export default function CheckoutPaymentKhqr({
   }, [open, paymentId, status]);
 
   useEffect(() => {
-    if (!open && !pendingOpen && !successOpen) {
+    if (!open) {
       createInFlightRef.current = false;
       stopPolling();
       if (!successOpen) {
@@ -329,7 +309,7 @@ export default function CheckoutPaymentKhqr({
         lastResumeCheckRef.current = 0;
       }
     }
-  }, [open, pendingOpen, successOpen, stopPolling]);
+  }, [open, successOpen, stopPolling]);
 
   useEffect(() => {
     if (!successOpen) return undefined;
@@ -342,7 +322,6 @@ export default function CheckoutPaymentKhqr({
 
   const handleSuccessClose = useCallback(() => {
     setSuccessOpen(false);
-    setPendingOpen(false);
     paidNotifiedRef.current = false;
     setPayment(null);
     setPaymentId(null);
@@ -353,46 +332,31 @@ export default function CheckoutPaymentKhqr({
 
   return (
     <>
-      <KhqrModal
-        open={open && !successOpen}
-        onClose={onClose}
-        qrImageBase64={payment?.qr_image_base64}
-        qrString={payment?.qr_string}
-        billNumber={payment?.bill_number || orderNumber}
-        md5={payment?.md5}
-        expiresAt={payment?.expires_at}
-        status={status}
-        loading={loading}
-        error={error}
-        verificationNote={verificationNote}
-        awaitingConfirmation={awaitingConfirmation}
-        amount={amount}
-        currency={payment?.currency || currency}
-        onRegenerate={() => createKhqr({ force: true })}
-        manualMode={manualMode && MANUAL_VERIFY_ENV}
-        onManualPaid={MANUAL_VERIFY_ENV ? handleManualPaid : undefined}
-      />
-      {MANUAL_VERIFY_ENV && (
-        <KhqrPendingModal
-          open={pendingOpen && !successOpen}
-          orderNumber={orderNumber}
-          billNumber={payment?.bill_number || orderNumber}
-          total={amount}
-          currency={currency}
-          onClose={() => {
-            setPendingOpen(false);
-            onDone?.();
-          }}
-        />
-      )}
-      <KhqrSuccessModal
-        open={successOpen}
-        orderNumber={orderNumber}
-        total={amount}
-        currency={currency}
-        redirectSeconds={redirectSeconds}
-        onClose={handleSuccessClose}
-      />
+    <KhqrModal
+      open={open && !successOpen}
+      onClose={onClose}
+      qrImageBase64={payment?.qr_image_base64}
+      qrString={payment?.qr_string}
+      billNumber={payment?.bill_number || orderNumber}
+      md5={payment?.md5}
+      expiresAt={payment?.expires_at}
+      status={status}
+      loading={loading}
+      error={error}
+      verificationNote={verificationNote}
+      awaitingConfirmation={awaitingConfirmation}
+      amount={amount}
+      currency={payment?.currency || currency}
+      onRegenerate={() => createKhqr({ force: true })}
+    />
+    <KhqrSuccessModal
+      open={successOpen}
+      orderNumber={orderNumber}
+      total={amount}
+      currency={currency}
+      redirectSeconds={redirectSeconds}
+      onClose={handleSuccessClose}
+    />
     </>
   );
 }
