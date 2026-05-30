@@ -87,9 +87,9 @@ export default function AdminDiscounts() {
     setLoading(true);
     try {
       const { data: discountsData } = await api.get("/admin/discounts");
-      const { data: productsData } = await api.get("/products");
+      const { data: productsData } = await api.get("/admin/products", { params: { per_page: 500 } });
       setRows(discountsData?.data || []);
-      setProducts(Array.isArray(productsData) ? productsData : productsData?.data || []);
+      setProducts(productsData?.data || []);
     } catch (e) {
       setErr(extractErr(e));
     } finally {

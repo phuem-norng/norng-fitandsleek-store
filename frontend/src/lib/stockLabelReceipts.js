@@ -155,17 +155,53 @@ export const buildProductBarcodeLabelOptions = (categories) => {
     });
 };
 
-export const formatBarcodeLabelOptionText = (row, categories) => {
+export const catalogUnitsForMasterLabel = (master, allCategories, products = [], ignoreProductId = null) => {
+    if (!master?.id) return 0;
+    const masterId = String(master.id);
+    const masterBarcode = String(master.slug || "").trim().toLowerCase();
+    const batchIds = new Set(
+        receiveBatchesForMaster(master, allCategories).map((b) => String(b.id)),
+    );
+    batchIds.add(masterId);
+
+    let units = 0;
+    for (const product of products || []) {
+        if (ignoreProductId != null && String(product?.id) === String(ignoreProductId)) {
+            continue;
+        }
+        let linked = false;
+        if (product.stock_label_id != null && product.stock_label_id !== "") {
+            linked = batchIds.has(String(product.stock_label_id));
+        } else if (masterBarcode) {
+            linked = String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
+        }
+        if (!linked) continue;
+        const st = Number(product?.stock);
+        if (Number.isFinite(st)) units += Math.max(0, st);
+    }
+    return units;
+};
+
+export const formatBarcodeLabelOptionText = (row, categories, products = []) => {
     const allRows = stockLabelRows(categories);
+    const master = resolveMasterCategoryForLabel(row, allRows);
     const name = row.name || row.slug || "Label";
     const ref = batchReceiptRefForRow(row, allRows);
-    const displaySlug = ref || String(row.slug || "").trim();
+    const displaySlug = ref || String(master?.slug || row.slug || "").trim();
     let qty = "";
-    if (row.manage_stock) {
-        const q = row.stock_received != null
-            ? parseInt(row.stock_received, 10)
-            : parseInt(row.stock, 10);
-        if (Number.isFinite(q) && q > 0) qty = ` · ${q} units`;
+    if (row.manage_stock || master?.manage_stock) {
+        if (isAverageBundleCategory(master)) {
+            const catalog = catalogUnitsForMasterLabel(master, allRows, products);
+            const pool = inventoryOnHandForMaster(master, allRows) ?? 0;
+            const remaining = Math.max(0, pool - catalog);
+            if (remaining > 0) qty = ` · ${remaining} units left`;
+            else if (pool > 0) qty = ` · ${pool} units`;
+        } else {
+            const q = row.stock_received != null
+                ? parseInt(row.stock_received, 10)
+                : parseInt(row.stock, 10);
+            if (Number.isFinite(q) && q > 0) qty = ` · ${q} units`;
+        }
     }
     const dateIn = effectiveDateIn(row);
     const dateSuffix = dateIn ? ` · ${dateIn}` : "";
@@ -255,7 +291,15 @@ export const labelPricePoolForProduct = (label, allCategories, options = {}) => 
     const rawPoolStock = poolStock;
     let usedStock = 0;
     if (isAverageBundle) {
-        poolStock = String(inventoryOnHandForMaster(master, allCategories));
+        const masterPool = inventoryOnHandForMaster(master, allCategories) ?? 0;
+        const catalogUnits = catalogUnitsForMasterLabel(
+            master,
+            allCategories,
+            options.products,
+            null,
+        );
+        const remaining = Math.max(0, masterPool - catalogUnits);
+        poolStock = String(remaining);
     } else {
         usedStock = options.usedStockForSlug
             ? options.usedStockForSlug(slug, options.ignoreProductId ?? null)

@@ -521,6 +521,7 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  const lp = labelPricePoolForProduct(label, categories, {
  ignoreProductId: options.ignoreProductId ?? null,
  usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ products: rows,
  });
  if (lp) return lp;
  }
@@ -530,6 +531,7 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
  return labelPricePoolForProduct(label, categories, {
  ignoreProductId: options.ignoreProductId ?? null,
  usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ products: rows,
  });
  };
 
@@ -550,7 +552,9 @@ if (name.includes("hat") || name.includes("cap")) return "hat";
 
  const barcodeLabelModeText = (meta) => {
  if (!meta) return "";
- if (meta.isAverageBundle) return "Second-hand average bundle: price and stock come from the pooled label.";
+ if (meta.isAverageBundle) {
+ return "Second-hand average bundle: price from the label; Stock shows units still available on the label pool (pool minus units already on linked products).";
+ }
  const used = Number(meta.usedStock || 0);
  const suffix = used > 0
  ? ` Available stock is label stock ${meta.rawPoolStock} minus ${used} units already linked to products.`
@@ -1917,6 +1921,7 @@ For no-variant products, this is the single barcode to print and scan.
  const stockLabelId = label ? String(label.id) : "";
  const lp = labelPricePoolForProduct(label, categories, {
  usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ products: rows,
  });
  if (!lp) {
  return { ...s, barcode_code: v, stock_label_id: stockLabelId, allocated_stock: "" };
@@ -1934,7 +1939,7 @@ For no-variant products, this is the single barcode to print and scan.
  )}
  {barcodeLabelOptions.map((c) => (
  <option key={c.id} value={c.slug || ""}>
- {formatBarcodeLabelOptionText(c, categories)}
+ {formatBarcodeLabelOptionText(c, categories, rows)}
  </option>
  ))}
  </select>
@@ -3410,6 +3415,7 @@ For no-variant products, this is the single barcode to print and scan.
  const lp = labelPricePoolForProduct(label, categories, {
  ignoreProductId: s.id,
  usedStockForSlug: (slug, ignoreId) => usedProductStockForBarcodeLabel(slug, ignoreId),
+ products: rows,
  });
  if (!lp) {
  return { ...s, barcode_code: v, stock_label_id: stockLabelId, allocated_stock: "" };
@@ -3427,7 +3433,7 @@ For no-variant products, this is the single barcode to print and scan.
  )}
  {barcodeLabelOptions.map((c) => (
  <option key={c.id} value={c.slug || ""}>
- {formatBarcodeLabelOptionText(c, categories)}
+ {formatBarcodeLabelOptionText(c, categories, rows)}
  </option>
  ))}
  </select>
