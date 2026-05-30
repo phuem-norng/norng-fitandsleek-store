@@ -6,6 +6,7 @@ import { useLanguage } from "../lib/i18n.jsx";
 import { useCart } from "../state/cart.jsx";
 import { ShoppingCart } from "lucide-react";
 import Swal, { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../lib/swal";
+import ReplacementRequestModal from "../components/ReplacementRequestModal.jsx";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -15,8 +16,8 @@ function Money({ value }) {
 export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
   const [reordering, setReordering] = useState(null);
+  const [replacementOrder, setReplacementOrder] = useState(null);
   const { t } = useLanguage();
   const { add: addItem } = useCart();
 
@@ -31,64 +32,6 @@ export default function Orders() {
       }
     })();
   }, []);
-
-  const requestReplacement = async (orderId) => {
-    const reasonPrompt = await Swal.fire({
-      icon: "question",
-      title: "សរសេរមូលហេតុស្នើប្តូរ (Enter replacement reason)",
-      input: "text",
-      inputPlaceholder: t('replacementReasonPrompt') || "Why do you need a replacement?",
-      showCancelButton: true,
-      confirmButtonColor: "#497869",
-      confirmButtonText: "បញ្ជាក់ (Confirm)",
-      cancelButtonText: "បោះបង់ (Cancel)",
-    });
-    if (!reasonPrompt.isConfirmed || !reasonPrompt.value?.trim()) return;
-
-    const notesPrompt = await Swal.fire({
-      icon: "question",
-      title: "ព័ត៌មានបន្ថែម (Additional notes)",
-      input: "text",
-      inputPlaceholder: t('replacementNotesPrompt') || "Any extra details? (optional)",
-      showCancelButton: true,
-      confirmButtonColor: "#497869",
-      confirmButtonText: "បញ្ជាក់ (Confirm)",
-      cancelButtonText: "រំលង (Skip)",
-    });
-
-    const reason = reasonPrompt.value.trim();
-    const notes = notesPrompt.isConfirmed ? notesPrompt.value || "" : "";
-    setSubmitting(true);
-    loadingAlert({
-      khTitle: "កំពុងផ្ញើសំណើ",
-      enTitle: "Submitting request",
-      khText: "សូមរង់ចាំបន្តិច",
-      enText: "Please wait",
-    });
-    try {
-      await api.post("/replacement-cases", {
-        order_id: orderId,
-        reason,
-        notes: notes || null,
-      });
-      closeSwal();
-      await toastSuccess({
-        khTitle: "ជោគជ័យ",
-        enTitle: "Success",
-        khText: "សំណើប្តូរទំនិញត្រូវបានផ្ញើរួចរាល់",
-        enText: t('replacementSubmitted') || "Replacement request submitted.",
-      });
-    } catch (e) {
-      closeSwal();
-      await errorAlert({
-        khTitle: "ការផ្ញើសំណើបរាជ័យ",
-        enTitle: "Request failed",
-        detail: e?.response?.data?.message || "Failed to submit replacement request",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const orderAgain = async (order) => {
     const items = order.items || [];
@@ -159,6 +102,15 @@ export default function Orders() {
     }
   };
 
+  const handleReplacementSuccess = async () => {
+    await toastSuccess({
+      khTitle: "ជោគជ័យ",
+      enTitle: "Success",
+      khText: "សំណើប្តូរទំនិញត្រូវបានផ្ញើរួចរាល់",
+      enText: t('replacementSubmitted') || "Replacement request submitted.",
+    });
+  };
+
   return (
     <div className="container-safe py-8">
       <div className="flex items-end justify-between">
@@ -180,7 +132,7 @@ export default function Orders() {
           rows.map((o) => (
             <div key={o.id} className="fs-card p-5">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                <div className="text-sm font-black">{t('orderNumber')} {o.id}</div>
+                <div className="text-sm font-black">{t('orderNumber')} {o.order_number || o.id}</div>
                 <div className="text-xs text-zinc-600">
                   {t('status')}: <span className="font-semibold text-zinc-900">{o.status}</span>
                 </div>
@@ -209,9 +161,9 @@ export default function Orders() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold line-clamp-1 text-zinc-900 group-hover:text-emerald-600">{it.product?.name}</div>
                       <div className="text-xs text-zinc-600">
-                        {t('qty')} {it.quantity} · <Money value={it.unit_price} />
-                        {it.variant_details && (
-                          <span className="ml-2 text-zinc-500">({it.variant_details})</span>
+                        {t('qty')} {it.quantity ?? it.qty ?? 0} · <Money value={it.unit_price ?? it.price} />
+                        {(it.size || it.color) && (
+                          <span className="ml-2 text-zinc-500">({[it.size, it.color].filter(Boolean).join(" / ")})</span>
                         )}
                       </div>
                     </div>
@@ -233,9 +185,8 @@ export default function Orders() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => requestReplacement(o.id)}
-                  disabled={submitting}
-                  className="text-sm font-semibold px-4 sm:px-6 py-2.5 sm:py-3 rounded-full border border-zinc-200 hover:bg-zinc-50 disabled:opacity-50"
+                  onClick={() => setReplacementOrder(o)}
+                  className="text-sm font-semibold px-4 sm:px-6 py-2.5 sm:py-3 rounded-full border border-zinc-200 hover:bg-zinc-50"
                 >
                   {t('requestReplacement') || "Request Replacement"}
                 </button>
@@ -244,6 +195,14 @@ export default function Orders() {
           ))
         )}
       </div>
+
+      <ReplacementRequestModal
+        open={!!replacementOrder}
+        onClose={() => setReplacementOrder(null)}
+        order={replacementOrder}
+        onSuccess={handleReplacementSuccess}
+        t={t}
+      />
     </div>
   );
 }

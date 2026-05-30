@@ -8,6 +8,7 @@ import { Edit, MapPin, Phone, Mail, Heart, ShoppingBag, LogOut, Save, X, Upload,
 import { useLanguage } from "../lib/i18n.jsx";
 import Swal, { errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../lib/swal";
 import TwoFactorSettings from "../components/security/TwoFactorSettings.jsx";
+import ReplacementRequestModal, { ReplacementCaseItemsList } from "../components/ReplacementRequestModal.jsx";
 
 const createEmptyAddress = () => ({
   label: "Home",
@@ -55,10 +56,7 @@ export default function CustomerProfile() {
   const [addressSubmitting, setAddressSubmitting] = useState(false);
   const [addressEditSubmitting, setAddressEditSubmitting] = useState(false);
   const [showReplacementForm, setShowReplacementForm] = useState(false);
-  const [replacementOrderId, setReplacementOrderId] = useState(null);
-  const [replacementReason, setReplacementReason] = useState("");
-  const [replacementNotes, setReplacementNotes] = useState("");
-  const [replacementSubmitting, setReplacementSubmitting] = useState(false);
+  const [replacementOrder, setReplacementOrder] = useState(null);
   const [showEditReplacementForm, setShowEditReplacementForm] = useState(false);
   const [editingReplacementId, setEditingReplacementId] = useState(null);
   const [editingReplacementReason, setEditingReplacementReason] = useState("");
@@ -457,10 +455,13 @@ export default function CustomerProfile() {
     }
   };
 
-  const requestReplacement = (orderId) => {
-    setReplacementOrderId(orderId);
-    setReplacementReason("");
-    setReplacementNotes("");
+  const loadReplacementCases = async () => {
+    const replacementRes = await api.get("/replacement-cases");
+    setReplacementCases(replacementRes.data?.data?.data || replacementRes.data?.data || []);
+  };
+
+  const requestReplacement = (order) => {
+    setReplacementOrder(order);
     setShowReplacementForm(true);
   };
 
@@ -504,26 +505,9 @@ export default function CustomerProfile() {
     }
   };
 
-  const submitReplacement = async () => {
-    if (!replacementOrderId) return;
-    if (!replacementReason.trim()) {
-      await showError(t('replacementReasonPrompt') || "Why do you need a replacement?");
-      return;
-    }
-    setReplacementSubmitting(true);
-    try {
-      await api.post("/replacement-cases", {
-        order_id: replacementOrderId,
-        reason: replacementReason.trim(),
-        notes: replacementNotes.trim() ? replacementNotes.trim() : null,
-      });
-      await showSuccess("Success", t('replacementSubmitted') || "Replacement request submitted.");
-      setShowReplacementForm(false);
-    } catch (error) {
-      await showError(error?.response?.data?.message || "Failed to submit replacement request");
-    } finally {
-      setReplacementSubmitting(false);
-    }
+  const handleReplacementSuccess = async () => {
+    await loadReplacementCases();
+    await showSuccess("Success", t('replacementSubmitted') || "Replacement request submitted.");
   };
 
   const handleLogoutClick = async () => {
@@ -902,7 +886,7 @@ export default function CustomerProfile() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => requestReplacement(order.id)}
+                            onClick={() => requestReplacement(order)}
                             className="text-xs font-semibold px-4 py-2 rounded-full border border-gray-200 hover:bg-gray-50"
                           >
                             {t('requestReplacement') || "Request Replacement"}
@@ -944,20 +928,12 @@ export default function CustomerProfile() {
                         {c.notes && (
                           <p className="text-sm text-gray-500 mt-2">{c.notes}</p>
                         )}
-                        {c.order?.items?.length ? (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {c.order.items.slice(0, 6).map((item) => (
-                              <div key={item.id} className="h-12 w-12 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
-                                <img
-                                  src={resolveImageUrl(item.product?.image_url)}
-                                  alt={item.product?.name || item.name || ""}
-                                  onError={(e) => (e.currentTarget.src = "/placeholder.svg")}
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                            {t('replacementItems') || "Items to replace"}
+                          </p>
+                          <ReplacementCaseItemsList caseItem={c} t={t} />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1356,68 +1332,13 @@ export default function CustomerProfile() {
         </div>
       </div>
 
-      {showReplacementForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-lg p-4 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base sm:text-lg font-bold">
-                {t('requestReplacement') || "Request Replacement"}
-              </h3>
-              <button
-                onClick={() => setShowReplacementForm(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t('replacementReasonPrompt') || "Why do you need a replacement?"}
-                </label>
-                <textarea
-                  value={replacementReason}
-                  onChange={(e) => setReplacementReason(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6F8B7F] focus:border-transparent outline-none text-sm sm:text-base"
-                  placeholder={t('replacementReasonPrompt') || "Why do you need a replacement?"}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t('replacementNotesPrompt') || "Any extra details? (optional)"}
-                </label>
-                <textarea
-                  value={replacementNotes}
-                  onChange={(e) => setReplacementNotes(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6F8B7F] focus:border-transparent outline-none text-sm sm:text-base"
-                  placeholder={t('replacementNotesPrompt') || "Any extra details? (optional)"}
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowReplacementForm(false)}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 text-sm sm:text-base"
-              >
-                {t('cancel') || "Cancel"}
-              </button>
-              <button
-                type="button"
-                onClick={submitReplacement}
-                disabled={replacementSubmitting}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#6F8B7F] text-white hover:bg-[#5f786d] disabled:opacity-50 text-sm sm:text-base"
-              >
-                {replacementSubmitting ? (t('submitting') || "Submitting...") : (t('submit') || "Submit")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReplacementRequestModal
+        open={showReplacementForm}
+        onClose={() => setShowReplacementForm(false)}
+        order={replacementOrder}
+        onSuccess={handleReplacementSuccess}
+        t={t}
+      />
     </>
   );
 }

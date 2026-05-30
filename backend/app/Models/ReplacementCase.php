@@ -28,6 +28,11 @@ class ReplacementCase extends Model
         return $this->belongsTo(User::class, 'handled_by');
     }
 
+    public function items()
+    {
+        return $this->hasMany(ReplacementCaseItem::class);
+    }
+
     // Scopes
     public function scopePending($query)
     {

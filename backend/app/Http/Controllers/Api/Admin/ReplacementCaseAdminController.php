@@ -4,21 +4,22 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Models\ReplacementCase;
 use App\Models\Order;
+use App\Services\ReplacementCaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ReplacementCaseAdminController extends BaseAdminController
 {
+    public function __construct(
+        private readonly ReplacementCaseService $replacementCaseService,
+    ) {}
+
     /**
      * Get all replacement cases
      */
     public function index(Request $request): JsonResponse
     {
-        $query = ReplacementCase::with([
-            'order:id,user_id,total,status',
-            'order.user:id,name,email',
-            'handledBy:id,name',
-        ]);
+        $query = ReplacementCase::with(ReplacementCaseService::defaultEagerLoad());
 
         // Filter by status
         if ($request->has('status')) {
@@ -49,7 +50,7 @@ class ReplacementCaseAdminController extends BaseAdminController
     public function byOrder(int $orderId): JsonResponse
     {
         $cases = ReplacementCase::where('order_id', $orderId)
-            ->with(['order.user', 'order.items.product', 'handledBy'])
+            ->with(ReplacementCaseService::defaultEagerLoad())
             ->get();
 
         return response()->json([
@@ -67,10 +68,16 @@ class ReplacementCaseAdminController extends BaseAdminController
             'order_id' => 'required|exists:orders,id',
             'reason' => 'required|string|max:255',
             'notes' => 'nullable|string|max:1000',
+            'items' => 'required|array|min:1',
+            'items.*.order_item_id' => 'required|integer|exists:order_items,id',
+            'items.*.quantity' => 'nullable|integer|min:1',
+            'items.*.requested_size' => 'nullable|string|max:50',
+            'items.*.requested_color' => 'nullable|string|max:50',
+            'items.*.note' => 'nullable|string|max:500',
         ]);
 
         // Admins can only create cases for customer orders
-        $order = Order::findOrFail($validated['order_id']);
+        $order = Order::with('items')->findOrFail($validated['order_id']);
         /** @var \App\Models\User|null $authUser */
         $authUser = auth()->guard('sanctum')->user();
         if ($authUser && $authUser->isAdmin() && !$authUser->isSuperAdmin()) {
@@ -81,12 +88,12 @@ class ReplacementCaseAdminController extends BaseAdminController
             }
         }
 
-        $case = ReplacementCase::create([
-            'order_id' => $validated['order_id'],
-            'reason' => $validated['reason'],
-            'notes' => $validated['notes'] ?? null,
-            'status' => 'pending',
-        ]);
+        $case = $this->replacementCaseService->createCase(
+            $order,
+            $validated['reason'],
+            $validated['notes'] ?? null,
+            $validated['items'],
+        );
 
         return response()->json([
             'message' => 'Replacement case created successfully',
@@ -155,7 +162,7 @@ class ReplacementCaseAdminController extends BaseAdminController
 
         return response()->json([
             'message' => 'Replacement case approved',
-            'data' => $case,
+            'data' => $case->load(ReplacementCaseService::defaultEagerLoad()),
         ]);
     }
 
@@ -187,7 +194,7 @@ class ReplacementCaseAdminController extends BaseAdminController
 
         return response()->json([
             'message' => 'Replacement case rejected',
-            'data' => $case,
+            'data' => $case->load(ReplacementCaseService::defaultEagerLoad()),
         ]);
     }
 
@@ -207,7 +214,7 @@ class ReplacementCaseAdminController extends BaseAdminController
 
         return response()->json([
             'message' => 'Replacement case marked as completed',
-            'data' => $case,
+            'data' => $case->load(ReplacementCaseService::defaultEagerLoad()),
         ]);
     }
 

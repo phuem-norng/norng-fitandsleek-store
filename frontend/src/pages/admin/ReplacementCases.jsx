@@ -5,12 +5,25 @@ import { errorAlert, promptEnglish, toastSuccess, warningConfirm } from "../../l
 import AdminModal from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import { useTheme } from "@/state/theme";
+import { ReplacementCaseItemsList } from "../../components/ReplacementRequestModal.jsx";
 
 function adminPrimaryRgbTriplet() {
  if (typeof document === "undefined") return "107, 126, 115";
  return document.documentElement.style.getPropertyValue("--admin-primary-rgb").trim()
   || getComputedStyle(document.documentElement).getPropertyValue("--admin-primary-rgb").trim()
   || "107, 126, 115";
+}
+
+function caseProductSummary(caseItem) {
+ const rows = caseItem?.items || [];
+ if (!rows.length) return "—";
+ return rows
+  .map((row) => {
+   const orderItem = row.order_item || row.orderItem;
+   const name = orderItem?.product?.name || orderItem?.name || "Product";
+   return `${name} ×${row.quantity}`;
+  })
+  .join(", ");
 }
 
 export default function AdminReplacementCases() {
@@ -103,7 +116,6 @@ export default function AdminReplacementCases() {
  } finally { setActionInProgress(false); }
  };
 
- // ប្រើ Inline Style ដើម្បីធានាថាពណ៌មិនលោតទៅបៃតងក្នុង Dark Mode
  const getStatusStyles = (status) => {
  const isDark = mode === "dark";
  switch (status) {
@@ -145,10 +157,12 @@ export default function AdminReplacementCases() {
  const filteredCases = cases.filter((c) => {
  const q = search.trim().toLowerCase();
  if (!q) return true;
+ const productText = caseProductSummary(c).toLowerCase();
  return (
  String(c.id || "").toLowerCase().includes(q) ||
- String(c.order?.order_number || "").toLowerCase().includes(q) ||
- String(c.order?.user?.name || "").toLowerCase().includes(q)
+ String(c.order?.order_number || c.order_id || "").toLowerCase().includes(q) ||
+ String(c.order?.user?.name || "").toLowerCase().includes(q) ||
+ productText.includes(q)
  );
  });
 
@@ -184,7 +198,7 @@ export default function AdminReplacementCases() {
  <input
  value={search}
  onChange={(e) => setSearch(e.target.value)}
- placeholder="Search ID, Order #..."
+ placeholder="Search ID, Order #, customer, product..."
  className="w-full px-4 py-2 border admin-border admin-surface rounded-lg focus:outline-none dark:text-white"
  />
  </div>
@@ -202,6 +216,8 @@ export default function AdminReplacementCases() {
  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">ID</th>
  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Order</th>
  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Customer</th>
+ <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Products</th>
+ <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Reason</th>
  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Action</th>
  </tr>
@@ -210,8 +226,23 @@ export default function AdminReplacementCases() {
  {filteredCases.map((caseItem) => (
  <tr key={caseItem.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
  <td className="px-6 py-4 font-medium tabular-nums dark:text-white">#{caseItem.id}</td>
- <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{caseItem.order?.order_number}</td>
+ <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{caseItem.order?.order_number || `#${caseItem.order_id}`}</td>
  <td className="px-6 py-4 text-slate-900 dark:text-white font-medium">{caseItem.order?.user?.name || "N/A"}</td>
+ <td className="px-6 py-4 text-slate-600 dark:text-slate-300 max-w-xs">
+ <div className="flex items-center gap-2">
+ {(caseItem.items || []).slice(0, 3).map((row) => {
+  const orderItem = row.order_item || row.orderItem;
+  const product = orderItem?.product;
+  return product?.image_url ? (
+   <div key={row.id} className="h-8 w-8 rounded border admin-border overflow-hidden shrink-0">
+    <img src={resolveImageUrl(product.image_url)} alt="" className="h-full w-full object-cover" onError={(e) => { e.currentTarget.src = "/placeholder.svg"; }} />
+   </div>
+  ) : null;
+ })}
+ <span className="text-sm line-clamp-2">{caseProductSummary(caseItem)}</span>
+ </div>
+ </td>
+ <td className="px-6 py-4 text-slate-600 dark:text-slate-300 max-w-[180px] truncate" title={caseItem.reason}>{caseItem.reason}</td>
  <td className="px-6 py-4">
  <span
  style={getStatusStyles(caseItem.status)}
@@ -235,21 +266,44 @@ export default function AdminReplacementCases() {
  onClose={() => setShowDetails(false)}
  title="Case Details"
  titleId="replacement-case-details-title"
- maxWidthClass="max-w-lg"
+ maxWidthClass="max-w-2xl"
  >
  {selectedCase ? (
  <>
  <div className="space-y-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  <div>
+   <label className="text-xs leading-tight font-semibold uppercase tracking-wide text-slate-400">Order</label>
+   <p className="text-slate-700 dark:text-slate-300 mt-1 font-medium">{selectedCase.order?.order_number || `#${selectedCase.order_id}`}</p>
+  </div>
+  <div>
+   <label className="text-xs leading-tight font-semibold uppercase tracking-wide text-slate-400">Customer</label>
+   <p className="text-slate-700 dark:text-slate-300 mt-1 font-medium">{selectedCase.order?.user?.name || "N/A"}</p>
+   {selectedCase.order?.user?.email ? (
+    <p className="text-sm text-slate-500">{selectedCase.order.user.email}</p>
+   ) : null}
+  </div>
+ </div>
+
  <div className="flex justify-between border-b admin-border pb-2">
  <span className="text-slate-500 text-sm">Status</span>
  <span style={getStatusStyles(selectedCase.status)} className="px-3 py-0.5 rounded-full text-xs leading-tight font-semibold uppercase tracking-wide border">
  {selectedCase.status}
  </span>
  </div>
+
+ <div>
+ <label className="text-xs leading-tight font-semibold uppercase tracking-wide text-slate-400">Items to Replace</label>
+ <div className="mt-2">
+  <ReplacementCaseItemsList caseItem={selectedCase} />
+ </div>
+ </div>
+
  <div>
  <label className="text-xs leading-tight font-semibold uppercase tracking-wide text-slate-400">Reason</label>
  <p className="text-slate-700 dark:text-slate-300 mt-1 italic">"{selectedCase.reason}"</p>
  </div>
+
  {selectedCase.notes && (
  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-100 dark:border-amber-900">
  <label className="text-xs leading-tight font-semibold uppercase tracking-wide text-amber-600">Admin Notes</label>
@@ -260,12 +314,12 @@ export default function AdminReplacementCases() {
  <div className="mt-6 border-t admin-border bg-slate-50 pt-4 dark:bg-white/5 flex justify-end gap-3">
  {selectedCase.status === "pending" && (
  <>
- <button onClick={handleReject} className="px-4 py-2 text-red-600 font-semibold text-xs uppercase tracking-wide">Reject</button>
- <button onClick={handleApprove} className="px-6 py-2 rounded-xl font-semibold text-xs uppercase tracking-wide text-white bg-[var(--admin-primary)] hover:brightness-110">Approve</button>
+ <button onClick={handleReject} disabled={actionInProgress} className="px-4 py-2 text-red-600 font-semibold text-xs uppercase tracking-wide">Reject</button>
+ <button onClick={handleApprove} disabled={actionInProgress} className="px-6 py-2 rounded-xl font-semibold text-xs uppercase tracking-wide text-white bg-[var(--admin-primary)] hover:brightness-110">Approve</button>
  </>
  )}
  {selectedCase.status === "approved" && (
- <button onClick={handleComplete} className="px-6 py-2 rounded-xl font-semibold text-xs uppercase tracking-wide text-white bg-[color:var(--admin-primary)] hover:brightness-110">Complete</button>
+ <button onClick={handleComplete} disabled={actionInProgress} className="px-6 py-2 rounded-xl font-semibold text-xs uppercase tracking-wide text-white bg-[color:var(--admin-primary)] hover:brightness-110">Complete</button>
  )}
  <button onClick={() => setShowDetails(false)} className="px-4 py-2 border admin-border rounded-xl text-xs font-semibold dark:text-white">Close</button>
  </div>
