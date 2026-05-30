@@ -4,8 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\Category;
 use App\Models\Product;
-use App\Models\User;
 use App\Services\PaidOrderInventory;
+use App\Services\StockTableSyncService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -68,11 +68,11 @@ class HistoricalStockInventorySeeder extends Seeder
             $batchCount = $this->seedMonthlyReceives($masters, $catalogCategoryIds);
             $this->syncMasterStockFromBatches($masters);
             $this->linkCatalogProducts($masters);
-            $ledgerCount = $this->seedStockReceivedLedgerTable();
+            $ledgerCount = $this->syncDedicatedStockTables($masters);
 
             $this->command?->info("Created {$batchCount} receive batches (30/month × 36 months).");
             if ($ledgerCount > 0) {
-                $this->command?->info("Inserted {$ledgerCount} rows into stock_received table (pgAdmin).");
+                $this->command?->info("Synced {$ledgerCount} rows into stock_received table (pgAdmin).");
             }
         });
 
@@ -112,7 +112,20 @@ class HistoricalStockInventorySeeder extends Seeder
             ->where('slug', 'like', self::SLUG_PREFIX.'-%')
             ->pluck('id');
 
+        $demoMasterIds = Category::query()
+            ->where('slug', 'like', self::SLUG_PREFIX.'-%')
+            ->whereNull('parent_id')
+            ->pluck('id');
+
         $demoProductIds = Product::query()->where('sku', 'like', 'FS-DEMO-%')->pluck('id');
+
+        if (Schema::hasTable('stock_received') && $demoIds->isNotEmpty()) {
+            DB::table('stock_received')->whereIn('category_id', $demoIds)->delete();
+        }
+
+        if (Schema::hasTable('stock_inventory') && $demoMasterIds->isNotEmpty()) {
+            DB::table('stock_inventory')->whereIn('category_id', $demoMasterIds)->delete();
+        }
 
         if (Schema::hasTable('stock_received') && $demoProductIds->isNotEmpty()) {
             DB::table('stock_received')->whereIn('product_id', $demoProductIds)->delete();
@@ -317,15 +330,22 @@ class HistoricalStockInventorySeeder extends Seeder
     }
 
     /**
-     * Mirror receive batches into public.stock_received (visible as its own table in pgAdmin).
+     * Mirror category stock rows into stock_inventory + stock_received (visible in pgAdmin).
+     *
+     * @param  list<Category>  $masters
      */
-    private function seedStockReceivedLedgerTable(): int
+    private function syncDedicatedStockTables(array $masters): int
     {
-        if (! Schema::hasTable('stock_received')) {
+        if (! Schema::hasTable('stock_inventory') || ! Schema::hasTable('stock_received')) {
             return 0;
         }
 
-        $createdBy = User::query()->whereIn('role', ['admin', 'superadmin'])->value('id');
+        $sync = app(StockTableSyncService::class);
+        $count = 0;
+
+        foreach ($masters as $master) {
+            $sync->syncMasterFromCategory($master->fresh());
+        }
 
         $batches = Category::query()
             ->where('type', PaidOrderInventory::BARCODE_CATEGORY_TYPE)
@@ -334,63 +354,26 @@ class HistoricalStockInventorySeeder extends Seeder
             ->orderBy('id')
             ->get();
 
-        $productByBatch = Product::query()
-            ->where('sku', 'like', 'FS-DEMO-%')
-            ->whereNotNull('stock_label_id')
-            ->pluck('id', 'stock_label_id');
-
-        $fallbackProducts = Product::query()
-            ->where('sku', 'like', 'FS-DEMO-%')
-            ->orderBy('id')
-            ->pluck('id')
-            ->all();
-
-        $rows = [];
-        $fallbackIndex = 0;
-
         foreach ($batches as $batch) {
-            $qty = max(0, (int) ($batch->stock_received ?? $batch->stock ?? 0));
-            if ($qty < 1) {
-                continue;
-            }
-
-            $productId = $productByBatch->get($batch->id)
-                ?? $productByBatch->get($batch->parent_id)
-                ?? ($fallbackProducts[$fallbackIndex % max(1, count($fallbackProducts))] ?? null);
-
-            $fallbackIndex++;
+            $productId = Product::query()
+                ->where('sku', 'like', 'FS-DEMO-%')
+                ->where('stock_label_id', $batch->id)
+                ->value('id');
 
             if ($productId === null) {
-                continue;
+                $productId = Product::query()
+                    ->where('sku', 'like', 'FS-DEMO-%')
+                    ->where('stock_label_id', $batch->parent_id)
+                    ->value('id');
             }
 
-            $unitCost = round((float) ($batch->cost ?? 0), 2);
-            $receivedAt = $batch->created_at
-                ? Carbon::parse($batch->created_at)
-                : Carbon::parse($batch->date_in ?? now());
-
-            $rows[] = [
-                'product_id' => $productId,
-                'created_by' => $createdBy,
-                'corrects_stock_received_id' => null,
-                'entry_type' => 'receive',
-                'quantity' => $qty,
-                'unit_cost' => $unitCost,
-                'total_cost' => round($unitCost * $qty, 2),
-                'supplier_name' => 'Demo Supplier '.strtoupper((string) $batch->origin),
-                'invoice_number' => 'INV-'.$batch->slug,
-                'received_at' => $receivedAt,
-                'notes' => 'Historical demo 2023–2025',
-                'created_at' => $receivedAt,
-                'updated_at' => $receivedAt,
-            ];
+            $row = $sync->syncReceiveFromCategory($batch, $productId ? (int) $productId : null);
+            if ($row) {
+                $count++;
+            }
         }
 
-        foreach (array_chunk($rows, 200) as $chunk) {
-            DB::table('stock_received')->insert($chunk);
-        }
-
-        return count($rows);
+        return $count;
     }
 
     private function unitsForBand(string $band, int $month): int

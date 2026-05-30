@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\BakongPaymentController;
 use App\Http\Controllers\Api\TelegramWebhookController;
+use App\Http\Controllers\Api\TelegramLinkController;
 
 // Storefront
 use App\Http\Controllers\Api\Storefront\CategoryController;
@@ -171,6 +172,8 @@ Route::get('/homepage-settings', [HomepageSettingsController::class, 'getSetting
 // AUTH STOREFRONT
 // -------------------------
 Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
+    Route::post('/telegram/link-webapp', [TelegramLinkController::class, 'link']);
+
     Route::get('/auth/two-factor', [TwoFactorController::class, 'status']);
     Route::post('/auth/two-factor/preferred-method', [TwoFactorController::class, 'updatePreferredMethod']);
     Route::post('/auth/two-factor/setup', [TwoFactorController::class, 'setup']);

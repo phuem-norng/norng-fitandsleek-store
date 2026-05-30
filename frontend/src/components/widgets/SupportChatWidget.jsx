@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { MessageCircle, X } from "lucide-react";
 import api from "../../lib/api";
+import { resolveImageUrl } from "../../lib/images";
+import { getProductPath } from "../../lib/paths";
 import { useTheme } from "../../state/theme.jsx";
 
 const DEFAULTS = {
@@ -9,6 +12,159 @@ const DEFAULTS = {
   welcome: "How can we help you today?",
   social_links: [],
 };
+
+const WELCOME_TEXT =
+  "Hi! I'm Fit & Sleek support.\n\n" +
+  "I can help with:\n" +
+  "• Products, sizes & recommendations\n" +
+  "• Discounts & new arrivals\n" +
+  "• Shipping, returns & orders\n" +
+  "• Store navigation\n\n" +
+  "Ask in Khmer or English.";
+
+const QUICK_SUGGESTIONS = [
+  { label: "New arrivals", text: "What's new in the store?" },
+  { label: "Discounts", text: "Show me items on sale" },
+  { label: "Shipping", text: "How long does shipping take?" },
+  { label: "Returns", text: "What is your return policy?" },
+  { label: "ថ្មី", text: "មានអីវ៉ាន់ថ្មីអ្វីខ្លះ?" },
+  { label: "បញ្ចុះតម្លៃ", text: "តើមានបញ្ចុះតម្លៃអ្វីខ្លះ?" },
+];
+
+function formatInlineText(text) {
+  return String(text)
+    .split(/(\*\*[^*]+\*\*)/g)
+    .map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        return (
+          <strong key={index} className="font-semibold">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+}
+
+function stripMarkdownTables(text) {
+  return String(text || "")
+    .replace(/^\|.+\|\s*\n\|[-:\s|]+\|\s*\n(?:\|.+\|\s*\n?)*/gm, "")
+    .replace(/^#{1,6}\s+.+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function ChatMessageContent({ content }) {
+  const lines = stripMarkdownTables(content).split("\n");
+  const blocks = [];
+  let listItems = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    blocks.push(
+      <ul key={`ul-${blocks.length}`} className="my-1 list-disc space-y-0.5 pl-4">
+        {listItems}
+      </ul>
+    );
+    listItems = [];
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    const bulletMatch = trimmed.match(/^[*•-]\s+(.+)$/);
+
+    if (bulletMatch) {
+      listItems.push(<li key={`li-${index}`}>{formatInlineText(bulletMatch[1])}</li>);
+      return;
+    }
+
+    flushList();
+    if (trimmed === "") return;
+
+    blocks.push(
+      <p key={`p-${index}`} className={blocks.length ? "mt-1" : undefined}>
+        {formatInlineText(trimmed)}
+      </p>
+    );
+  });
+
+  flushList();
+  return <div>{blocks}</div>;
+}
+
+function ProductThumb({ name, imageUrl }) {
+  return (
+    <img
+      src={resolveImageUrl(imageUrl)}
+      alt={name || "Product"}
+      className="h-14 w-14 shrink-0 rounded-lg border border-zinc-200 object-cover dark:border-zinc-600"
+      loading="lazy"
+      onError={(e) => {
+        e.currentTarget.src = "/placeholder.svg";
+      }}
+    />
+  );
+}
+
+function ChatProductCards({ products, dark }) {
+  if (!Array.isArray(products) || products.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {products.map((p) => (
+        <Link
+          key={p.id || p.slug || p.name}
+          to={getProductPath(p) || "/search"}
+          onClick={() => {}}
+          className={`flex items-center gap-2.5 rounded-xl border p-2 transition hover:-translate-y-0.5 ${
+            dark
+              ? "border-[#30363d] bg-[#0d1117] hover:border-[#58a6ff]/40"
+              : "border-zinc-200 bg-zinc-50 hover:border-zinc-300 hover:shadow-sm"
+          }`}
+        >
+          <ProductThumb name={p.name} imageUrl={p.image_url} />
+          <div className="min-w-0 flex-1">
+            <p className={`line-clamp-2 text-xs font-semibold ${dark ? "text-[#f0f6fc]" : "text-zinc-900"}`}>
+              {p.name}
+            </p>
+            <p className="mt-0.5 text-xs tabular-nums">
+              {p.has_discount ? (
+                <>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    ${Number(p.final_price ?? p.price).toFixed(2)}
+                  </span>
+                  <span className={`ml-1.5 line-through ${dark ? "text-[#8b949e]" : "text-zinc-400"}`}>
+                    ${Number(p.price).toFixed(2)}
+                  </span>
+                </>
+              ) : (
+                <span className={`font-semibold ${dark ? "text-[#c9d1d9]" : "text-zinc-700"}`}>
+                  ${Number(p.price).toFixed(2)}
+                </span>
+              )}
+            </p>
+            <span className="text-[10px] font-medium text-[#586F64] dark:text-[#9BB0A5]">View product →</span>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function AssistantBubble({ message, dark }) {
+  return (
+    <div className="max-w-[92%]">
+      <div
+        className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+          dark ? "bg-[#21262d] text-[#c9d1d9]" : "bg-zinc-100 text-zinc-900"
+        }`}
+      >
+        <ChatMessageContent content={message.text} />
+      </div>
+      <ChatProductCards products={message.products} dark={dark} />
+    </div>
+  );
+}
 
 const PLATFORM_META = {
   messenger:  { label: "Facebook Messenger", color: "bg-[#1877F2]",   icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.892 1.44 5.476 3.696 7.17V22l3.378-1.858C10.053 20.37 11.011 20.5 12 20.5c5.523 0 10-4.145 10-9.257C22 6.145 17.523 2 12 2zm1.007 12.461-2.55-2.72-4.98 2.72 5.476-5.813 2.614 2.72 4.916-2.72-5.476 5.813z" /></svg> },
@@ -38,9 +194,7 @@ export default function SupportChatWidget() {
   const draggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, right: 16, bottom: getMinBottomOffset() });
   const movedRef = useRef(false);
-  const [messages, setMessages] = useState([
-    { role: "assistant", text: "Hi there 👋 I’m FitandSleek support. How can I help today?" },
-  ]);
+  const [messages, setMessages] = useState([{ role: "assistant", text: WELCOME_TEXT, products: [] }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const panelRef = useRef(null);
@@ -94,11 +248,11 @@ export default function SupportChatWidget() {
     return () => window.removeEventListener("resize", syncResponsiveBottomOffset);
   }, []);
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (textOverride) => {
+    const text = (typeof textOverride === "string" ? textOverride : input).trim();
     if (!text || loading) return;
 
-    const next = [...messages, { role: "user", text }];
+    const next = [...messages, { role: "user", text, products: [] }];
     setMessages(next);
     setInput("");
     setLoading(true);
@@ -112,12 +266,19 @@ export default function SupportChatWidget() {
         message: text,
         history,
       });
-      const reply = data?.reply || "Sorry, I couldn’t generate a reply.";
-      setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+      const reply = data?.reply || "Sorry, I couldn't generate a reply.";
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: reply,
+          products: Array.isArray(data?.products) ? data.products : [],
+        },
+      ]);
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: "Sorry, the chat service is unavailable right now." },
+        { role: "assistant", text: "Sorry, the chat service is unavailable right now.", products: [] },
       ]);
     } finally {
       setLoading(false);
@@ -220,29 +381,62 @@ export default function SupportChatWidget() {
         </div>
 
         <div className={`p-4 ${dark ? "bg-[#161b22]" : "bg-white"}`}>
-          <div ref={listRef} className="max-h-64 overflow-y-auto pr-1 space-y-3">
+          <div ref={listRef} className="max-h-72 overflow-y-auto pr-1 space-y-3">
             {messages.map((m, i) => (
               <div
                 key={`${m.role}-${i}`}
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <div
-                  className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed max-w-[85%] ${
-                    m.role === "user"
-                      ? dark ? "bg-[#58a6ff] text-white" : "bg-zinc-900 text-white"
-                      : dark ? "bg-[#21262d] text-[#c9d1d9]" : "bg-zinc-100 text-zinc-900"
-                  }`}
-                >
-                  {m.text}
-                </div>
+                {m.role === "user" ? (
+                  <div
+                    className={`max-w-[85%] whitespace-pre-wrap px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                      dark ? "bg-[#58a6ff] text-white" : "bg-zinc-900 text-white"
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                ) : (
+                  <AssistantBubble message={m} dark={dark} />
+                )}
               </div>
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className={`px-3 py-2 rounded-2xl text-sm ${dark ? "bg-[#21262d] text-[#8b949e]" : "bg-zinc-100 text-zinc-500"}`}>Typing…</div>
+                <div className={`px-3 py-2 rounded-2xl text-sm ${dark ? "bg-[#21262d] text-[#8b949e]" : "bg-zinc-100 text-zinc-500"}`}>
+                  <span className="inline-flex gap-1">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
+                </div>
               </div>
             )}
           </div>
+
+          {!loading && (
+            <div className="mt-3">
+              <p className={`mb-1.5 text-[10px] font-medium uppercase tracking-wide ${dark ? "text-[#8b949e]" : "text-zinc-400"}`}>
+                Quick ask
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_SUGGESTIONS.map((s) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => sendMessage(s.text)}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
+                      dark
+                        ? "border-[#30363d] text-[#c9d1d9] hover:border-[#58a6ff]/40 hover:bg-[#21262d]"
+                        : "border-zinc-200 text-zinc-700 hover:border-[#586F64]/40 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className={`mt-3 flex items-center gap-2 rounded-full px-2 py-1 border ${dark ? "bg-[#0d1117] border-[#30363d]" : "bg-zinc-50 border-zinc-200"}`}>
             <input
@@ -251,7 +445,7 @@ export default function SupportChatWidget() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") sendMessage();
               }}
-              placeholder="Ask about orders, shipping, size…"
+              placeholder="Ask about products, shipping, sizes…"
               className={`flex-1 h-9 bg-transparent px-3 text-sm outline-none ${dark ? "text-[#f0f6fc] placeholder:text-[#8b949e]" : "text-zinc-900 placeholder:text-zinc-400"}`}
             />
             <button

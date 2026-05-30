@@ -113,10 +113,58 @@ erDiagram
         string sku
         decimal cost
         boolean manage_stock
-        int stock
+        int stock "on-hand (sellable)"
+        int stock_received "opening receipt on master / qty on batch"
         int min_stock
+        date date_in "receive batch date"
+        string origin
+        string unit
+        string product_condition "new | second_hand"
         boolean has_variation
         json variation_sizes
+    }
+
+    %% ─── INVENTORY (pgAdmin tables) ────────────────────────────────────────────
+
+    stock_inventory {
+        bigint id PK
+        bigint category_id FK UK "→ categories (barcode_qr master)"
+        string name
+        string slug UK
+        string sku
+        int stock "on-hand sellable"
+        int stock_received "opening receipt total"
+        int min_stock
+        boolean manage_stock
+        decimal cost
+        decimal price
+        string unit
+        string origin
+        bigint brand_id FK "nullable → brands"
+        string product_condition "new | second_hand"
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    stock_received {
+        bigint id PK
+        bigint stock_inventory_id FK "nullable → stock_inventory"
+        bigint category_id FK UK "nullable → categories (receive batch)"
+        bigint product_id FK "nullable → products"
+        bigint created_by FK "nullable → users"
+        bigint corrects_stock_received_id FK "nullable → stock_received"
+        string entry_type "receive | adjustment"
+        int quantity
+        decimal unit_cost
+        decimal total_cost
+        string supplier_name
+        string invoice_number
+        date date_in
+        timestamp received_at
+        text notes
+        timestamp created_at
+        timestamp updated_at
     }
 
     products {
@@ -459,6 +507,13 @@ erDiagram
     categories ||--o{ categories : "parent → children"
     categories ||--o{ products : "category"
     categories ||--o{ products : "stock_label_id"
+    categories ||--o| stock_inventory : "mirrors master"
+    categories ||--o| stock_received : "mirrors receive batch"
+    stock_inventory ||--o{ stock_received : "receive ledger"
+    brands ||--o{ stock_inventory : "brand"
+    products ||--o{ stock_received : "linked product"
+    users ||--o{ stock_received : "created by"
+    stock_received ||--o| stock_received : "corrects"
     products ||--o{ product_images : "images"
     products ||--o{ discounts : "discounts"
 
@@ -511,6 +566,7 @@ erDiagram
 |-------|--------|
 | **Auth & Security** | `users`, `personal_access_tokens`, `otp_codes`, `user_device_sessions`, `user_trusted_devices`, `security_audit_logs` |
 | **Catalog** | `brands`, `categories`, `products`, `product_images`, `discounts`, `collections`, `banners`, `menus`, `settings` |
+| **Inventory** | `stock_inventory`, `stock_received` |
 | **Cart** | `carts`, `cart_items` |
 | **Orders** | `orders`, `order_items` |
 | **Payments** | `payments` (KHQR / Bakong / card) |
@@ -526,10 +582,11 @@ erDiagram
 
 ## Key Design Notes
 
-1. **`categories` is dual-purpose** — catalog tree nodes *and* stock/barcode labels (`type = 'barcode_qr'`). `products.stock_label_id` references this table for inventory labelling.
-2. **`discounts`** (originally `sales`) hold time-boxed promotions per product; the product model exposes `final_price` / `has_discount` as computed attributes.
-3. **POS mode** — `orders.sale_channel = 'pos'` with `pos_meta` JSON; `order_items.product_id` is **nullable** to allow off-catalog line items.
-4. **Vector image search** — `products.is_vector_indexed` / `vector_indexed_at` track CLIP-vector sync status with the external Qdrant service.
-5. **KHQR / Bakong payments** — `payments` stores full QR payloads (`khqr_payload`, `qr_string`, `qr_image_base64`) and Bakong webhook data alongside the standard status lifecycle.
-6. **Multi-device security** — every login creates a `user_device_sessions` row (linked to its Sanctum token) and optionally a `user_trusted_devices` record; all auth events are recorded in `security_audit_logs`.
-7. **Telegram broadcast pipeline** — `telegram_broadcasts` (batch job) → fan-out into `telegram_broadcast_deliveries` (one row per recipient), allowing per-message retry tracking.
+1. **`categories` is dual-purpose** — catalog tree nodes *and* stock/barcode labels (`type = 'barcode_qr'`). Masters have `parent_id IS NULL`; receive batches have `parent_id → master`. `products.stock_label_id` references this table for inventory labelling.
+2. **Dedicated inventory tables (pgAdmin)** — `stock_inventory` holds master labels (Stock & Inventory); `stock_received` holds the receive ledger (Stock Received). Both mirror `categories` rows with `type = 'barcode_qr'` and are kept in sync via `StockTableSyncService` on create/update/delete and Quick Restock. Admin UI still reads from `categories`; pgAdmin can query the dedicated tables directly.
+3. **`discounts`** (originally `sales`) hold time-boxed promotions per product; the product model exposes `final_price` / `has_discount` as computed attributes.
+4. **POS mode** — `orders.sale_channel = 'pos'` with `pos_meta` JSON; `order_items.product_id` is **nullable** to allow off-catalog line items.
+5. **Vector image search** — `products.is_vector_indexed` / `vector_indexed_at` track CLIP-vector sync status with the external Qdrant service.
+6. **KHQR / Bakong payments** — `payments` stores full QR payloads (`khqr_payload`, `qr_string`, `qr_image_base64`) and Bakong webhook data alongside the standard status lifecycle.
+7. **Multi-device security** — every login creates a `user_device_sessions` row (linked to its Sanctum token) and optionally a `user_trusted_devices` record; all auth events are recorded in `security_audit_logs`.
+8. **Telegram broadcast pipeline** — `telegram_broadcasts` (batch job) → fan-out into `telegram_broadcast_deliveries` (one row per recipient), allowing per-message retry tracking.

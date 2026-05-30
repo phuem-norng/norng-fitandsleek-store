@@ -3,16 +3,21 @@
 namespace App\Http\Controllers\Api\Storefront;
 
 use App\Http\Controllers\Controller;
-use App\Models\Brand;
-use App\Models\Category;
-use App\Models\Product;
 use App\Models\Setting;
+use App\Models\User;
+use App\Services\StorefrontChatContextService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class ChatbotController extends Controller
 {
+    public function __construct(
+        private readonly StorefrontChatContextService $storeContext,
+    ) {
+    }
+
     private function fetchAvailableModel(?string $apiKey): ?string
     {
         if (!$apiKey)
@@ -81,66 +86,45 @@ class ChatbotController extends Controller
 
         return (bool) $verify;
     }
-    private function buildStoreContext(): string
+    private function buildStoreContext(string $message, ?User $user = null): string
     {
-        $lines = [];
+        return $this->storeContext->toPromptContext($message, $user);
+    }
 
-        try {
-            $productCount = Product::where('is_active', true)->count();
-            $categoryCount = Category::where('is_active', true)->count();
-            $brandCount = Brand::where('is_active', true)->count();
-
-            if ($productCount)
-                $lines[] = "Products available: {$productCount}.";
-            if ($categoryCount)
-                $lines[] = "Categories: {$categoryCount}.";
-            if ($brandCount)
-                $lines[] = "Brands: {$brandCount}.";
-
-            $categories = Category::where('is_active', true)
-                ->orderBy('sort_order')
-                ->limit(8)
-                ->pluck('name')
-                ->filter()
-                ->values();
-            if ($categories->count()) {
-                $lines[] = "Top categories: " . $categories->implode(', ') . ".";
-            }
-
-            $brands = Brand::where('is_active', true)
-                ->orderBy('sort_order')
-                ->limit(8)
-                ->pluck('name')
-                ->filter()
-                ->values();
-            if ($brands->count()) {
-                $lines[] = "Top brands: " . $brands->implode(', ') . ".";
-            }
-
-            $latestProducts = Product::where('is_active', true)
-                ->orderByDesc('created_at')
-                ->limit(5)
-                ->get(['name', 'price']);
-            if ($latestProducts->count()) {
-                $items = $latestProducts
-                    ->map(fn($p) => $p->name . " ($" . number_format((float) $p->price, 2) . ")")
-                    ->implode(', ');
-                $lines[] = "New arrivals: {$items}.";
-            }
-
-            $contactEmail = Setting::where('key', 'footer_contact_email')->first()?->value;
-            $contactPhone = Setting::where('key', 'footer_contact_phone')->first()?->value;
-            if ($contactEmail || $contactPhone) {
-                $contact = trim(($contactEmail ? "Email: {$contactEmail}." : '') . ' ' . ($contactPhone ? "Phone: {$contactPhone}." : ''));
-                $lines[] = "Support contact: {$contact}";
-            }
-        } catch (\Throwable $e) {
-            // avoid breaking chatbot on context errors
+    private function polishReply(string $reply, array $products): string
+    {
+        if ($products === []) {
+            return trim($reply);
         }
 
-        if (!$lines)
-            return '';
-        return "Store context: " . implode(' ', $lines);
+        $clean = preg_replace('/^\|.+\|\s*\r?\n\|[-:\s|]+\|\s*\r?\n(?:\|.+\|\s*\r?\n?)+/m', '', $reply) ?? $reply;
+        $clean = preg_replace('/^#{1,6}\s+.+$/m', '', $clean) ?? $clean;
+        $clean = preg_replace("/\n{3,}/", "\n\n", trim($clean));
+
+        if ($clean === '') {
+            return 'Here are some picks from our store:';
+        }
+
+        if (strlen($clean) > 280) {
+            $parts = preg_split('/(?<=[.!?។])\s+/u', $clean) ?: [$clean];
+
+            return trim(implode(' ', array_slice($parts, 0, 2)));
+        }
+
+        return $clean;
+    }
+
+    private function resolveUser(Request $request): ?User
+    {
+        $token = $request->bearerToken();
+        if (! $token) {
+            return null;
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        $user = $accessToken?->tokenable;
+
+        return $user instanceof User ? $user : null;
     }
 
     private function defaults(): array
@@ -158,7 +142,7 @@ class ChatbotController extends Controller
 
     public function settings()
     {
-        $row = \App\Models\Setting::where('key', 'chatbot')->first();
+        $row = Setting::where('key', 'chatbot')->first();
         $value = is_array($row?->value) ? $row->value : [];
 
         return response()->json([
@@ -204,10 +188,14 @@ class ChatbotController extends Controller
             ],
         ];
 
-        $context = $this->buildStoreContext();
-        $systemText = 'You are FitandSleek customer support assistant. Be friendly, concise, and helpful. Keep replies short and focus on store help, orders, shipping, returns, sizing, and product suggestions. If the user writes in Khmer, respond in Khmer. Otherwise respond in English.';
+        $user = $this->resolveUser($request);
+        $context = $this->buildStoreContext($validated['message'], $user);
+        $systemText = 'You are Fit & Sleek customer support assistant. Be friendly, professional, and concise (1–3 sentences). '
+            . 'Help with products, orders, shipping, returns, sizing, discounts, and store navigation. '
+            . 'If the user writes in Khmer, respond in Khmer. Otherwise respond in English. '
+            . 'Do NOT use markdown tables — product cards appear in the chat UI.';
         if ($context) {
-            $systemText .= "\n" . $context;
+            $systemText .= "\n\n[Live store database — use ONLY this data]\n" . $context;
         }
 
         $payload = [
@@ -218,8 +206,8 @@ class ChatbotController extends Controller
             ],
             'contents' => $contents,
             'generationConfig' => [
-                'temperature' => 0.6,
-                'maxOutputTokens' => 400,
+                'temperature' => 0.55,
+                'maxOutputTokens' => 512,
             ],
         ];
 
@@ -273,8 +261,12 @@ class ChatbotController extends Controller
             ], 500);
         }
 
+        $products = $this->storeContext->buildRichProductsForMessage($validated['message']);
+        $reply = $this->polishReply(trim($text), $products);
+
         return response()->json([
-            'reply' => $text,
+            'reply' => $reply,
+            'products' => $products,
         ]);
     }
 }

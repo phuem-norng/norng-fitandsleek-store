@@ -9,6 +9,10 @@ use Illuminate\Validation\ValidationException;
 
 class StockReceiveService
 {
+    public function __construct(
+        private readonly StockTableSyncService $stockTables,
+    ) {
+    }
     /** Units recorded on a receive batch (Stock Received log). */
     public function receivedQuantity(Category $category): int
     {
@@ -225,8 +229,14 @@ class StockReceiveService
                 $inventory->save();
             }
 
+            $inventory = $inventory->fresh();
+            $received = $received->fresh();
+
+            $this->stockTables->syncMasterFromCategory($inventory);
+            $this->stockTables->syncReceiveFromCategory($received);
+
             return [
-                'inventory' => $inventory->fresh(),
+                'inventory' => $inventory,
                 'received' => $received,
             ];
         });

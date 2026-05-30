@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Services\PaidOrderInventory;
 use App\Services\StockReceiveService;
+use App\Services\StockTableSyncService;
 use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -446,6 +447,12 @@ class CategoryAdminController extends BaseAdminController
         $this->normalizeCategoryImages($c);
         $c->refresh();
 
+        if ($c->type === PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+            $stockTables = app(StockTableSyncService::class);
+            $stockTables->syncMasterFromCategory($c);
+            $stockTables->syncReceiveFromCategory($c);
+        }
+
         return response()->json(['data' => $this->mapCategory($c)], 201);
     }
 
@@ -556,12 +563,20 @@ class CategoryAdminController extends BaseAdminController
             'variation_sizes' => array_key_exists('variation_sizes', $validated) ? $validated['variation_sizes'] : $category->variation_sizes,
         ]);
 
-        DB::transaction(function () use ($category, $stockReceive, $recalcSnapshot) {
+        $stockTables = app(StockTableSyncService::class);
+
+        DB::transaction(function () use ($category, $stockReceive, $recalcSnapshot, $stockTables) {
             $category->save();
 
             $this->normalizeCategoryImages($category);
 
             $stockReceive->syncInventoryAfterReceiveChange($category->fresh(), $recalcSnapshot);
+
+            $fresh = $category->fresh();
+            if ($fresh->type === PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
+                $stockTables->syncMasterFromCategory($fresh);
+                $stockTables->syncReceiveFromCategory($fresh);
+            }
         });
 
         return response()->json(['data' => $this->mapCategory($category->fresh())]);
@@ -569,12 +584,16 @@ class CategoryAdminController extends BaseAdminController
 
     public function destroy(Category $category, StockReceiveService $stockReceive)
     {
-        DB::transaction(function () use ($category, $stockReceive) {
+        $stockTables = app(StockTableSyncService::class);
+
+        DB::transaction(function () use ($category, $stockReceive, $stockTables) {
             $recalcSnapshot = $stockReceive->inventoryRecalcSnapshotForReceiveChange($category);
 
             if ($category->image_path) {
                 $this->deleteMediaPath($category->image_path);
             }
+
+            $stockTables->deleteForCategory($category);
 
             $category->delete();
 

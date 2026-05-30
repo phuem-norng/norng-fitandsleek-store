@@ -54,6 +54,22 @@ export function isTelegramWebApp() {
   return Boolean(getTelegramWebApp());
 }
 
+/** Link the logged-in store account to this Telegram user (Mini App). */
+export async function linkTelegramWebAppAccount(apiClient) {
+  const tg = getTelegramWebApp();
+  const initData = tg?.initData;
+  if (!initData || !apiClient) return null;
+
+  try {
+    const { data } = await apiClient.post("/telegram/link-webapp", {
+      init_data: initData,
+    });
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export function triggerTelegramHaptic(type = "impact", style = "light") {
   const tg = getTelegramWebApp();
   if (!tg?.HapticFeedback) return;

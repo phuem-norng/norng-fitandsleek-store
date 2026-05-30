@@ -74,6 +74,12 @@ function LegacyBarcodeQrToStockInventoryEdit() {
   return <Navigate to={`/admin/stock-inventory/${id}/edit`} replace />;
 }
 
+/** Legacy chat/API links used `/products/:slug`; storefront route is `/p/:slug`. */
+function ProductSlugRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/p/${slug}`} replace />;
+}
+
 function CustomerPageSkeleton() {
   return (
     <div className="container-safe py-8">
@@ -198,6 +204,7 @@ export default function App() {
           <Route path="/discounts" element={<Discounts />} />
           <Route path="/discounts/:categorySlug" element={<DiscountCategory />} />
           <Route path="/p/:slug" element={<ProductDetail />} />
+          <Route path="/products/:slug" element={<ProductSlugRedirect />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/support" element={<SupportPage />} />

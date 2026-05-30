@@ -20,12 +20,23 @@ php artisan demo:import-historical --force
 | **orders** | ~900+ sales 2023–2025 | `order_number LIKE 'DEMO-%'` |
 | **order_items** | Line items for demo orders | `order_id IN (SELECT id FROM orders WHERE order_number LIKE 'DEMO-%')` |
 | **users** | 20 demo customers | `email LIKE '%@fitandsleek.test'` |
-| **categories** | Stock masters (30) + receive batches (1080) | `slug LIKE 'FS-STOCK-DEMO-%'` |
-| **stock_received** | Ledger rows (same receives, own table) | `notes = 'Historical demo 2023–2025'` |
+| **stock_inventory** | Master labels (Stock & Inventory) | `slug LIKE 'FS-STOCK-DEMO-M%'` |
+| **stock_received** | Receive ledger (Stock Received) | `notes LIKE '%demo%'` or join `stock_inventory` |
+| **categories** | Legacy mirror (same data, `type = barcode_qr`) | `slug LIKE 'FS-STOCK-DEMO-%'` |
 
 ### Stock Received admin page
 
-The UI reads receive events from **categories** rows where `parent_id IS NOT NULL` and `type = 'barcode_qr'`:
+Dedicated table **`stock_received`** (pgAdmin). The admin UI still reads from **categories** receive batches (`parent_id IS NOT NULL`, `type = barcode_qr`), kept in sync automatically.
+
+```sql
+SELECT sr.id, si.name, sr.quantity, sr.date_in, sr.received_at, sr.invoice_number
+FROM stock_received sr
+JOIN stock_inventory si ON si.id = sr.stock_inventory_id
+ORDER BY sr.received_at DESC
+LIMIT 50;
+```
+
+Legacy mirror in categories:
 
 ```sql
 SELECT id, name, slug, date_in, stock_received, stock, created_at, parent_id

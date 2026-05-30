@@ -374,7 +374,7 @@ class ProductAdminController extends Controller
                 'target_audience' => 'all',
                 'is_active' => true,
                 'created_by' => $request->user()->id,
-                'link_url' => url('/p/' . $product->slug),
+                'link_url' => '/p/' . $product->slug,
                 'media_url' => $product->image_url,
                 'media_type' => $product->image_url ? 'image' : null,
             ];

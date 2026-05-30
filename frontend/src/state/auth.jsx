@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
 import { getDeviceMeta } from "../lib/device";
+import { isTelegramWebApp, linkTelegramWebAppAccount } from "../lib/telegramWebApp";
 
 const AUTH_CONTEXT_KEY = "__fitandsleek_auth_context__";
 const AuthCtx = globalThis[AUTH_CONTEXT_KEY] || createContext(null);
@@ -50,6 +51,11 @@ export function AuthProvider({ children }) {
     return localStorage.getItem(TOKEN_KEY);
   });
 
+  const syncTelegramLink = async () => {
+    if (!isTelegramWebApp() || !localStorage.getItem(TOKEN_KEY)) return;
+    await linkTelegramWebAppAccount(api);
+  };
+
   const loadMe = async () => {
     const currentToken = localStorage.getItem(TOKEN_KEY);
     if (!currentToken) {
@@ -66,6 +72,7 @@ export function AuthProvider({ children }) {
       const { data } = await api.get("/me");
       setUser(data);
       writeCachedUser(data);
+      await syncTelegramLink();
     } catch (err) {
       if (err.response?.status === 404 || err.response?.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
@@ -96,6 +103,7 @@ export function AuthProvider({ children }) {
         setToken(newToken);
         setUser(data.user);
         writeCachedUser(data.user);
+        await syncTelegramLink();
       }
 
       if (data?.otp_required || data?.verification_required) {
@@ -138,6 +146,7 @@ export function AuthProvider({ children }) {
       setToken(newToken);
       setUser(data.user);
       writeCachedUser(data.user);
+      await syncTelegramLink();
     }
     return data;
   };
@@ -167,6 +176,7 @@ export function AuthProvider({ children }) {
       setToken(newToken);
       setUser(data.user);
       writeCachedUser(data.user);
+      await syncTelegramLink();
     }
     return data;
   };
@@ -183,6 +193,7 @@ export function AuthProvider({ children }) {
       setToken(newToken);
       setUser(data.user);
       writeCachedUser(data.user);
+      await syncTelegramLink();
     }
     return data;
   };

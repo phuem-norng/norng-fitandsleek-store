@@ -110,8 +110,12 @@ class AdminAiChatController extends Controller
 
         $reply = $this->substituteUnresolvedDifyPlaceholders($reply, $payload['inputs']);
 
+        $tables = $this->dashboardContext->buildRichTablesForMessage($validated['message']);
+        $reply = $this->polishReplyForRichTables($reply, $tables);
+
         return response()->json([
             'reply' => $reply,
+            'tables' => $tables,
             'conversation_id' => $data['conversation_id'] ?? ($validated['conversation_id'] ?? null),
             'message_id' => $data['message_id'] ?? null,
         ]);
@@ -192,18 +196,57 @@ class AdminAiChatController extends Controller
         $facts = $this->dashboardContext->toCompactQueryContext($message);
 
         $style = $isFollowUp
-            ? "Reply in 1–3 short sentences. Answer ONLY what was asked. Do NOT repeat unrelated metrics.\n\n"
-            : '';
+            ? "Reply in 1–2 short sentences only. Answer ONLY what was asked. Use the admin's language (Khmer or English). "
+                . "NEVER use markdown tables (| pipe syntax) or ### headings — the app renders rich tables automatically.\n\n"
+            : "Give a brief professional answer (1–2 sentences). Match the admin's language (Khmer or English). "
+                . "NEVER use markdown tables (| pipe syntax) or ### headings — product/inventory data appears as UI tables automatically.\n\n";
 
         if (! config('services.dify.use_inputs_only', true)) {
             $facts = $this->dashboardContext->toPromptBlock() . "\n\n" . $facts;
         }
 
         return $style
-            . "[Live database facts — use ONLY this data; never invent numbers, emails, or dates]\n"
+            . "[Live Fit & Sleek Admin Console data — authoritative source; never invent data]\n"
             . $facts
             . "\n\n[Admin question]\n"
             . $message;
+    }
+
+    /**
+     * Remove markdown table dumps when structured UI tables are attached.
+     *
+     * @param  list<array<string, mixed>>  $tables
+     */
+    private function polishReplyForRichTables(string $reply, array $tables): string
+    {
+        if ($tables === []) {
+            return $reply;
+        }
+
+        $clean = preg_replace('/^\|.+\|\s*\r?\n\|[-:\s|]+\|\s*\r?\n(?:\|.+\|\s*\r?\n?)+/m', '', $reply) ?? $reply;
+        $clean = preg_replace('/^#{1,6}\s+.+$/m', '', $clean) ?? $clean;
+        $clean = preg_replace("/\n{3,}/", "\n\n", trim($clean));
+
+        if ($clean === '') {
+            foreach ($tables as $table) {
+                if (($table['variant'] ?? '') === 'discount') {
+                    return 'ខាងក្រោមជាផលិតផលដែលលក់យឺត — គួរពិចារណាបញ្ចុះតម្លៃ៖';
+                }
+            }
+
+            return 'នេះជាទិន្នន័យពី database៖';
+        }
+
+        $paragraphs = preg_split('/\n\s*\n/', $clean) ?: [$clean];
+        $first = trim((string) ($paragraphs[0] ?? $clean));
+
+        if (strlen($first) > 220) {
+            $sentences = preg_split('/(?<=[.!?។])\s+/u', $first) ?: [$first];
+
+            return trim(implode(' ', array_slice($sentences, 0, 2)));
+        }
+
+        return $first;
     }
 
     /** Accept https://api.dify.ai or https://api.dify.ai/v1 — always return …/v1 base. */

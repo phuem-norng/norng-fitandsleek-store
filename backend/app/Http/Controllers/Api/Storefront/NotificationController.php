@@ -62,7 +62,7 @@ class NotificationController extends Controller
                     'type' => 'message',
                     'title' => $message->title,
                     'message' => $message->content,
-                    'link_url' => $message->link_url,
+                    'link_url' => $this->normalizeStorefrontLink($message->link_url),
                     'media_url' => $message->media_url,
                     'media_type' => $message->media_type,
                     'language' => $message->language,
@@ -170,6 +170,40 @@ class NotificationController extends Controller
         $notification->delete();
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Convert stored URLs to in-app storefront paths for the SPA router.
+     */
+    private function normalizeStorefrontLink(?string $link): ?string
+    {
+        if ($link === null || trim($link) === '') {
+            return null;
+        }
+
+        $link = trim($link);
+
+        if (str_starts_with($link, '/')) {
+            return preg_replace('#^/products/#', '/p/', $link) ?: null;
+        }
+
+        $path = parse_url($link, PHP_URL_PATH);
+        if (! is_string($path) || $path === '' || $path === '/') {
+            return null;
+        }
+
+        $query = parse_url($link, PHP_URL_QUERY);
+        $fragment = parse_url($link, PHP_URL_FRAGMENT);
+        $normalized = preg_replace('#^/products/#', '/p/', $path);
+
+        if ($query) {
+            $normalized .= '?' . $query;
+        }
+        if ($fragment) {
+            $normalized .= '#' . $fragment;
+        }
+
+        return $normalized;
     }
 }
 
