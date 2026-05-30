@@ -90,7 +90,7 @@ export default function AdminPayments() {
  const handleVerify = async (payment) => {
  const confirmRes = await warningConfirm({
  enTitle: "Verify payment?",
- enText: `Mark payment #${payment.id} as successful? Customers will see a completed status.`,
+ enText: `Mark payment #${payment.id} as successful? The customer order will be confirmed and their checkout screen will update.`,
  enConfirm: "Verify",
  intent: "primary",
  });
@@ -209,6 +209,10 @@ export default function AdminPayments() {
  <p className="text-sm text-slate-500 dark:text-slate-400">
  View and manage all payment transactions
  </p>
+ <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+ <strong>KHQR (Bakong):</strong> After the customer pays, check your Bakong app, then click{" "}
+ <strong>Verify</strong> on the pending payment below. The customer&apos;s checkout page updates automatically.
+ </div>
  </div>
 
  {/* Filters */}

@@ -25,24 +25,33 @@ class BakongKhqrService
         return filled(config('services.bakong.proxy_url'));
     }
 
+    public static function manualVerifyEnabled(): bool
+    {
+        return filter_var(config('services.bakong.manual_verify'), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    public static function serverShouldPollNbc(): bool
+    {
+        if (self::manualVerifyEnabled()) {
+            return false;
+        }
+
+        if (! self::hostingRequiresProxy()) {
+            return true;
+        }
+
+        return self::proxyConfigured();
+    }
+
     public static function checkoutReady(): bool
     {
-        if (! filled(config('services.bakong.token')) || ! filled(config('services.bakong.receive_account'))) {
-            return false;
-        }
-
-        if (self::hostingRequiresProxy() && ! self::proxyConfigured()) {
-            return false;
-        }
-
-        return true;
+        return filled(config('services.bakong.token'))
+            && filled(config('services.bakong.receive_account'));
     }
 
     public static function hostingBlockedUserMessage(): string
     {
-        return 'Payment was sent but this server cannot confirm it yet. '
-            . 'The store must enable Bakong proxy on Render (BAKONG_PROXY_URL). '
-            . 'Keep this page open — it will update when configured.';
+        return 'Confirming your payment… keep this screen open after paying in your banking app.';
     }
 
     public static function hostingBlockedAdminMessage(): string

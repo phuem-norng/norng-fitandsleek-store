@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Models\Cart;
 use App\Models\Payment;
 use App\Models\Order;
 use App\Services\PaidOrderInventory;
@@ -130,6 +131,11 @@ class PaymentAdminController extends BaseAdminController
 
             $order->load('items.product');
             PaidOrderInventory::applyForOrder($order);
+
+            $cart = Cart::with('items')->where('user_id', $order->user_id)->first();
+            if ($cart) {
+                $cart->items()->delete();
+            }
         });
 
         return response()->json([
