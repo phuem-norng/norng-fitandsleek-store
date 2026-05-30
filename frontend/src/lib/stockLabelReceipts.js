@@ -22,7 +22,8 @@ export const receivedQuantityForRow = (row) => {
         const q = parseInt(String(row.stock_received), 10);
         if (Number.isFinite(q)) return Math.max(0, q);
     }
-    if (row.stock != null && row.stock !== "") {
+    // Quick Restock batches only — master sellable `stock` must not appear in received totals.
+    if (row.parent_id != null && row.parent_id !== "" && row.stock != null && row.stock !== "") {
         const q = parseInt(String(row.stock), 10);
         if (Number.isFinite(q)) return Math.max(0, q);
     }
@@ -210,15 +211,19 @@ export const resolveMasterCategoryForLabel = (label, allCategories) => {
 /** Unit selling price for second-hand average bundle labels. */
 export const averageBundleSellingUnitPrice = (master) => {
     if (!master) return "0";
-    if (master.price != null && master.price !== "") {
-        const fromPrice = Number(master.price);
-        if (Number.isFinite(fromPrice) && fromPrice >= 0) return String(fromPrice);
-    }
     const cost = Number(master.bundle_total_cost);
     const qty = parseInt(String(master.bundle_total_quantity ?? ""), 10);
-    if (Number.isFinite(cost) && cost >= 0 && Number.isFinite(qty) && qty > 0) {
-        return (cost / qty).toFixed(2);
+    const fromBundle =
+        Number.isFinite(cost) && cost >= 0 && Number.isFinite(qty) && qty > 0
+            ? (cost / qty).toFixed(2)
+            : null;
+    if (master.price != null && master.price !== "") {
+        const fromPrice = Number(master.price);
+        if (Number.isFinite(fromPrice) && fromPrice > 0) return String(fromPrice);
+        if (fromPrice === 0 && fromBundle != null) return fromBundle;
+        if (Number.isFinite(fromPrice) && fromPrice >= 0) return String(fromPrice);
     }
+    if (fromBundle != null) return fromBundle;
     return "0";
 };
 

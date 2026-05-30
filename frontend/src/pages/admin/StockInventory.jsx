@@ -24,6 +24,7 @@ import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 import {
+    averageBundleSellingUnitPrice,
     BARCODE_QR_TYPE,
     batchReceiptRefForRow,
     buildStockReceivedLogRows,
@@ -82,7 +83,10 @@ const effectiveRowStock = (row, receivedPage, allRows = []) => {
             }, 0);
         }
         if (row.stock_received != null) return parseInt(row.stock_received, 10) || 0;
-        if (row.stock != null) return parseInt(row.stock, 10) || 0;
+        // Receive batches only: legacy rows may have qty on `stock` before stock_received existed.
+        if (row.parent_id != null && row.parent_id !== "" && row.stock != null) {
+            return parseInt(row.stock, 10) || 0;
+        }
         return 0;
     }
     if (row.stock == null) return null;
@@ -297,7 +301,7 @@ const matchesOriginFilterSet = (item, selected) => matchesSection(selected, "ori
 
 const unitPriceForLabel = (item) => {
     if (isAverageBundleLabel(item)) {
-        const price = Number(item?.price);
+        const price = Number(averageBundleSellingUnitPrice(item));
         return Number.isFinite(price) ? price : null;
     }
     const price = Number(item?.price);
@@ -1462,6 +1466,24 @@ export default function AdminBarcodeQR() {
         });
     };
 
+    /** Sum of linked POS product stock × price (used for average-bundle total price & catalog units). */
+    const linkedCatalogValuation = (item) => {
+        const linked = linkedProductsForLabel(item);
+        let total = 0;
+        let count = 0;
+        let units = 0;
+        for (const product of linked) {
+            const price = Number(product?.price);
+            if (!Number.isFinite(price)) continue;
+            const stock = Number(product?.stock);
+            const qty = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+            total += price * qty;
+            count += 1;
+            units += qty;
+        }
+        return count > 0 ? { amount: total, sourceCount: count, units } : null;
+    };
+
     const displayRowStock = (item) => {
         if (!item?.manage_stock) return null;
         // Stock Received: always sum receipt rows (opening + batches), including average bundle.
@@ -1585,11 +1607,7 @@ export default function AdminBarcodeQR() {
 
     const totalPriceForLabel = (item) => {
         if (isAverageBundleLabel(item)) {
-            const linked = linkedProductsForLabel(item);
-            const units = displayRowStock(item) ?? averageBundleOnHandQuantity(item);
-            const price = Number(item?.price);
-            if (!Number.isFinite(price)) return null;
-            return { amount: price * units, sourceCount: linked.length, units };
+            return linkedCatalogValuation(item);
         }
 
         const linked = linkedProductsForLabel(item);
@@ -1620,7 +1638,11 @@ export default function AdminBarcodeQR() {
 
     const averageUnitPriceForLabel = (item) => {
         if (!isAverageBundleLabel(item)) return null;
-        const price = Number(item?.price);
+        const catalog = linkedCatalogValuation(item);
+        if (catalog && catalog.units > 0) {
+            return catalog.amount / catalog.units;
+        }
+        const price = Number(averageBundleSellingUnitPrice(item));
         return Number.isFinite(price) ? price : null;
     };
 
@@ -3050,7 +3072,7 @@ export default function AdminBarcodeQR() {
                     return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
                 }, 0);
                 const unitsLabel = isAverageBundle
-                    ? `${displayRowStock(linkedProductsItem) ?? averageBundleOnHandQuantity(linkedProductsItem)} units on hand`
+                    ? `${catalogUnits} unit${catalogUnits === 1 ? "" : "s"}`
                     : isReceiveBatch
                         ? `${receiptUnits} units in this receipt`
                         : `${catalogUnits} units`;

@@ -196,7 +196,7 @@ class StockReceiveService
                 'label_category_ids' => $inventory->label_category_ids,
                 'manage_stock' => true,
                 'stock_received' => $quantity,
-                'stock' => $quantity,
+                'stock' => null,
                 'min_stock' => $inventory->min_stock,
                 'date_in' => now()->toDateString(),
                 'product_condition' => $productCondition,

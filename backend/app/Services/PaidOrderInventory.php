@@ -58,10 +58,10 @@ class PaidOrderInventory
         }
 
         $productStock = (int) $product->stock;
-        $bundle = self::findBarcodeBundleByCode((string) ($product->barcode_code ?? ''));
+        $pool = self::sellablePoolForProduct($product);
 
-        if ($bundle && ($bundle->manage_stock ?? false) && $bundle->stock !== null) {
-            return min($productStock, (int) $bundle->stock);
+        if ($pool !== null) {
+            return min($productStock, $pool);
         }
 
         return $productStock;
@@ -95,7 +95,11 @@ class PaidOrderInventory
             $qty
         );
 
-        self::decrementBarcodeBundleStock((string) ($product->barcode_code ?? ''), $qty);
+        if (! empty($product->stock_label_id)) {
+            self::decrementStockLabelPool($product, $qty);
+        } else {
+            self::decrementBarcodeBundleStock((string) ($product->barcode_code ?? ''), $qty);
+        }
     }
 
     public static function applyForOrder(Order $order): void
@@ -106,6 +110,121 @@ class PaidOrderInventory
         }
     }
 
+    /** Sellable units on the linked inventory master, if tracked. */
+    public static function sellablePoolForProduct(Product $product): ?int
+    {
+        if (! empty($product->stock_label_id)) {
+            $label = Category::query()
+                ->where('id', (int) $product->stock_label_id)
+                ->where('type', self::BARCODE_CATEGORY_TYPE)
+                ->first();
+
+            if ($label) {
+                $master = self::resolveInventoryMaster($label);
+                if (($master->manage_stock ?? false) && $master->stock !== null) {
+                    return (int) $master->stock;
+                }
+
+                return null;
+            }
+        }
+
+        $bundle = self::findBarcodeBundleByCode((string) ($product->barcode_code ?? ''));
+        if (! $bundle) {
+            return null;
+        }
+
+        $master = self::resolveInventoryMaster($bundle);
+        if (! ($master->manage_stock ?? false) || $master->stock === null) {
+            return null;
+        }
+
+        return (int) $master->stock;
+    }
+
+    /**
+     * Inventory master for a barcode_qr row (never a Quick Restock receive-batch child).
+     */
+    public static function isAverageBundleCategory(Category $category): bool
+    {
+        return ($category->product_condition ?? 'new') === 'second_hand'
+            && ($category->second_hand_sale_type ?? 'single') === 'average_bundle';
+    }
+
+    public static function averageBundleUnitPrice(Category $master): float
+    {
+        if ($master->price !== null && (float) $master->price > 0) {
+            return round((float) $master->price, 2);
+        }
+
+        $cost = (float) ($master->bundle_total_cost ?? 0);
+        $qty = (int) ($master->bundle_total_quantity ?? 0);
+        if ($qty > 0 && $cost >= 0) {
+            return round($cost / $qty, 2);
+        }
+
+        if ($master->price !== null && (float) $master->price >= 0) {
+            return round((float) $master->price, 2);
+        }
+
+        return 0.0;
+    }
+
+    public static function resolveInventoryMaster(Category $label): Category
+    {
+        if ($label->parent_id) {
+            $parent = Category::query()
+                ->where('id', $label->parent_id)
+                ->where('type', self::BARCODE_CATEGORY_TYPE)
+                ->first();
+
+            if ($parent) {
+                return $parent;
+            }
+        }
+
+        return $label;
+    }
+
+    /**
+     * Reduce sellable pool on the inventory master only.
+     * stock_received and receive-batch rows are never modified (Stock Received log stays fixed).
+     */
+    public static function decrementInventoryMasterStock(Category $label, int $qty): void
+    {
+        if ($qty <= 0) {
+            return;
+        }
+
+        $master = self::resolveInventoryMaster($label);
+        if (! ($master->manage_stock ?? false) || $master->stock === null) {
+            return;
+        }
+
+        $current = (int) $master->stock;
+        $master->update([
+            'stock' => max(0, $current - $qty),
+        ]);
+    }
+
+    public static function decrementStockLabelPool(Product $product, int $qty): void
+    {
+        if ($qty <= 0 || empty($product->stock_label_id)) {
+            return;
+        }
+
+        $label = Category::query()
+            ->where('id', (int) $product->stock_label_id)
+            ->where('type', self::BARCODE_CATEGORY_TYPE)
+            ->first();
+
+        if (! $label) {
+            return;
+        }
+
+        self::decrementInventoryMasterStock($label, $qty);
+    }
+
     public static function decrementBarcodeBundleStock(string $barcodeCode, int $qty): void
     {
         if ($qty <= 0) {
@@ -113,14 +232,10 @@ class PaidOrderInventory
         }
 
         $bundle = self::findBarcodeBundleByCode($barcodeCode);
-        if (! $bundle || ! ($bundle->manage_stock ?? false) || $bundle->stock === null) {
+        if (! $bundle) {
             return;
         }
 
-        // Sellable on-hand only; stock_received is a permanent received log (Stock Received admin).
-        $current = (int) $bundle->stock;
-        $bundle->update([
-            'stock' => max(0, $current - $qty),
-        ]);
+        self::decrementInventoryMasterStock($bundle, $qty);
     }
 }

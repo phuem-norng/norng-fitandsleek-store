@@ -285,7 +285,8 @@ class PosSaleController extends Controller
     {
         $candidates = BarcodeScanStockService::collectScanCandidates($code);
         $variantMatch = \App\Services\ProductVariantInventory::findBySkuBarcodeCandidates($candidates);
-        $products = BarcodeScanStockService::findLinkedProductsAmongCandidates($candidates);
+        $bundle = BarcodeScanStockService::findBundleAmongCandidates($candidates);
+        $products = BarcodeScanStockService::findLinkedProductsAmongCandidates($candidates, $bundle);
         $product = $variantMatch['product'] ?? $products->first();
         $variant = $variantMatch['variant'] ?? null;
         $lineTotal = round($unitPrice * $qty, 2);

@@ -62,12 +62,17 @@ class PaidOrderInventoryTest extends TestCase
             $table->boolean('is_active')->default(true);
             $table->boolean('manage_stock')->default(false);
             $table->unsignedInteger('stock')->nullable();
+            $table->unsignedInteger('stock_received')->nullable();
+            $table->string('product_condition', 30)->nullable();
+            $table->string('second_hand_sale_type', 30)->nullable();
+            $table->decimal('price', 12, 2)->nullable();
             $table->timestamps();
         });
 
         Schema::create('products', function (Blueprint $table) {
             $table->id();
             $table->foreignId('category_id')->constrained('categories')->cascadeOnDelete();
+            $table->unsignedBigInteger('stock_label_id')->nullable();
             $table->string('name', 180);
             $table->string('slug', 200)->unique();
             $table->string('sku', 60)->unique();
@@ -353,5 +358,143 @@ class PaidOrderInventoryTest extends TestCase
 
         $this->assertSame(6, (int) $product->stock);
         $this->assertSame(4, (int) $barcodeBundle->stock);
+    }
+
+    public function test_paid_order_keeps_stock_received_and_receive_batch_stock_unchanged(): void
+    {
+        $user = User::create([
+            'name' => 'Buyer 4',
+            'email' => 'buyer4-'.uniqid().'@example.test',
+            'password' => Hash::make('secret'),
+        ]);
+
+        $productCategory = Category::create([
+            'name' => 'Men Clothes',
+            'slug' => 'men-clothes-'.uniqid(),
+            'type' => 'clothing',
+            'is_active' => true,
+        ]);
+
+        $master = Category::create([
+            'name' => 'MEN CLOTHES SECOND HAND AVERAGE',
+            'slug' => '8VWI26G4O2IX-'.uniqid(),
+            'type' => PaidOrderInventory::BARCODE_CATEGORY_TYPE,
+            'is_active' => true,
+            'manage_stock' => true,
+            'stock' => 80,
+            'product_condition' => 'second_hand',
+            'second_hand_sale_type' => 'average_bundle',
+        ]);
+
+        $receiveBatch = Category::create([
+            'parent_id' => $master->id,
+            'name' => $master->name,
+            'slug' => $master->slug.'-R'.uniqid(),
+            'type' => PaidOrderInventory::BARCODE_CATEGORY_TYPE,
+            'is_active' => true,
+            'manage_stock' => true,
+            'stock_received' => 100,
+            'stock' => 100,
+            'product_condition' => 'second_hand',
+            'second_hand_sale_type' => 'average_bundle',
+        ]);
+
+        $product = Product::create([
+            'category_id' => $productCategory->id,
+            'name' => 'Jacket',
+            'slug' => 'jacket-'.uniqid(),
+            'sku' => 'SKU-J-'.uniqid(),
+            'description' => null,
+            'price' => 20,
+            'stock' => 10,
+            'is_active' => true,
+            'barcode_code' => 'product-only-barcode',
+            'stock_label_id' => $master->id,
+            'audience' => 'men',
+        ]);
+
+        $order = Order::create([
+            'user_id' => $user->id,
+            'order_number' => 'ORD4-'.uniqid(),
+            'status' => 'processing',
+            'payment_status' => 'paid',
+            'payment_method' => 'bakong_khqr',
+            'subtotal' => 20,
+            'total' => 20,
+        ]);
+
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'name' => $product->name,
+            'sku' => $product->sku,
+            'price' => 20,
+            'qty' => 1,
+            'line_total' => 20,
+        ]);
+
+        $order->load('items.product');
+        PaidOrderInventory::applyForOrder($order);
+
+        $product->refresh();
+        $master->refresh();
+        $receiveBatch->refresh();
+
+        $this->assertSame(9, (int) $product->stock);
+        $this->assertSame(79, (int) $master->stock);
+        $this->assertSame(100, (int) $receiveBatch->stock_received);
+        $this->assertSame(100, (int) $receiveBatch->stock);
+    }
+
+    public function test_pos_lookup_and_scan_by_inventory_label_slug_with_stock_label_products(): void
+    {
+        $productCategory = Category::create([
+            'name' => 'Men Clothes',
+            'slug' => 'men-clothes-scan-'.uniqid(),
+            'type' => 'clothing',
+            'is_active' => true,
+        ]);
+
+        $labelSlug = '8VWI26G4O2IX';
+        $master = Category::create([
+            'name' => 'MEN CLOTHES SECOND HAND AVERAGE',
+            'slug' => $labelSlug,
+            'type' => PaidOrderInventory::BARCODE_CATEGORY_TYPE,
+            'is_active' => true,
+            'manage_stock' => true,
+            'stock' => 50,
+            'product_condition' => 'second_hand',
+            'second_hand_sale_type' => 'average_bundle',
+            'price' => 20,
+        ]);
+
+        $product = Product::create([
+            'category_id' => $productCategory->id,
+            'name' => 'Jacket',
+            'slug' => 'jacket-scan-'.uniqid(),
+            'sku' => 'SKU-SCAN-'.uniqid(),
+            'description' => null,
+            'price' => 20,
+            'stock' => 10,
+            'is_active' => true,
+            'barcode_code' => 'unique-product-barcode',
+            'stock_label_id' => $master->id,
+            'audience' => 'men',
+        ]);
+
+        $lookup = BarcodeScanStockService::lookupDisplay($labelSlug);
+        $this->assertNotNull($lookup);
+        $this->assertSame($labelSlug, $lookup['code']);
+        $this->assertSame('MEN CLOTHES SECOND HAND AVERAGE', $lookup['name']);
+        $this->assertSame(20.0, $lookup['price']);
+        $this->assertSame(10, $lookup['max_sellable_qty']);
+
+        BarcodeScanStockService::applyScanDeduction($labelSlug, 2);
+
+        $master->refresh();
+        $product->refresh();
+
+        $this->assertSame(48, (int) $master->stock);
+        $this->assertSame(8, (int) $product->stock);
     }
 }
