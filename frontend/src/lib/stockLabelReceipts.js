@@ -197,10 +197,8 @@ export const formatBarcodeLabelOptionText = (row, categories, products = []) => 
             if (remaining > 0) qty = ` · ${remaining} units left`;
             else if (pool > 0) qty = ` · ${pool} units`;
         } else {
-            const q = row.stock_received != null
-                ? parseInt(row.stock_received, 10)
-                : parseInt(row.stock, 10);
-            if (Number.isFinite(q) && q > 0) qty = ` · ${q} units`;
+            const q = receivedQuantityForRow(row);
+            if (q > 0) qty = ` · ${q} units`;
         }
     }
     const dateIn = effectiveDateIn(row);
@@ -211,6 +209,10 @@ export const formatBarcodeLabelOptionText = (row, categories, products = []) => 
 /** Sellable units remaining on this receipt/label row (for product allocation pool). */
 export const labelPoolStockForCategory = (label) => {
     if (!label?.manage_stock) return "0";
+    // Quick Restock batch: receipt qty lives in stock_received (stock may be stale sellable copy).
+    if (label.parent_id != null && label.parent_id !== "") {
+        return String(receivedQuantityForRow(label));
+    }
     if (label.stock != null && label.stock !== "") {
         const st = parseInt(String(label.stock), 10);
         if (!Number.isNaN(st)) return String(Math.max(0, st));
@@ -220,6 +222,40 @@ export const labelPoolStockForCategory = (label) => {
         if (!Number.isNaN(st)) return String(Math.max(0, st));
     }
     return "0";
+};
+
+/**
+ * Units already allocated to POS products for this exact label row (receive batch or master).
+ */
+export const usedStockForInventoryLabel = (label, allCategories, products = [], ignoreProductId = null) => {
+    if (!label?.id) return 0;
+    const isBatch = label.parent_id != null && label.parent_id !== "";
+    const master = resolveMasterCategoryForLabel(label, allCategories);
+    const labelIds = new Set([String(label.id)]);
+    if (!isBatch && master?.id) {
+        labelIds.add(String(master.id));
+        for (const batch of receiveBatchesForMaster(master, allCategories)) {
+            labelIds.add(String(batch.id));
+        }
+    }
+
+    const masterBarcode = String(master?.slug || "").trim().toLowerCase();
+    let used = 0;
+    for (const product of products || []) {
+        if (ignoreProductId != null && String(product?.id) === String(ignoreProductId)) {
+            continue;
+        }
+        let linked = false;
+        if (product.stock_label_id != null && product.stock_label_id !== "") {
+            linked = labelIds.has(String(product.stock_label_id));
+        } else if (!isBatch && masterBarcode) {
+            linked = String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
+        }
+        if (!linked) continue;
+        const st = Number(product?.stock);
+        if (Number.isFinite(st)) used += Math.max(0, st);
+    }
+    return used;
 };
 
 export const findBarcodeLabelBySlug = (slug, options) => {
@@ -301,9 +337,11 @@ export const labelPricePoolForProduct = (label, allCategories, options = {}) => 
         const remaining = Math.max(0, masterPool - catalogUnits);
         poolStock = String(remaining);
     } else {
-        usedStock = options.usedStockForSlug
-            ? options.usedStockForSlug(slug, options.ignoreProductId ?? null)
-            : 0;
+        usedStock = options.products?.length
+            ? usedStockForInventoryLabel(label, allCategories, options.products, options.ignoreProductId ?? null)
+            : (options.usedStockForSlug
+                ? options.usedStockForSlug(slug, options.ignoreProductId ?? null)
+                : 0);
         const available = Math.max(0, (parseInt(rawPoolStock, 10) || 0) - usedStock);
         poolStock = String(available);
     }

@@ -1448,9 +1448,23 @@ export default function AdminBarcodeQR() {
             );
         }
 
-        // Master inventory label: union of all receive batches + legacy barcode match.
         const masterId = itemId;
         const masterBarcode = String(item.slug || "").trim().toLowerCase();
+
+        // Stock Received log: master row only shows products linked to this master id (not batch receipts).
+        if (isReceivedLogPage) {
+            return products.filter((product) => {
+                if (product.stock_label_id != null && product.stock_label_id !== "") {
+                    return String(product.stock_label_id) === masterId;
+                }
+                if (masterBarcode) {
+                    return String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
+                }
+                return false;
+            });
+        }
+
+        // Stock & Inventory: union of all receive batches + legacy barcode match.
         const batchIds = new Set(
             receiveBatchesForMaster(item, rows).map((b) => String(b.id)),
         );
