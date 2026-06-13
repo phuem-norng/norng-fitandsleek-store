@@ -38,6 +38,7 @@ return [
 
     'allowed_origins_patterns' => [
         '~^https://[a-z0-9-]+\.onrender\.com$~i',
+        '~^https://[a-z0-9-]+\.vercel\.app$~i',
         '~^http://localhost:\d+$~',
         '~^http://127\.0\.0\.1:\d+$~',
         '~^https://localhost:\d+$~',

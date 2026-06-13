@@ -49,6 +49,8 @@ return [
         'https://www.fitandsleek.kalapak-team.space',
         'https://web-fitandsleek.onrender.com',
         'https://www.web-fitandsleek.onrender.com',
+        'https://norng-fitandsleek-store.vercel.app',
+        'https://www.norng-fitandsleek-store.vercel.app',
     ]))),
 
     /*
@@ -76,6 +78,7 @@ return [
         $isLocal ? 'http://127.0.0.1:8000' : null,
         'https://fitandsleekapp.kalapak-team.space',
         'https://api-fitandsleek.onrender.com',
+        'https://norng-fitandsleek-backend.onrender.com',
         ...$extraApiOrigins,
     ]))),
 
