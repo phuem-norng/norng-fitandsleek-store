@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/api_client.dart';
+import '../core/auth_flow.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
@@ -45,15 +46,15 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final data = await _auth.login(email, password);
-      if (data['otp_required'] == true) {
+      if (authRequiresOtpStep(data)) {
         return data;
       }
       await _applyTokenResponse(data);
       return data;
     } on DioException catch (e) {
-      final body = e.response?.data;
-      if (body is Map && body['otp_required'] == true) {
-        return Map<String, dynamic>.from(body);
+      final otpPayload = authOtpPayloadFromResponse(e.response?.data);
+      if (otpPayload != null) {
+        return otpPayload;
       }
       rethrow;
     } finally {
@@ -89,6 +90,7 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String code,
     required String purpose,
+    String? challengeToken,
   }) async {
     busy = true;
     notifyListeners();
@@ -97,6 +99,7 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         code: code,
         purpose: purpose,
+        challengeToken: challengeToken,
       );
       await _applyTokenResponse(data);
     } finally {
@@ -105,8 +108,16 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> resendOtp({required String email, required String purpose}) {
-    return _auth.resendOtp(email: email, purpose: purpose);
+  Future<void> resendOtp({
+    required String email,
+    required String purpose,
+    String? challengeToken,
+  }) {
+    return _auth.resendOtp(
+      email: email,
+      purpose: purpose,
+      challengeToken: challengeToken,
+    );
   }
 
   Future<void> logout() async {

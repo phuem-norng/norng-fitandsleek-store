@@ -13,10 +13,14 @@ class OtpScreen extends StatefulWidget {
     super.key,
     required this.email,
     required this.purpose,
+    this.challengeToken,
+    this.notice,
   });
 
   final String email;
   final String purpose;
+  final String? challengeToken;
+  final String? notice;
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -39,6 +43,7 @@ class _OtpScreenState extends State<OtpScreen> {
         email: widget.email,
         code: _codeController.text.trim(),
         purpose: widget.purpose,
+        challengeToken: widget.challengeToken,
       );
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -54,7 +59,11 @@ class _OtpScreenState extends State<OtpScreen> {
     final auth = context.read<AuthProvider>();
     final api = context.read<ApiClient>();
     try {
-      await auth.resendOtp(email: widget.email, purpose: widget.purpose);
+      await auth.resendOtp(
+        email: widget.email,
+        purpose: widget.purpose,
+        challengeToken: widget.challengeToken,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('A new code was sent to your email')),
@@ -87,7 +96,9 @@ class _OtpScreenState extends State<OtpScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'We sent a verification code to ${widget.email}',
+                widget.notice?.trim().isNotEmpty == true
+                    ? widget.notice!.trim()
+                    : 'We sent a verification code to ${widget.email}',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 28),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_client.dart';
+import '../core/auth_flow.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/common/fs_button.dart';
 import 'otp_screen.dart';
@@ -46,12 +47,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: _phoneController.text.trim(),
       );
       if (!mounted) return;
-      if (data['otp_required'] == true) {
+      if (authRequiresOtpStep(data)) {
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => OtpScreen(
               email: _emailController.text.trim(),
-              purpose: 'register',
+              purpose: (data['purpose'] ?? 'register').toString(),
+              challengeToken: data['challenge_token']?.toString(),
+              notice: data['message']?.toString(),
             ),
           ),
         );

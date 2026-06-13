@@ -641,10 +641,6 @@ class AuthController extends Controller
         'purpose' => $purpose,
         'error' => $e->getMessage(),
       ]);
-
-      if (! $this->otpDebugEnabled() && ! app()->environment('local')) {
-        throw $e;
-      }
     }
 
     if ($this->otpDebugEnabled()) {
