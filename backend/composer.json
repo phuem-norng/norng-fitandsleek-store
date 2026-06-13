@@ -17,6 +17,7 @@
         "league/flysystem-aws-s3-v3": "^3.29",
         "pragmarx/google2fa": "^9.0",
         "predis/predis": "^3.4",
+        "resend/resend-php": "^0.10",
         "symfony/filesystem": "^7.2",
         "twilio/sdk": "^8.10"
     },
