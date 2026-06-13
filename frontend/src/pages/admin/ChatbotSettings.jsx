@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import AdminSaveToast, { AdminFormErrorBanner, flashAdminMessage } from "../../components/admin/AdminFormToast.jsx";
 import { useTheme } from "../../state/theme.jsx";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 const PLATFORMS = [
  { value: "messenger", label: "Facebook Messenger", placeholder: "https://m.me/yourpage", color: "bg-blue-600" },
@@ -91,11 +95,16 @@ const parseSocialLinks = (data) => {
 
 export default function ChatbotSettings() {
  const { primaryColor } = useTheme();
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewChatbot = can("chatbot", "view");
+ const canEditChatbot = can("chatbot", "edit");
  const [form, setForm] = useState(defaults);
  const [socialLinks, setSocialLinks] = useState([]);
  const [loading, setLoading] = useState(true);
  const [saving, setSaving] = useState(false);
- const [message, setMessage] = useState("");
+ const [success, setSuccess] = useState("");
+ const [error, setError] = useState("");
+ const [info, setInfo] = useState("");
 
  // Modal state for add / edit
  const [showModal, setShowModal] = useState(false);
@@ -104,6 +113,11 @@ export default function ChatbotSettings() {
  const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
  useEffect(() => {
+ if (!permissionsReady) return;
+ if (!canViewChatbot) {
+ setLoading(false);
+ return;
+ }
  const load = async () => {
  setLoading(true);
  try {
@@ -122,14 +136,19 @@ export default function ChatbotSettings() {
  }
  };
  load();
- }, []);
+ }, [permissionsReady, canViewChatbot]);
 
- const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+ const update = (key, value) => {
+ if (!canEditChatbot) return;
+ setForm((prev) => ({ ...prev, [key]: value }));
+ };
 
  const handleSubmit = async (e) => {
  e.preventDefault();
+ if (!canEditChatbot) return;
  setSaving(true);
- setMessage("");
+ setError("");
+ setInfo("");
  try {
  const payload = {
  ...form,
@@ -142,10 +161,9 @@ export default function ChatbotSettings() {
  const d = data?.data || payload;
  setForm({ enabled: d.enabled ?? true, greeting: d.greeting || defaults.greeting, welcome: d.welcome || defaults.welcome });
  setSocialLinks(parseSocialLinks(d));
- setMessage("Saved successfully.");
- setTimeout(() => setMessage(""), 3000);
+ flashAdminMessage(setSuccess, "Chatbot settings saved successfully.");
  } catch {
- setMessage("Failed to save settings.");
+ setError("Failed to save chatbot settings.");
  } finally {
  setSaving(false);
  }
@@ -154,27 +172,33 @@ export default function ChatbotSettings() {
  // ── Social link CRUD ──────────────────────────────────────────────────────
 
  const openAdd = () => {
+ if (!canEditChatbot) return;
  setEditingLink(null);
  setLinkForm({ platform: "messenger", label: "", url: "" });
  setShowModal(true);
  };
 
  const openEdit = (link) => {
+ if (!canEditChatbot) return;
  setEditingLink(link);
  setLinkForm({ platform: link.platform, label: link.label, url: link.url });
  setShowModal(true);
  };
 
- const deleteLink = (id) => setPendingDeleteId(id);
+ const deleteLink = (id) => {
+ if (!canEditChatbot) return;
+ setPendingDeleteId(id);
+ };
 
  const confirmDeleteLink = () => {
- if (pendingDeleteId == null) return;
+ if (pendingDeleteId == null || !canEditChatbot) return;
  setSocialLinks((prev) => prev.filter((l) => l.id !== pendingDeleteId));
  setPendingDeleteId(null);
- setMessage("Social link removed. Click Save settings to publish changes.");
+ setInfo("Social link removed. Click Save settings to publish changes.");
  };
 
  const saveLink = () => {
+ if (!canEditChatbot) return;
  const platform = PLATFORMS.find((p) => p.value === linkForm.platform) || PLATFORMS[PLATFORMS.length - 1];
  const label = linkForm.label.trim() || platform.label;
  if (!linkForm.url.trim()) return;
@@ -193,9 +217,19 @@ export default function ChatbotSettings() {
  setLinkForm((prev) => ({ ...prev, platform: value, label: p?.label || "" }));
  };
 
+ if (!permissionsReady || (loading && canViewChatbot)) return <AdminContentSkeleton title="Chatbot Settings" />;
+
+ if (!canViewChatbot) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
+
  if (loading) return <AdminContentSkeleton title="Chatbot Settings" />;
 
  const selectedPlatform = PLATFORMS.find((p) => p.value === linkForm.platform);
+ const fieldClass =
+ "w-full h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 text-sm text-slate-900 dark:text-slate-100 outline-none focus:bg-white dark:focus:bg-slate-900 transition-all duration-200";
+ const textAreaFieldClass =
+ "w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 outline-none focus:bg-white dark:focus:bg-slate-900 transition-all duration-200 resize-none";
 
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
@@ -210,6 +244,9 @@ export default function ChatbotSettings() {
  cancelLabel="Cancel"
  destructive
  />
+
+ <AdminSaveToast message={success} />
+ <AdminFormErrorBanner error={error} onDismiss={() => setError("")} />
 
  <div className="mb-8">
  <h1 className="text-2xl md:text-4xl font-semibold text-slate-800 dark:text-white mb-2">Chatbot Settings</h1>
@@ -235,7 +272,8 @@ export default function ChatbotSettings() {
  <button
  type="button"
  onClick={() => update("enabled", !form.enabled)}
- className={"relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-300 " + (form.enabled ? "shadow-lg" : "bg-slate-300 dark:bg-slate-700")}
+ disabled={!canEditChatbot}
+ className={"relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-300 " + (form.enabled ? "shadow-lg" : "bg-slate-300 dark:bg-slate-700") + (!canEditChatbot ? " opacity-60 cursor-not-allowed" : "")}
  style={form.enabled ? { backgroundColor: primaryColor } : undefined}
  >
  <span className={"inline-block h-5 w-5 rounded-full bg-white dark:bg-slate-100 transition-transform duration-300 " + (form.enabled ? "translate-x-6" : "translate-x-1")} />
@@ -248,7 +286,9 @@ export default function ChatbotSettings() {
  <input
  value={form.greeting || ""}
  onChange={(e) => update("greeting", e.target.value)}
- className="w-full h-11 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 text-sm text-slate-900 dark:text-slate-100 outline-none focus:bg-white dark:focus:bg-slate-900 transition-all duration-200"
+ readOnly={!canEditChatbot}
+ disabled={!canEditChatbot}
+ className={fieldClass}
  />
  </div>
 
@@ -259,7 +299,9 @@ export default function ChatbotSettings() {
  value={form.welcome || ""}
  onChange={(e) => update("welcome", e.target.value)}
  rows={3}
- className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 outline-none focus:bg-white dark:focus:bg-slate-900 transition-all duration-200 resize-none"
+ readOnly={!canEditChatbot}
+ disabled={!canEditChatbot}
+ className={textAreaFieldClass}
  />
  </div>
  </div>
@@ -268,6 +310,7 @@ export default function ChatbotSettings() {
  <div className="bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 rounded-3xl overflow-hidden backdrop-blur-xl bot-enter" style={{ animationDelay: "160ms" }}>
  <div className="bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
  <h2 className="font-semibold text-slate-800 dark:text-slate-100">Social Media Links</h2>
+ {canEditChatbot ? (
  <button
  type="button"
  onClick={openAdd}
@@ -278,6 +321,7 @@ export default function ChatbotSettings() {
  </svg>
  Add
  </button>
+ ) : null}
  </div>
 
  {socialLinks.length === 0 ? (
@@ -303,6 +347,7 @@ export default function ChatbotSettings() {
  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{link.label}</p>
  <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{link.url}</p>
  </div>
+ {canEditChatbot ? (
  <div className="flex gap-1.5 shrink-0">
  <button
  type="button"
@@ -331,6 +376,7 @@ export default function ChatbotSettings() {
  </svg>
  </button>
  </div>
+ ) : null}
  </div>
  );
  })}
@@ -339,6 +385,7 @@ export default function ChatbotSettings() {
  </div>
 
  {/* Save bar */}
+ {canEditChatbot ? (
  <div className="flex items-center gap-3 bot-enter" style={{ animationDelay: "220ms" }}>
  <button
  type="submit"
@@ -347,12 +394,13 @@ export default function ChatbotSettings() {
  >
  {saving ? "Saving…" : "Save settings"}
  </button>
- {message && (
- <span className={"text-sm font-medium px-3 py-1.5 rounded-full border " + (!message.startsWith("Failed") ? "text-[color:var(--admin-primary)] border-[rgba(var(--admin-primary-rgb),0.35)] bg-[rgba(var(--admin-primary-rgb),0.08)] dark:bg-[rgba(var(--admin-primary-rgb),0.12)] dark:border-[rgba(var(--admin-primary-rgb),0.4)]" : "text-red-500 border-red-200 bg-red-50 dark:bg-red-500/10 dark:border-red-400/30") }>
- {message}
+ {info ? (
+ <span className="text-sm font-medium text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/60">
+ {info}
  </span>
- )}
+ ) : null}
  </div>
+ ) : null}
  </form>
  </div>
 

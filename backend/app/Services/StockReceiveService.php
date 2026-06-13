@@ -138,11 +138,39 @@ class StockReceiveService
     /**
      * Add stock to the canonical inventory label and append a Stock Received batch row.
      *
+     * @param  array{
+     *     unit_cost?: float|int|null,
+     *     date_in?: string|null,
+     *     description?: string|null,
+     *     supplier_name?: string|null,
+     *     invoice_number?: string|null,
+     *     product_id?: int|null,
+     * }  $meta
      * @return array{inventory: Category, received: Category}
      */
     public function quickRestock(
         Category $source,
         int $quantity,
+        array $meta = [],
+    ): array {
+        return $this->receiveWithMetadata($source, $quantity, $meta);
+    }
+
+    /**
+     * @param  array{
+     *     unit_cost?: float|int|null,
+     *     date_in?: string|null,
+     *     description?: string|null,
+     *     supplier_name?: string|null,
+     *     invoice_number?: string|null,
+     *     product_id?: int|null,
+     * }  $meta
+     * @return array{inventory: Category, received: Category}
+     */
+    public function receiveWithMetadata(
+        Category $source,
+        int $quantity,
+        array $meta = [],
     ): array {
         if ($source->type !== PaidOrderInventory::BARCODE_CATEGORY_TYPE) {
             throw ValidationException::withMessages([
@@ -173,8 +201,13 @@ class StockReceiveService
             ? ($inventory->second_hand_sale_type === 'average_bundle' ? 'average_bundle' : 'single')
             : null;
 
-        return DB::transaction(function () use ($inventory, $quantity, $productCondition, $secondHandSaleType) {
+        return DB::transaction(function () use ($inventory, $quantity, $productCondition, $secondHandSaleType, $meta) {
             $batchSlug = $this->uniqueReceiveSlug((string) $inventory->slug);
+            $unitCost = array_key_exists('unit_cost', $meta) && $meta['unit_cost'] !== null
+                ? round((float) $meta['unit_cost'], 2)
+                : $inventory->cost;
+            $dateIn = ! empty($meta['date_in']) ? (string) $meta['date_in'] : now()->toDateString();
+            $description = ! empty($meta['description']) ? (string) $meta['description'] : $inventory->description;
 
             $received = Category::create([
                 'parent_id' => $inventory->id,
@@ -183,7 +216,7 @@ class StockReceiveService
                 'type' => PaidOrderInventory::BARCODE_CATEGORY_TYPE,
                 'sort_order' => (int) ($inventory->sort_order ?? 0),
                 'is_active' => (bool) ($inventory->is_active ?? true),
-                'description' => $inventory->description,
+                'description' => $description,
                 'details' => $inventory->details,
                 'price' => $inventory->price,
                 'compare_at_price' => $inventory->compare_at_price,
@@ -192,7 +225,7 @@ class StockReceiveService
                 'image_path' => $inventory->image_path,
                 'gallery' => $inventory->gallery,
                 'sku' => $inventory->sku ?: $inventory->slug,
-                'cost' => $inventory->cost,
+                'cost' => $unitCost,
                 'unit' => $inventory->unit,
                 'origin' => $inventory->origin,
                 'brand_id' => $inventory->brand_id,
@@ -202,7 +235,7 @@ class StockReceiveService
                 'stock_received' => $quantity,
                 'stock' => null,
                 'min_stock' => $inventory->min_stock,
-                'date_in' => now()->toDateString(),
+                'date_in' => $dateIn,
                 'product_condition' => $productCondition,
                 'second_hand_sale_type' => $secondHandSaleType,
                 'bundle_total_cost' => $productCondition === 'second_hand' && $secondHandSaleType === 'average_bundle'
@@ -233,7 +266,12 @@ class StockReceiveService
             $received = $received->fresh();
 
             $this->stockTables->syncMasterFromCategory($inventory);
-            $this->stockTables->syncReceiveFromCategory($received);
+            $this->stockTables->syncReceiveFromCategory($received, isset($meta['product_id']) ? (int) $meta['product_id'] : null, [
+                'unit_cost' => $unitCost,
+                'supplier_name' => $meta['supplier_name'] ?? null,
+                'invoice_number' => $meta['invoice_number'] ?? null,
+                'notes' => $description,
+            ]);
 
             return [
                 'inventory' => $inventory,

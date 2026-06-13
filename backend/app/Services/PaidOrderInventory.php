@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Category;
+use App\Models\InventoryLot;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -80,6 +81,31 @@ class PaidOrderInventory
         $qty = (int) ($item->qty ?? $item->quantity ?? 0);
         if ($qty <= 0) {
             return;
+        }
+
+        if (empty($item->inventory_lot_id)) {
+            $lotService = app(InventoryLotService::class);
+            $hasLots = InventoryLot::query()
+                ->where('product_id', $product->id)
+                ->where('is_sellable', true)
+                ->where('quantity_on_hand', '>', 0)
+                ->exists();
+
+            if ($hasLots) {
+                try {
+                    $allocations = $lotService->consumeForSale(
+                        $product,
+                        $item->size,
+                        $item->color,
+                        $qty,
+                    );
+                    if ($allocations !== []) {
+                        OrderItemLotAllocation::splitPaidOrderItem($item, $allocations);
+                    }
+                } catch (\Illuminate\Validation\ValidationException) {
+                    // Fall back to aggregate stock only when lots are unavailable.
+                }
+            }
         }
 
         if ($product->stock !== null) {

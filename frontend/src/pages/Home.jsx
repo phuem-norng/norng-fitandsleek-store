@@ -85,6 +85,7 @@ export default function Home() {
   const [categories, setCategories] = useState([]);
   const { settings: homepageSettings } = useHomepageSettings();
   const [sections, setSections] = useState({});
+  const [recommended, setRecommended] = useState({ loading: true, items: [] });
   const { t } = useLanguage();
 
   // Load categories
@@ -226,6 +227,25 @@ export default function Home() {
     });
   }, [enabledSections, sectionCategories]);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await api.get("/products/recommended", { params: { per_page: 8 } });
+        if (!mounted) return;
+        setRecommended({ loading: false, items: data?.data || [] });
+      } catch (error) {
+        console.error("Error loading personalized recommendations:", error);
+        if (!mounted) return;
+        setRecommended({ loading: false, items: [] });
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const getSectionLink = (section) => {
     const key = section?.key;
     const matchedCategories = sectionCategories[key] || [];
@@ -242,7 +262,7 @@ export default function Home() {
   };
 
   return (
-    <div className="pb-14 max-w-[1600px] mx-auto">
+    <div className="pb-14 w-full">
       <Hero />
       <div className="animate-fade-in">
         <BrandRow />
@@ -252,6 +272,15 @@ export default function Home() {
       </div>
 
       {/* Dynamically render sections based on homepage settings */}
+      <div className="animate-fade-in-up delay-200">
+        <Section
+          title="Recommended for you"
+          to="/search?sort=recommend"
+          items={recommended.items}
+          loading={recommended.loading}
+        />
+      </div>
+
       {enabledSections.map((section, index) => (
         <div key={section.key} className={`animate-fade-in-up delay-${(index + 2) * 100}`}>
           <Section

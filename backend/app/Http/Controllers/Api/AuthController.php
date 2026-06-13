@@ -369,7 +369,7 @@ class AuthController extends Controller
       UserDeviceSession::query()
         ->where('user_id', $user->id)
         ->where('personal_access_token_id', $token->id)
-        ->update(['personal_access_token_id' => null]);
+        ->delete();
 
       $token->delete();
     }

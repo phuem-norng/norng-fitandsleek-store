@@ -19,6 +19,12 @@ class DatabaseSeeder extends Seeder
             CustomerSeeder::class,
             HomepageSeeder::class,
             ExtraDataSeeder::class,
+            // Optional full catalog + stock example (nav-aligned categories):
+            // StorefrontExampleSeeder::class,
+            // Optional small inventory/procurement sample (suppliers + purchase orders + stock receive):
+            // InventoryProcurementMiniSeeder::class,
+            // Optional top-fans sample (tier rules + loyalty profiles):
+            // TopFansMiniSeeder::class,
         ]);
     }
 }

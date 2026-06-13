@@ -8,6 +8,8 @@ class Order extends Model
 {
     protected $fillable = [
         'user_id',
+        'parent_order_id',
+        'replacement_case_id',
         'sale_channel',
         'order_number',
         'status',
@@ -55,5 +57,20 @@ class Order extends Model
     public function replacementCases()
     {
         return $this->hasMany(ReplacementCase::class);
+    }
+
+    public function parentOrder()
+    {
+        return $this->belongsTo(Order::class, 'parent_order_id');
+    }
+
+    public function replacementCase()
+    {
+        return $this->belongsTo(ReplacementCase::class);
+    }
+
+    public function childReplacementOrders()
+    {
+        return $this->hasMany(Order::class, 'parent_order_id');
     }
 }

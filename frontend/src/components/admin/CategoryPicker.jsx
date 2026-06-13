@@ -18,6 +18,7 @@ export default function CategoryPicker({
     inputCls,
     disabled = false,
     emptyMessage = "No catalog categories yet. Add categories under Admin → Categories.",
+    placeholder = "Search category…",
 }) {
     const listId = useId();
     const rootRef = useRef(null);
@@ -132,7 +133,7 @@ export default function CategoryPicker({
                     }}
                     onFocus={openList}
                     onKeyDown={onKeyDown}
-                    placeholder="Search category…"
+                    placeholder={placeholder}
                     className={inputCls}
                     autoComplete="off"
                 />

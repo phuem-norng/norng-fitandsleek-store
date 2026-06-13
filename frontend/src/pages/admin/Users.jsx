@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
+import AdminPermissionsPanel from "../../components/admin/AdminPermissionsPanel.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import AdminListPaginationBar from "../../components/admin/AdminListPaginationBar.jsx";
 import {
  buildAllColumnsVisibility,
  loadTableColumnVisibility,
@@ -16,16 +21,48 @@ const CUSTOMER_TABLE_COLUMNS = [
  { id: "name", label: "Name" },
  { id: "email", label: "Email" },
  { id: "phone", label: "Phone" },
+ { id: "role", label: "Role" },
+ { id: "loyalty", label: "Loyalty" },
  { id: "orders", label: "Orders" },
  { id: "totalSpent", label: "Total Spent" },
  { id: "joined", label: "Joined" },
  { id: "actions", label: "Actions" },
 ];
 
+const CUSTOMER_STATUS_OPTIONS = [
+ { value: "", label: "All statuses" },
+ { value: "active", label: "Active" },
+ { value: "inactive", label: "Inactive" },
+ { value: "suspended", label: "Suspended" },
+];
+
+const CUSTOMER_LOYALTY_OPTIONS = [
+ { value: "", label: "All tiers" },
+ { value: "bronze", label: "Bronze" },
+ { value: "silver", label: "Silver" },
+ { value: "gold", label: "Gold" },
+ { value: "vip", label: "VIP" },
+];
+
+const CUSTOMER_ORDERS_OPTIONS = [
+ { value: "", label: "All customers" },
+ { value: "1", label: "With orders" },
+ { value: "0", label: "No orders" },
+];
+
+const CUSTOMER_SORT_OPTIONS = [
+ { value: "newest", label: "Newest first" },
+ { value: "name", label: "Name (A–Z)" },
+ { value: "orders", label: "Most orders" },
+ { value: "spent", label: "Highest spent" },
+ { value: "loyalty", label: "Most points" },
+];
+
 const ADMIN_TABLE_COLUMNS = [
  { id: "name", label: "Name" },
  { id: "email", label: "Email" },
  { id: "phone", label: "Phone" },
+ { id: "role", label: "Role" },
  { id: "joined", label: "Joined" },
  { id: "actions", label: "Actions" },
 ];
@@ -33,10 +70,66 @@ const ADMIN_TABLE_COLUMNS = [
 const CUSTOMERS_COLUMNS_STORAGE_KEY = "fitandsleek-customers-columns";
 const ADMINISTRATORS_COLUMNS_STORAGE_KEY = "fitandsleek-administrators-columns";
 
+const USER_ROLE_OPTIONS = [
+ { value: "customer", label: "Customer" },
+ { value: "admin", label: "Admin" },
+ { value: "superadmin", label: "Super Admin" },
+ { value: "driver", label: "Driver" },
+];
+
 function formatDate(value) {
  if (!value) return "—";
  const date = new Date(value);
  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+}
+
+function normalizeRoleValue(role) {
+ const normalized = String(role || "customer").toLowerCase().replace(/[\s-]+/g, "");
+ if (normalized === "superadmin") return "superadmin";
+ if (normalized === "admin") return "admin";
+ if (normalized === "driver") return "driver";
+ return "customer";
+}
+
+function formatRoleLabel(role) {
+ const normalized = String(role || "").toLowerCase().replace(/[\s-]+/g, "");
+ if (normalized === "superadmin") return "Super Admin";
+ if (normalized === "admin") return "Admin";
+ if (normalized === "driver") return "Driver";
+ if (normalized === "customer") return "Customer";
+ if (!role) return "—";
+ return String(role).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function loyaltyTierBadgeClass(tier) {
+ const normalized = String(tier || "bronze").toLowerCase();
+ if (normalized === "vip") return "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950/50 dark:text-violet-200 dark:border-violet-800";
+ if (normalized === "gold") return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800";
+ if (normalized === "silver") return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700";
+ return "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/50 dark:text-orange-200 dark:border-orange-800";
+}
+
+function formatLoyaltyTierLabel(tier) {
+ const normalized = String(tier || "bronze").toLowerCase();
+ if (normalized === "vip") return "VIP";
+ return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function roleBadgeClass(role) {
+ const normalized = String(role || "").toLowerCase().replace(/[\s-]+/g, "");
+ if (normalized === "superadmin") {
+ return "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950/50 dark:text-violet-200 dark:border-violet-800";
+ }
+ if (normalized === "admin") {
+ return "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-950/50 dark:text-sky-200 dark:border-sky-800";
+ }
+ if (normalized === "driver") {
+ return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800";
+ }
+ if (normalized === "customer") {
+ return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800";
+ }
+ return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700";
 }
 
 const pageSize = 10;
@@ -51,7 +144,13 @@ function normalizeList(payload) {
 }
 
 export default function Users({ showCustomers = true, showAdmins = true }) {
- const { user } = useAuth();
+ const navigate = useNavigate();
+ const { user, refresh } = useAuth();
+ const { user: sessionUser, can, permissionsReady } = useAdminPermissions();
+ const canViewCustomers = can("customers", "view");
+ const canCreateCustomers = can("customers", "create");
+ const canEditCustomers = can("customers", "edit");
+ const canDeleteCustomers = can("customers", "delete");
  const { mode } = useTheme();
  const isSuperAdmin = useMemo(() => {
  const role = user?.role?.toLowerCase?.();
@@ -59,6 +158,9 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  }, [user]);
 
  const allowAdmins = showAdmins && isSuperAdmin;
+ const customersPageOnly = showCustomers && !allowAdmins;
+ const showCustomerSection = showCustomers && canViewCustomers;
+ const customerCanMutate = canEditCustomers || canDeleteCustomers;
 
  const pageTitle = useMemo(() => {
  if (!showCustomers && allowAdmins) return "Administrators";
@@ -80,6 +182,10 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const [adminViewMode, setAdminViewMode] = useState("list");
  const [searchQuery, setSearchQuery] = useState("");
  const [searchDebounced, setSearchDebounced] = useState("");
+ const [statusFilter, setStatusFilter] = useState("");
+ const [loyaltyFilter, setLoyaltyFilter] = useState("");
+ const [ordersFilter, setOrdersFilter] = useState("");
+ const [sortFilter, setSortFilter] = useState("newest");
  const [currentPage, setCurrentPage] = useState(1);
  const [customerTotalPages, setCustomerTotalPages] = useState(1);
  const [customerTotal, setCustomerTotal] = useState(0);
@@ -90,13 +196,21 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const [userToDelete, setUserToDelete] = useState(null);
  const [modalContext, setModalContext] = useState("customer");
  const [deleteContext, setDeleteContext] = useState("customer");
- const [formData, setFormData] = useState({ name: "", email: "", phone: "", address: "", password: "" });
+ const [formData, setFormData] = useState({
+ name: "",
+ email: "",
+ phone: "",
+ address: "",
+ password: "",
+ role: "customer",
+ });
  const [customerColumnVisibility, setCustomerColumnVisibility] = useState(() =>
  loadTableColumnVisibility(CUSTOMERS_COLUMNS_STORAGE_KEY, CUSTOMER_TABLE_COLUMNS),
  );
  const [adminColumnVisibility, setAdminColumnVisibility] = useState(() =>
  loadTableColumnVisibility(ADMINISTRATORS_COLUMNS_STORAGE_KEY, ADMIN_TABLE_COLUMNS),
  );
+ const [permissionsAdmin, setPermissionsAdmin] = useState(null);
 
  useEffect(() => {
  const t = window.setTimeout(() => setSearchDebounced(searchQuery.trim()), 350);
@@ -108,8 +222,21 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  setLoadingCustomers(false);
  return;
  }
- loadCustomers(currentPage, searchDebounced);
- }, [showCustomers, currentPage, searchDebounced]);
+ if (!permissionsReady) return;
+ if (!canViewCustomers) {
+ setCustomers([]);
+ setCustomerTotalPages(1);
+ setCustomerTotal(0);
+ setLoadingCustomers(false);
+ return;
+ }
+ loadCustomers(currentPage, searchDebounced, {
+ status: statusFilter,
+ loyalty_tier: loyaltyFilter,
+ has_orders: ordersFilter,
+ sort: sortFilter,
+ });
+ }, [showCustomers, currentPage, searchDebounced, statusFilter, loyaltyFilter, ordersFilter, sortFilter, permissionsReady, canViewCustomers]);
 
  useEffect(() => {
  if (allowAdmins) {
@@ -147,11 +274,32 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  setter(buildAllColumnsVisibility(columns, visible, "name"));
  };
 
- const loadCustomers = async (page = 1, search = "") => {
+ const loadCustomers = async (page = 1, search = "", filters = {}) => {
+ if (!canViewCustomers) {
+ setCustomers([]);
+ setLoadingCustomers(false);
+ return;
+ }
  setLoadingCustomers(true);
  try {
  const params = { page, per_page: pageSize, compact: 1 };
  if (search) params.search = search;
+ if (filters.status) params.status = filters.status;
+ if (filters.loyalty_tier) params.loyalty_tier = filters.loyalty_tier;
+ if (filters.has_orders) params.has_orders = filters.has_orders;
+ if (filters.sort && filters.sort !== "newest") {
+ const sortMap = {
+ name: { sort: "name", direction: "asc" },
+ orders: { sort: "orders", direction: "desc" },
+ spent: { sort: "spent", direction: "desc" },
+ loyalty: { sort: "loyalty", direction: "desc" },
+ };
+ const mapped = sortMap[filters.sort];
+ if (mapped) {
+ params.sort = mapped.sort;
+ params.direction = mapped.direction;
+ }
+ }
  const { data } = await api.get("/admin/customers", { params });
  const list = normalizeList(data);
  setCustomers(list);
@@ -184,6 +332,15 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const totalPages = customerTotalPages;
  const filteredCustomers = customers;
  const allSelected = paginatedCustomers.length > 0 && paginatedCustomers.every((cust) => selectedIds.includes(cust.id));
+ const hasActiveCustomerFilters = Boolean(statusFilter || loyaltyFilter || ordersFilter || sortFilter !== "newest");
+
+ const clearCustomerFilters = () => {
+ setStatusFilter("");
+ setLoyaltyFilter("");
+ setOrdersFilter("");
+ setSortFilter("newest");
+ setCurrentPage(1);
+ };
 
  const filteredAdmins = useMemo(() => {
  const q = adminSearchQuery.trim().toLowerCase();
@@ -206,14 +363,23 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
 
  const openCreate = (context) => {
  if (context === "admin" && !allowAdmins) return;
+ if (context === "customer" && !canCreateCustomers) return;
  setModalContext(context);
  setEditingUser(null);
- setFormData({ name: "", email: "", phone: "", address: "", password: "" });
+ setFormData({
+ name: "",
+ email: "",
+ phone: "",
+ address: "",
+ password: "",
+ role: context === "admin" ? "admin" : "customer",
+ });
  setShowAddModal(true);
  };
 
  const openEdit = (userItem, context) => {
  if (context === "admin" && !allowAdmins) return;
+ if (context === "customer" && !canEditCustomers) return;
  setModalContext(context);
  setEditingUser(userItem);
  setFormData({
@@ -222,26 +388,53 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  phone: userItem.phone || "",
  address: userItem.address || "",
  password: "",
+ role: normalizeRoleValue(userItem.role),
  });
  setShowAddModal(true);
  };
 
  const openDelete = (userItem, context) => {
  if (context === "admin" && !allowAdmins) return;
+ if (context === "customer" && !canDeleteCustomers) return;
  setUserToDelete(userItem);
  setDeleteContext(context);
+ };
+
+ const openPermissions = (adminItem) => {
+ if (!allowAdmins || adminItem?.role !== "admin") return;
+ setPermissionsAdmin(adminItem);
+ };
+
+ const openProfile = (userItem, context) => {
+ if (context === "admin" && !allowAdmins) return;
+ if (context === "customer" && !canViewCustomers) return;
+ navigate(`/admin/users/${userItem.id}`);
  };
 
  const closeModals = () => {
  setShowAddModal(false);
  setEditingUser(null);
  setUserToDelete(null);
- setFormData({ name: "", email: "", phone: "", address: "", password: "" });
+ setFormData({
+ name: "",
+ email: "",
+ phone: "",
+ address: "",
+ password: "",
+ role: "customer",
+ });
  };
 
  const handleSubmit = async () => {
  if (modalContext === "admin" && !allowAdmins) return;
+ if (modalContext === "customer") {
+ if (editingUser && !canEditCustomers) return;
+ if (!editingUser && !canCreateCustomers) return;
+ }
  const payload = { name: formData.name, email: formData.email, phone: formData.phone, address: formData.address };
+ if (isSuperAdmin) {
+ payload.role = formData.role;
+ }
  if (!editingUser || modalContext === "admin") {
  if (formData.password) {
  payload.password = formData.password;
@@ -252,15 +445,25 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  try {
  if (editingUser) {
  const url = `/admin/${modalContext === "admin" ? "superadmin/admin-users" : "customers"}/${editingUser.id}`;
+ if (modalContext === "admin") {
  await api.put(url, payload);
+ } else {
+ await api.patch(url, payload);
+ }
  } else {
  const url = modalContext === "admin" ? "/admin/superadmin/admin-users" : "/admin/customers";
  await api.post(url, payload);
  }
- if (modalContext === "admin") {
+ if (modalContext === "admin" || isSuperAdmin) {
  await loadAdmins();
- } else {
- await loadCustomers(currentPage, searchDebounced);
+ }
+ if (modalContext === "customer" || isSuperAdmin) {
+ await loadCustomers(currentPage, searchDebounced, {
+ status: statusFilter,
+ loyalty_tier: loyaltyFilter,
+ has_orders: ordersFilter,
+ sort: sortFilter,
+ });
  }
  closeModals();
  } catch (err) {
@@ -271,13 +474,19 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  const handleDelete = async () => {
  if (!userToDelete) return;
  if (deleteContext === "admin" && !allowAdmins) return;
+ if (deleteContext === "customer" && !canDeleteCustomers) return;
  try {
  const url = deleteContext === "admin" ? `/admin/superadmin/admin-users/${userToDelete.id}` : `/admin/customers/${userToDelete.id}`;
  await api.delete(url);
  if (deleteContext === "admin") {
  await loadAdmins();
  } else {
- await loadCustomers(currentPage, searchDebounced);
+ await loadCustomers(currentPage, searchDebounced, {
+ status: statusFilter,
+ loyalty_tier: loyaltyFilter,
+ has_orders: ordersFilter,
+ sort: sortFilter,
+ });
  }
  } catch (err) {
  console.error("Failed to delete user", err);
@@ -285,6 +494,13 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  closeModals();
  }
  };
+
+ if (customersPageOnly && !permissionsReady) {
+ return <AdminContentSkeleton title="Customers" />;
+ }
+ if (customersPageOnly && permissionsReady && !canViewCustomers) {
+ return <Navigate to={getFirstAccessibleAdminPath(sessionUser)} replace />;
+ }
 
  if (loadingCustomers && customers.length === 0 && !showAdmins) {
  return <AdminContentSkeleton title="Users" />;
@@ -341,7 +557,12 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  {colIsVisible(context, "name") && (
  <td className="px-6 py-4">
- <div className="flex items-center gap-3">
+ <button
+ type="button"
+ onClick={() => openProfile(item, context)}
+ className="flex items-center gap-3 text-left hover:opacity-80 transition-opacity"
+ title="View profile"
+ >
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold overflow-hidden">
  {item.profile_image_url ? (
 <img src={resolveImageUrl(item.profile_image_url)} alt={item.name} className="w-full h-full object-cover" />
@@ -350,9 +571,11 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  </div>
  <div className="min-w-0">
- <div className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{item.name}</div>
+ <div className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate hover:text-[color:var(--admin-primary)]">
+ {item.name}
  </div>
  </div>
+ </button>
  </td>
  )}
  {colIsVisible(context, "email") && (
@@ -360,6 +583,35 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  {colIsVisible(context, "phone") && (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300 truncate">{item.phone || "-"}</td>
+ )}
+ {colIsVisible(context, "role") && (
+ <td className="px-6 py-4">
+ <span
+ className={
+ "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold " +
+ roleBadgeClass(item.role)
+ }
+ >
+ {formatRoleLabel(item.role)}
+ </span>
+ </td>
+ )}
+ {context === "customer" && colIsVisible(context, "loyalty") && (
+ <td className="px-6 py-4">
+ <div className="flex flex-col gap-1">
+ <span
+ className={
+ "inline-flex w-fit items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold " +
+ loyaltyTierBadgeClass(item.loyalty_tier)
+ }
+ >
+ {formatLoyaltyTierLabel(item.loyalty_tier)}
+ </span>
+ <span className="text-xs text-slate-500 dark:text-slate-400">
+ {Number(item.loyalty_points ?? 0).toLocaleString()} pts
+ </span>
+ </div>
+ </td>
  )}
  {context === "customer" && colIsVisible(context, "orders") && (
  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.orders_count ?? 0}</td>
@@ -375,6 +627,18 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  {colIsVisible(context, "actions") && (
  <td className="px-6 py-4">
  <div className="flex gap-2">
+ {(context === "admin" && allowAdmins) || (context === "customer" && canViewCustomers) ? (
+ <button
+ onClick={() => openProfile(item, context)}
+ title="View profile"
+ className="h-9 w-9 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center"
+ >
+ <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+ </svg>
+ </button>
+ ) : null}
+ {(context === "admin" || customerCanMutate) && (context === "admin" || canEditCustomers) && (
  <button
  onClick={() => openEdit(item, context)}
  title="Edit"
@@ -384,6 +648,19 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
  </svg>
  </button>
+ )}
+ {context === "admin" && item.role === "admin" ? (
+ <button
+ onClick={() => openPermissions(item)}
+ title="Manage Permissions"
+ className="h-9 w-9 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors inline-flex items-center justify-center"
+ >
+ <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+ </svg>
+ </button>
+ ) : null}
+ {(context === "admin" || canDeleteCustomers) && (
  <button
  onClick={() => openDelete(item, context)}
  title="Delete"
@@ -395,6 +672,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ )}
  </div>
  </td>
  )}
@@ -416,7 +694,12 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  />
  )}
  {colIsVisible(context, "name") && (
- <>
+ <button
+ type="button"
+ onClick={() => openProfile(item, context)}
+ className="flex items-center gap-3 min-w-0 text-left hover:opacity-80 transition-opacity"
+ title="View profile"
+ >
  <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold overflow-hidden flex-shrink-0">
  {item.profile_image_url ? (
 <img src={resolveImageUrl(item.profile_image_url)} alt={item.name} className="w-full h-full object-cover" />
@@ -425,15 +708,17 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  )}
  </div>
  <div className="min-w-0">
- <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{item.name}</p>
+ <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate hover:text-[color:var(--admin-primary)]">
+ {item.name}
+ </p>
  {colIsVisible(context, "email") ? (
  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{item.email}</p>
  ) : null}
  </div>
- </>
+ </button>
  )}
  </div>
- {(colIsVisible(context, "phone") || colIsVisible(context, "joined") || (context === "customer" && (colIsVisible(context, "orders") || colIsVisible(context, "totalSpent")))) ? (
+ {(colIsVisible(context, "phone") || colIsVisible(context, "role") || colIsVisible(context, "joined") || (context === "customer" && (colIsVisible(context, "loyalty") || colIsVisible(context, "orders") || colIsVisible(context, "totalSpent")))) ? (
  <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 dark:border-slate-800 pt-3">
  {colIsVisible(context, "phone") ? (
  <div>
@@ -441,10 +726,41 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <p className="text-slate-700 dark:text-slate-200 font-medium">{item.phone || "-"}</p>
  </div>
  ) : null}
+ {colIsVisible(context, "role") ? (
+ <div>
+ <span className="text-slate-400 dark:text-slate-500">Role</span>
+ <p className="mt-1">
+ <span
+ className={
+ "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold " +
+ roleBadgeClass(item.role)
+ }
+ >
+ {formatRoleLabel(item.role)}
+ </span>
+ </p>
+ </div>
+ ) : null}
  {colIsVisible(context, "joined") ? (
  <div>
  <span className="text-slate-400 dark:text-slate-500">Joined</span>
  <p className="text-slate-700 dark:text-slate-200 font-medium">{formatDate(item.created_at)}</p>
+ </div>
+ ) : null}
+ {context === "customer" && colIsVisible(context, "loyalty") ? (
+ <div>
+ <span className="text-slate-400 dark:text-slate-500">Loyalty</span>
+ <p className="mt-1">
+ <span
+ className={
+ "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold " +
+ loyaltyTierBadgeClass(item.loyalty_tier)
+ }
+ >
+ {formatLoyaltyTierLabel(item.loyalty_tier)}
+ </span>
+ </p>
+ <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{Number(item.loyalty_points ?? 0).toLocaleString()} pts</p>
  </div>
  ) : null}
  {context === "customer" && colIsVisible(context, "orders") ? (
@@ -463,6 +779,18 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  ) : null}
  {colIsVisible(context, "actions") ? (
  <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+ {(context === "admin" && allowAdmins) || (context === "customer" && canViewCustomers) ? (
+ <button
+ onClick={() => openProfile(item, context)}
+ title="View profile"
+ className="flex-1 h-9 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center"
+ >
+ <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+ </svg>
+ </button>
+ ) : null}
+ {(context === "admin" || customerCanMutate) && (context === "admin" || canEditCustomers) && (
  <button
  onClick={() => openEdit(item, context)}
  title="Edit"
@@ -472,6 +800,19 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
  </svg>
  </button>
+ )}
+ {context === "admin" && item.role === "admin" ? (
+ <button
+ onClick={() => openPermissions(item)}
+ title="Manage Permissions"
+ className="flex-1 h-9 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors inline-flex items-center justify-center"
+ >
+ <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+ </svg>
+ </button>
+ ) : null}
+ {(context === "admin" || canDeleteCustomers) && (
  <button
  onClick={() => openDelete(item, context)}
  title="Delete"
@@ -486,6 +827,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ )}
  </div>
  ) : null}
  </div>
@@ -501,7 +843,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <p className="text-slate-500 dark:text-slate-400 mt-2">{pageSubtitle}</p>
  </div>
  <div className="flex gap-3">
- {showCustomers && (
+ {showCustomerSection && canCreateCustomers && (
  <button
  onClick={() => openCreate("customer")}
  className="px-4 py-2 rounded-lg transition-colors flex items-center gap-2 font-semibold text-white bg-[color:var(--admin-primary)] hover:brightness-110"
@@ -526,7 +868,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </div>
  </div>
 
- {showCustomers && (
+ {showCustomerSection && (
  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 mb-12">
  <div className="px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-slate-200 dark:border-slate-800">
  <div>
@@ -534,9 +876,6 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <p className="text-slate-500 dark:text-slate-400">Total: {customerTotal} customer{customerTotal !== 1 ? "s" : ""}</p>
  </div>
  <div className="flex flex-col gap-3 w-full lg:w-auto lg:flex-row lg:items-center">
- {totalPages > 1 && (
- <div className="text-slate-500 dark:text-slate-400 text-sm text-right">Page {currentPage} of {totalPages}</div>
- )}
  <div className="flex items-center gap-3">
  <input
  type="text"
@@ -580,6 +919,60 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </div>
  </div>
 
+ <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40">
+ <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:flex-wrap">
+ <select
+ value={statusFilter}
+ onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+ className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
+ aria-label="Filter by status"
+ >
+ {CUSTOMER_STATUS_OPTIONS.map((opt) => (
+ <option key={opt.value || "all-status"} value={opt.value}>{opt.label}</option>
+ ))}
+ </select>
+ <select
+ value={loyaltyFilter}
+ onChange={(e) => { setLoyaltyFilter(e.target.value); setCurrentPage(1); }}
+ className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
+ aria-label="Filter by loyalty tier"
+ >
+ {CUSTOMER_LOYALTY_OPTIONS.map((opt) => (
+ <option key={opt.value || "all-tier"} value={opt.value}>{opt.label}</option>
+ ))}
+ </select>
+ <select
+ value={ordersFilter}
+ onChange={(e) => { setOrdersFilter(e.target.value); setCurrentPage(1); }}
+ className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
+ aria-label="Filter by orders"
+ >
+ {CUSTOMER_ORDERS_OPTIONS.map((opt) => (
+ <option key={opt.value || "all-orders"} value={opt.value}>{opt.label}</option>
+ ))}
+ </select>
+ <select
+ value={sortFilter}
+ onChange={(e) => { setSortFilter(e.target.value); setCurrentPage(1); }}
+ className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
+ aria-label="Sort customers"
+ >
+ {CUSTOMER_SORT_OPTIONS.map((opt) => (
+ <option key={opt.value} value={opt.value}>{opt.label}</option>
+ ))}
+ </select>
+ {hasActiveCustomerFilters ? (
+ <button
+ type="button"
+ onClick={clearCustomerFilters}
+ className="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+ >
+ Clear filters
+ </button>
+ ) : null}
+ </div>
+ </div>
+
  {loadingCustomers ? (
  <AdminSectionLoader rows={6} />
  ) : paginatedCustomers.length === 0 ? (
@@ -590,7 +983,6 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  <p className="text-slate-500 dark:text-slate-200 text-lg">No customers found</p>
  </div>
  ) : viewMode === "list" ? (
- <>
  <div className="overflow-x-auto">
  <table className="w-full">
  <thead>
@@ -603,6 +995,8 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  {colIsVisible("customer", "name") ? <th className="px-6 py-4">Name</th> : null}
  {colIsVisible("customer", "email") ? <th className="px-6 py-4">Email</th> : null}
  {colIsVisible("customer", "phone") ? <th className="px-6 py-4">Phone</th> : null}
+ {colIsVisible("customer", "role") ? <th className="px-6 py-4">Role</th> : null}
+ {colIsVisible("customer", "loyalty") ? <th className="px-6 py-4">Loyalty</th> : null}
  {colIsVisible("customer", "orders") ? <th className="px-6 py-4">Orders</th> : null}
  {colIsVisible("customer", "totalSpent") ? <th className="px-6 py-4">Total Spent</th> : null}
  {colIsVisible("customer", "joined") ? <th className="px-6 py-4">Joined</th> : null}
@@ -614,25 +1008,6 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  </tbody>
  </table>
  </div>
- {totalPages > 1 && (
- <div className="flex justify-center gap-2 p-6 border-t border-slate-100 dark:border-slate-800">
- {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
- <button
- key={page}
- onClick={() => setCurrentPage(page)}
- className={
- "px-3 py-2 rounded transition-colors " +
- (currentPage === page
- ? "text-white bg-[color:var(--admin-primary)] shadow-sm"
- : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700")
- }
- >
- {page}
- </button>
- ))}
- </div>
- )}
- </>
  ) : (
  <div
  className={
@@ -643,6 +1018,12 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  {paginatedCustomers.map((cust) => renderUserCard(cust, "customer"))}
  </div>
  )}
+ <AdminListPaginationBar
+ page={currentPage}
+ lastPage={totalPages}
+ total={customerTotal}
+ onPageChange={setCurrentPage}
+ />
  </div>
  )}
 
@@ -709,6 +1090,7 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  {colIsVisible("admin", "name") ? <th className="px-6 py-4">Name</th> : null}
  {colIsVisible("admin", "email") ? <th className="px-6 py-4">Email</th> : null}
  {colIsVisible("admin", "phone") ? <th className="px-6 py-4">Phone</th> : null}
+ {colIsVisible("admin", "role") ? <th className="px-6 py-4">Role</th> : null}
  {colIsVisible("admin", "joined") ? <th className="px-6 py-4">Joined</th> : null}
  {colIsVisible("admin", "actions") ? <th className="px-6 py-4">Actions</th> : null}
  </tr>
@@ -783,7 +1165,33 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  />
  </label>
  </div>
- {modalContext === "admin" && (
+ {isSuperAdmin ? (
+ <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 block sm:max-w-xs">
+ <span>Role</span>
+ <select
+ value={formData.role}
+ onChange={(e) => setFormData((prev) => ({ ...prev, role: e.target.value }))}
+ disabled={
+ !!editingUser &&
+ (normalizeRoleValue(editingUser.role) === "superadmin" || editingUser.id === user?.id)
+ }
+ className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[var(--admin-primary)] dark:focus:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+ >
+ {USER_ROLE_OPTIONS.map((option) => (
+ <option key={option.value} value={option.value}>
+ {option.label}
+ </option>
+ ))}
+ </select>
+ {editingUser?.id === user?.id ? (
+ <p className="text-xs font-normal text-slate-500 dark:text-slate-400">You cannot change your own role.</p>
+ ) : null}
+ {normalizeRoleValue(editingUser?.role) === "superadmin" ? (
+ <p className="text-xs font-normal text-slate-500 dark:text-slate-400">Super Admin role cannot be changed here.</p>
+ ) : null}
+ </label>
+ ) : null}
+ {(modalContext === "admin" || !editingUser) && (
  <label className="space-y-2 text-sm font-medium text-slate-700 dark:text-slate-200 block">
  <span>Password {editingUser ? "(leave blank to keep)" : ""}</span>
  <input
@@ -821,6 +1229,17 @@ export default function Users({ showCustomers = true, showAdmins = true }) {
  confirmLabel="Delete"
  cancelLabel="Cancel"
  destructive
+ />
+
+ <AdminPermissionsPanel
+ open={!!permissionsAdmin}
+ adminUser={permissionsAdmin}
+ onClose={() => setPermissionsAdmin(null)}
+ onSaved={(payload) => {
+  if (payload?.user_id != null && String(payload.user_id) === String(user?.id)) {
+   refresh?.();
+  }
+ }}
  />
  </div>
  );

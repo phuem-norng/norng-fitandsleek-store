@@ -59,7 +59,7 @@ export default function UserNotifications() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <div className="container-safe py-8">
+      <div className="container-safe-inset py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>

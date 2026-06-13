@@ -1,12 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import AdminListPaginationBar from "../../components/admin/AdminListPaginationBar.jsx";
 import {
  buildAllColumnsVisibility,
  loadTableColumnVisibility,
  TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 const CONTACTS_TABLE_COLUMNS = [
  { id: "select", label: "Select" },
@@ -21,6 +25,11 @@ const CONTACTS_TABLE_COLUMNS = [
 const CONTACTS_COLUMNS_STORAGE_KEY = "fitandsleek-contacts-columns";
 
 export default function Contacts() {
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewContacts = can("contacts", "view");
+ const canEditContacts = can("contacts", "edit");
+ const canDeleteContacts = can("contacts", "delete");
+ const canBulkSelect = canEditContacts || canDeleteContacts;
  const [contacts, setContacts] = useState([]);
  const [loading, setLoading] = useState(true);
  const [stats, setStats] = useState(null);
@@ -37,7 +46,13 @@ export default function Contacts() {
  loadTableColumnVisibility(CONTACTS_COLUMNS_STORAGE_KEY, CONTACTS_TABLE_COLUMNS),
  );
 
- const loadContacts = async () => {
+ const loadContacts = useCallback(async () => {
+ if (!canViewContacts) {
+ setContacts([]);
+ setStats(null);
+ setLoading(false);
+ return;
+ }
  setLoading(true);
  try {
  const params = new URLSearchParams();
@@ -61,11 +76,12 @@ export default function Contacts() {
  } finally {
  setLoading(false);
  }
- };
+ }, [canViewContacts, filters.status, filters.search, filters.sort_by, filters.sort_dir, pagination.current_page]);
 
  useEffect(() => {
+ if (!permissionsReady) return;
  loadContacts();
- }, [pagination.current_page, filters.status]);
+ }, [loadContacts, permissionsReady]);
 
  useEffect(() => {
  try {
@@ -86,6 +102,7 @@ export default function Contacts() {
  const visibleColumnCount = CONTACTS_TABLE_COLUMNS.filter((col) => isColVisible(col.id)).length || 1;
 
  const handleStatusChange = async (id, newStatus) => {
+ if (!canEditContacts) return;
  try {
  await api.patch(`/admin/contacts/${id}`, { status: newStatus });
  setSuccess("Contact status updated");
@@ -97,10 +114,12 @@ export default function Contacts() {
  };
 
  const handleDelete = (id) => {
+ if (!canDeleteContacts) return;
  setPendingDeleteId(id);
  };
 
  const confirmDelete = async () => {
+ if (!canDeleteContacts) return;
  setDeleteBusy(true);
  try {
  if (pendingBulkDelete) {
@@ -123,7 +142,7 @@ export default function Contacts() {
  };
 
  const handleBulkAction = async () => {
- if (selectedIds.length === 0) return;
+ if (!canEditContacts || selectedIds.length === 0) return;
 
  if (filters.status && filters.status !== "") {
  try {
@@ -138,7 +157,7 @@ export default function Contacts() {
  };
 
  const handleBulkDelete = async () => {
- if (selectedIds.length === 0) return;
+ if (!canDeleteContacts || selectedIds.length === 0) return;
  setPendingBulkDelete(true);
  };
 
@@ -157,6 +176,14 @@ export default function Contacts() {
  setSelectedIds([...selectedIds, id]);
  }
  };
+
+ if (!permissionsReady || (loading && contacts.length === 0)) {
+ return <AdminContentSkeleton title="Contacts" />;
+ }
+
+ if (!canViewContacts) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  if (loading) return <AdminContentSkeleton title="Contacts" />;
 
@@ -287,20 +314,24 @@ export default function Contacts() {
  <option value="name-asc">Name A-Z</option>
  <option value="name-desc">Name Z-A</option>
  </select>
- {selectedIds.length > 0 && (
+ {canBulkSelect && selectedIds.length > 0 && (
  <div className="flex items-center gap-2">
+ {canEditContacts ? (
  <button
  onClick={handleBulkAction}
  className="px-4 py-2 bg-[color:var(--admin-primary)] text-white rounded-lg hover:brightness-110 transition-colors font-medium"
  >
  Update Selected ({selectedIds.length})
  </button>
+ ) : null}
+ {canDeleteContacts ? (
  <button
  onClick={handleBulkDelete}
  className="px-4 py-2 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-300 bg-white dark:bg-slate-900 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
  >
  Delete Selected ({selectedIds.length})
  </button>
+ ) : null}
  </div>
  )}
  </div>
@@ -324,7 +355,7 @@ export default function Contacts() {
  <table className="w-full">
  <thead>
  <tr className="bg-slate-50 dark:bg-slate-800 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
- {isColVisible("select") ? (
+ {canBulkSelect && isColVisible("select") ? (
  <th className="px-6 py-4">
  <input
  type="checkbox"
@@ -363,7 +394,7 @@ export default function Contacts() {
  ) : (
  contacts.map((contact) => (
  <tr key={contact.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
- {isColVisible("select") ? (
+ {canBulkSelect && isColVisible("select") ? (
  <td className="px-6 py-4">
  <input
  type="checkbox"
@@ -410,6 +441,7 @@ export default function Contacts() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
  </svg>
  </button>
+ {canEditContacts ? (
  <button
  onClick={() => handleStatusChange(contact.id, contact.status === "new" ? "read" : "replied")}
  className="h-9 w-9 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center justify-center"
@@ -419,6 +451,8 @@ export default function Contacts() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
  </svg>
  </button>
+ ) : null}
+ {canDeleteContacts ? (
  <button
  onClick={() => handleDelete(contact.id)}
  className="h-9 w-9 border border-red-200 dark:border-red-700 text-red-500 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors inline-flex items-center justify-center"
@@ -428,6 +462,7 @@ export default function Contacts() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ ) : null}
  </div>
  </td>
  ) : null}
@@ -438,30 +473,12 @@ export default function Contacts() {
  </table>
  </div>
 
- {/* Pagination */}
- {pagination.last_page > 1 && (
- <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Showing {(pagination.current_page - 1) * 15 + 1} to {Math.min(pagination.current_page * 15, pagination.total)} of {pagination.total}
- </p>
- <div className="flex gap-2">
- <button
- onClick={() => setPagination({ ...pagination, current_page: pagination.current_page - 1 })}
- disabled={pagination.current_page === 1}
- className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200"
- >
- Previous
- </button>
- <button
- onClick={() => setPagination({ ...pagination, current_page: pagination.current_page + 1 })}
- disabled={pagination.current_page === pagination.last_page}
- className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200"
- >
- Next
- </button>
- </div>
- </div>
- )}
+ <AdminListPaginationBar
+ page={pagination.current_page}
+ lastPage={pagination.last_page}
+ total={pagination.total}
+ onPageChange={(p) => setPagination((prev) => ({ ...prev, current_page: p }))}
+ />
  </div>
  </div>
 
@@ -500,6 +517,7 @@ export default function Contacts() {
 
  <div>
  <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Status</p>
+ {canEditContacts ? (
  <div className="flex gap-2 flex-wrap">
  {["new", "read", "replied", "closed"].map((status) => (
  <button
@@ -511,9 +529,13 @@ export default function Contacts() {
  </button>
  ))}
  </div>
+ ) : (
+ <div>{getStatusBadge(viewContact.status)}</div>
+ )}
  </div>
 
  <div className="flex gap-3 pt-4">
+ {canEditContacts ? (
  <button
  onClick={() => {
  window.location.href = "mailto:" + viewContact.email + "?subject=Re: " + (viewContact.subject || "");
@@ -522,12 +544,15 @@ export default function Contacts() {
  >
  Reply via Email
  </button>
+ ) : null}
+ {canDeleteContacts ? (
  <button
  onClick={() => handleDelete(viewContact.id)}
  className="px-4 py-3 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-300 rounded-xl font-semibold hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
  >
  Delete
  </button>
+ ) : null}
  </div>
  </div>
  ) : null}

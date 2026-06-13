@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import { resolveImageUrl } from "../lib/images.js";
 import ProductCard from "../components/shop/ProductCard.jsx";
-import StorefrontFilterDrawer, { StorefrontFilterToolbarButton } from "../components/shop/StorefrontFilterDrawer.jsx";
+import StorefrontFilterDrawer from "../components/shop/StorefrontFilterDrawer.jsx";
+import ProductListingToolbar from "../components/shop/ProductListingToolbar.jsx";
 import { useWishlist } from "../state/wishlist.jsx";
 import { useStorefrontFilterDrawer } from "../hooks/useStorefrontFilterDrawer.js";
 import { useStorefrontFilterSections } from "../hooks/useStorefrontFilterSections.js";
@@ -13,10 +14,12 @@ import {
   buildProductApiParams,
   browseFromSearchParams,
   filtersFromSearchParams,
-  buildStorefrontFilterChips,
+  buildProductFacetsApiParams,
   countStorefrontFilters,
+  toggleListParamValue,
 } from "../lib/storefrontProductFilters.js";
 import { useStorefrontBrowseDraft } from "../hooks/useStorefrontBrowseDraft.js";
+import { useProductListingFacets } from "../hooks/useProductListingFacets.js";
 import { Sparkles } from "lucide-react";
 import { useLanguage } from "../lib/i18n.jsx";
 
@@ -45,6 +48,7 @@ export default function Search() {
 
   const q = qs.get("q") || "";
   const parentCategory = qs.get("parent_category") || "";
+  const categorySlug = qs.get("category") || "";
   const tab = qs.get("tab") || "";
   const imageSearchParam = qs.get("image_search");
   const colorsParam = qs.get("colors");
@@ -149,7 +153,7 @@ export default function Search() {
     })();
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, wishlistKey]);
 
   // Normal search / browse fetch (skip when wishlist tab is active)
@@ -173,6 +177,7 @@ export default function Search() {
           q,
           tab,
           parentCategory,
+          categorySlug,
           applied: appliedFilters,
           browse: browse.browseFromUrl,
           imageColors: imageSearchResults?.colors || null,
@@ -183,7 +188,7 @@ export default function Search() {
         setLoading(false);
       }
     })();
-  }, [tab, q, parentCategory, page, imageSearchResults, appliedFilters, browse.browseFromUrl]);
+  }, [tab, q, parentCategory, categorySlug, page, imageSearchResults, appliedFilters, browse.browseFromUrl]);
 
   const parentCollectionLabel = useMemo(() => {
     if (!parentCategory) return "";
@@ -207,6 +212,18 @@ export default function Search() {
     if (q) return `"${q}"`;
     return t("shop");
   }, [imageSearchResults, tab, parentCollectionLabel, q, t]);
+
+  const listingTitle = useMemo(() => {
+    if (appliedFilters.category?.length === 1) {
+      const cat = categories.find((c) => String(c.id) === String(appliedFilters.category[0]));
+      if (cat?.name) return cat.name;
+    }
+    if (categorySlug) {
+      const cat = categories.find((c) => c.slug === categorySlug);
+      if (cat?.name) return cat.name;
+    }
+    return pageTitle;
+  }, [appliedFilters.category, categories, categorySlug, pageTitle]);
 
   // When wishlist tab is active, use the dedicated wishlist fetch result
   const products = useMemo(() => {
@@ -281,37 +298,10 @@ export default function Search() {
 
   const totalActiveFilters = countStorefrontFilters(appliedFilters, browse.browseFromUrl, priceBounds);
 
-  const removeFilterValue = (sectionKey, value) => {
-    const next = {
-      ...appliedFilters,
-      [sectionKey]: (appliedFilters[sectionKey] || []).filter((v) => v !== value),
-    };
-    const n = applyFiltersToSearchParams(qs, next);
-    if (next.gender?.length) n.delete("parent_category");
-    n.delete("page");
-    listFilters.syncFromExternal(next);
-    nav(`/search?${n.toString()}`);
-  };
-
-  const filterChipLabels = useMemo(
-    () =>
-      buildStorefrontFilterChips({
-        applied: appliedFilters,
-        browse: browse.browseFromUrl,
-        priceBounds,
-        filterSections,
-        categories,
-        brands,
-        removeFilterValue,
-        changeBrowseParams: change,
-      }),
-    [appliedFilters, categories, brands, filterSections, browse.browseFromUrl, priceBounds],
-  );
-
   const handleImageSearch = async ({ image, colors }) => {
     setImageSearchResults({ image, colors });
     setShowImageSearch(false);
-    
+
     // Navigate to search page with image search params
     const encodedColors = encodeURIComponent(JSON.stringify(colors));
     nav(`/search?image_search=1&colors=${encodedColors}`);
@@ -334,27 +324,57 @@ export default function Search() {
 
   const meta = data?.meta || null;
   const lastPage = data?.last_page || meta?.last_page || 1;
+  const totalItems = data?.total ?? meta?.total ?? products.length;
+
+  const showPlpToolbar = tab !== "wishlist" && !imageSearchResults;
+
+  const facetsParams = useMemo(
+    () =>
+      buildProductFacetsApiParams({
+        q,
+        tab,
+        parentCategory,
+        categorySlug,
+        applied: appliedFilters,
+        browse: browse.browseFromUrl,
+      }),
+    [q, tab, parentCategory, categorySlug, appliedFilters, browse.browseFromUrl],
+  );
+
+  const { brandFacets, facetsLoading } = useProductListingFacets(facetsParams, showPlpToolbar);
+
+  const handleSortChange = (sort) => {
+    change({ sort: sort === "recommend" ? "" : sort });
+  };
+
+  const handleBrandToggle = (brandId) => {
+    const nextBrands = toggleListParamValue(appliedFilters.brand, brandId);
+    const next = applyFiltersToSearchParams(qs, { ...appliedFilters, brand: nextBrands });
+    if (appliedFilters.gender?.length) next.delete("parent_category");
+    listFilters.syncFromExternal({ ...appliedFilters, brand: nextBrands });
+    nav(`/search?${next.toString()}`);
+  };
 
   return (
     <div className="container-safe py-6 md:py-8">
-      {/* Header: title left, filter right */}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight truncate">
-            {pageTitle}
-          </h1>
-          {parentCollectionLabel && (
-            <p className="fs-filter-chip mt-2 text-xs">
-              View All • {parentCollectionLabel}
-            </p>
-          )}
-        </div>
-        <StorefrontFilterToolbarButton
-          activeCount={totalActiveFilters}
-          onClick={openFilterDrawer}
-          className="shrink-0"
+      {showPlpToolbar ? (
+        <ProductListingToolbar
+          title={listingTitle}
+          itemCount={totalItems}
+          filterActiveCount={totalActiveFilters}
+          onFilterClick={openFilterDrawer}
+          brandFacets={brandFacets}
+          selectedBrandIds={appliedFilters.brand}
+          onBrandToggle={handleBrandToggle}
+          sortValue={browse.browseFromUrl.sort}
+          onSortChange={handleSortChange}
+          facetsLoading={facetsLoading}
         />
-      </div>
+      ) : (
+        <div className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-black tracking-tight truncate">{pageTitle}</h1>
+        </div>
+      )}
 
       <StorefrontFilterDrawer
         open={listFilters.open}
@@ -372,47 +392,6 @@ export default function Search() {
         onPriceMinChange={browse.setDraftMinPrice}
         onPriceMaxChange={browse.setDraftMaxPrice}
       />
-
-      {(q || filterChipLabels.length > 0 || parentCategory || (tab && tab !== "wishlist")) && (
-        <div className="mb-6 flex flex-wrap gap-2 items-center text-xs">
-          <span className="text-zinc-600 font-medium">{t('activeFilters')}:</span>
-          {tab && tab !== "wishlist" && (
-            <span className="fs-filter-chip">
-              {pageTitle}
-              <button type="button" onClick={() => change({ tab: "" })} aria-label="Remove">×</button>
-            </span>
-          )}
-          {q && (
-            <span className="fs-filter-chip">
-              {q}
-              <button type="button" onClick={() => change({ q: '' })} aria-label="Remove">×</button>
-            </span>
-          )}
-          {parentCategory && (
-            <span className="fs-filter-chip">
-              {parentCollectionLabel}
-              <button type="button" onClick={() => change({ parent_category: '' })} aria-label="Remove">×</button>
-            </span>
-          )}
-          {filterChipLabels.map((chip) => (
-            <span key={chip.key} className="fs-filter-chip">
-              {chip.label}
-              {chip.onClear ? (
-                <button type="button" onClick={chip.onClear} aria-label="Remove">×</button>
-              ) : null}
-            </span>
-          ))}
-          {(totalActiveFilters > 0 || parentCategory) && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="text-zinc-600 underline hover:text-zinc-900"
-            >
-              {t('resetFilters') || 'Reset'}
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Image Search Results Info */}
       {imageSearchResults && (

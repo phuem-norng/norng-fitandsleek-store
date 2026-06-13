@@ -76,8 +76,14 @@ class ReplacementCaseService
         return [
             'order:id,user_id,order_number,total,status,created_at',
             'order.user:id,name,email',
+            'order.items:id,order_id,product_id,name,size,color,qty,sku',
+            'order.items.product:id,name,image_url,slug',
+            'replacementOrder:id,order_number,status,total,created_at',
             'items.orderItem.product:id,name,image_url,slug',
+            'items.fulfillmentLot:id,lot_number,listing_status,quantity_on_hand',
+            'items.returnLot:id,lot_number,listing_status,quantity_on_hand',
             'handledBy:id,name',
+            'completedBy:id,name',
         ];
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Message;
+use App\Services\InventoryLotService;
 use App\Services\PaidOrderInventory;
 use App\Services\ProductGalleryImageProcessor;
 use App\Support\Media;
@@ -18,6 +19,11 @@ use Illuminate\Validation\ValidationException;
 
 class ProductAdminController extends Controller
 {
+    public function __construct(
+        private readonly InventoryLotService $inventoryLots,
+    ) {
+    }
+
     private function isInlineDataUrl(?string $value): bool
     {
         return str_starts_with(strtolower(trim((string) $value)), 'data:');
@@ -142,7 +148,7 @@ class ProductAdminController extends Controller
      * Color × Size matrix rows; duplicate color+size keys keep the last row.
      *
      * @param  mixed  $raw
-     * @return array<int, array{color: string, size: string, qty: int, sku_barcode: ?string}>|null
+     * @return array<int, array{color: string, size: string, qty: int, sku_barcode: ?string, barcode_format: string}>|null
      */
     private function normalizeVariantMatrixInput(mixed $raw): ?array
     {
@@ -167,16 +173,46 @@ class ProductAdminController extends Controller
                 $q = (int) $item['qty'];
             }
             $skuBarcode = trim((string) ($item['sku_barcode'] ?? $item['skuBarcode'] ?? $item['barcode'] ?? ''));
+            $fmt = strtoupper(trim((string) ($item['barcode_format'] ?? $item['barcodeFormat'] ?? 'EAN13')));
+            $barcodeFormat = match ($fmt) {
+                'UPC' => 'UPC',
+                'CODE128', 'CODE-128' => 'CODE128',
+                default => 'EAN13',
+            };
             $key = mb_strtolower($c)."\0".mb_strtolower($s);
             $byKey[$key] = [
                 'color' => $c,
                 'size' => $s,
                 'qty' => $q,
                 'sku_barcode' => $skuBarcode !== '' ? Str::limit($skuBarcode, 120, '') : null,
+                'barcode_format' => $barcodeFormat,
             ];
         }
 
         return count($byKey) > 0 ? array_values($byKey) : null;
+    }
+
+    /**
+     * Keep product.stock aligned with variant rows so storefront cart caps stay correct.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function syncProductStockFromVariantMatrix(array &$data): void
+    {
+        $matrix = $data['variant_matrix'] ?? null;
+        if (! is_array($matrix) || $matrix === []) {
+            return;
+        }
+
+        $sum = 0;
+        foreach ($matrix as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $sum += max(0, (int) ($row['qty'] ?? 0));
+        }
+
+        $data['stock'] = $sum;
     }
 
     /**
@@ -284,9 +320,13 @@ class ProductAdminController extends Controller
     {
         $perPage = min(max((int) $request->input('per_page', 20), 1), 500);
 
-        return Product::with(['category', 'brand', 'activeDiscount'])
+        $paginator = Product::with(['category', 'brand', 'supplier', 'activeDiscount'])
             ->orderByDesc('id')
             ->paginate($perPage);
+
+        $paginator->getCollection()->transform(fn (Product $product) => $this->withLotCatalogPricing($product));
+
+        return $paginator;
     }
 
     public function store(Request $request)
@@ -294,6 +334,7 @@ class ProductAdminController extends Controller
         $data = $request->validate([
             'category_id' => ['required', 'integer'],
             'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'sku' => ['nullable', 'string', 'max:60'],
             'barcode_code' => [
                 'nullable',
@@ -309,6 +350,7 @@ class ProductAdminController extends Controller
             'name' => ['required', 'string', 'max:180'],
             'description' => ['nullable', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
+            'cost_price' => ['nullable', 'numeric', 'min:0'],
             'image_url' => ['nullable', 'string'],
             'stock' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
@@ -359,6 +401,7 @@ class ProductAdminController extends Controller
         if (array_key_exists('variant_matrix', $data)) {
             $data['variant_matrix'] = $this->normalizeVariantMatrixInput($data['variant_matrix'] ?? null);
             $this->assertVariantSkuBarcodesUnique($data['variant_matrix']);
+            $this->syncProductStockFromVariantMatrix($data);
         }
 
         $data = $this->applyStockLabelPricing($data);
@@ -390,7 +433,48 @@ class ProductAdminController extends Controller
 
     public function show(Product $product)
     {
-        return $product->load(['category', 'brand', 'activeDiscount']);
+        return $this->withLotCatalogPricing(
+            $product->load(['category', 'brand', 'supplier', 'activeDiscount']),
+        );
+    }
+
+    private function withLotCatalogPricing(Product $product): Product
+    {
+        $product->setAttribute('sellable_stock', $this->inventoryLots->productSellableStock($product));
+
+        $pricing = $this->inventoryLots->catalogPricingFromLots($product);
+
+        $product->setAttribute('pricing_source', $pricing['source']);
+        $product->setAttribute('lot_pricing_varies', (bool) ($pricing['varies_by_variant'] ?? false));
+        $product->setAttribute('lot_pricing_variant_label', $pricing['variant_label'] ?? null);
+
+        if ($pricing['source'] === 'inventory_lot') {
+            $product->setAttribute('cost_price', $pricing['cost_per_unit']);
+            $product->setAttribute('price', $pricing['sell_price']);
+
+            if ($pricing['varies_by_variant'] ?? false) {
+                $product->setAttribute('lot_cost_price_max', $pricing['cost_max']);
+                $product->setAttribute('lot_sell_price_max', $pricing['sell_max']);
+            }
+        }
+
+        return $product;
+    }
+
+    public function variantPricing(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'size' => ['nullable', 'string', 'max:40'],
+            'color' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        return response()->json([
+            'data' => $this->inventoryLots->variantPricingHints(
+                $product,
+                $validated['size'] ?? null,
+                $validated['color'] ?? null,
+            ),
+        ]);
     }
 
     public function update(Request $request, Product $product)
@@ -398,6 +482,7 @@ class ProductAdminController extends Controller
         $data = $request->validate([
             'category_id' => ['sometimes', 'integer'],
             'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'sku' => ['sometimes', 'string', 'max:60'],
             'barcode_code' => [
                 'nullable',
@@ -413,6 +498,7 @@ class ProductAdminController extends Controller
             'name' => ['sometimes', 'string', 'max:180'],
             'description' => ['nullable', 'string'],
             'price' => ['sometimes', 'numeric', 'min:0'],
+            'cost_price' => ['nullable', 'numeric', 'min:0'],
             'image_url' => ['nullable', 'string'],
             'stock' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
@@ -449,6 +535,7 @@ class ProductAdminController extends Controller
         if (array_key_exists('variant_matrix', $data)) {
             $data['variant_matrix'] = $this->normalizeVariantMatrixInput($data['variant_matrix'] ?? null);
             $this->assertVariantSkuBarcodesUnique($data['variant_matrix'], $product->id);
+            $this->syncProductStockFromVariantMatrix($data);
         }
 
         $data = $this->applyStockLabelPricing($data);
@@ -456,7 +543,7 @@ class ProductAdminController extends Controller
 
         $product->update($data);
 
-        return $product->load(['category', 'brand', 'activeDiscount']);
+        return $product->load(['category', 'brand', 'supplier', 'activeDiscount']);
     }
 
     public function destroy(Product $product)

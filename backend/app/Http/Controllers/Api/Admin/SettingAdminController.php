@@ -77,7 +77,7 @@ class SettingAdminController extends Controller
             $group = 'general';
             if (str_starts_with($key, 'social_')) {
                 $group = 'social';
-            } elseif (in_array($key, ['currency', 'tax_rate', 'free_shipping_threshold'], true)) {
+            } elseif (in_array($key, ['currency', 'tax_rate', 'free_shipping_threshold', 'delivery_fee_phnom_penh', 'delivery_fee_province'], true)) {
                 $group = 'commerce';
             } elseif (in_array($key, ['font_en', 'font_km'], true)) {
                 $group = 'appearance';

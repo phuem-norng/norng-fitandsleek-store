@@ -92,7 +92,7 @@ export default function BrandRow() {
   }
 
   return (
-    <section className="container-safe mt-8 max-w-[1600px] mx-auto">
+    <section className="container-safe mt-8">
       <div className="mt-4 relative">
         {/* Left / Right Controls */}
         {canScroll && (
@@ -100,7 +100,7 @@ export default function BrandRow() {
             <button
               type="button"
               onClick={() => scrollBy(-1)}
-              className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full border-0 bg-transparent text-zinc-800 shadow-none hover:opacity-75 transition-opacity duration-200 ease-out ${
+              className={`fs-carousel-nav-btn absolute left-2 top-1/2 z-10 -translate-y-1/2 transition-opacity duration-200 ease-out ${
                 canScrollLeft ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
               }`}
               aria-label="Scroll left"
@@ -113,7 +113,7 @@ export default function BrandRow() {
             <button
               type="button"
               onClick={() => scrollBy(1)}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full border-0 bg-transparent text-zinc-800 shadow-none hover:opacity-75 transition-opacity duration-200 ease-out ${
+              className={`fs-carousel-nav-btn absolute right-2 top-1/2 z-10 -translate-y-1/2 transition-opacity duration-200 ease-out ${
                 canScrollRight ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
               }`}
               aria-label="Scroll right"

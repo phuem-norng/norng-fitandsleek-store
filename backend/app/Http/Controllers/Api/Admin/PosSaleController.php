@@ -8,6 +8,7 @@ use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Services\BarcodeScanStockService;
 use App\Services\BakongKhqrService;
+use App\Services\OrderItemLotAllocation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,21 +55,13 @@ class PosSaleController extends Controller
                     ]);
                 }
                 $qty = (int) $line['qty'];
-                $max = $row['max_sellable_qty'];
-                if ($max !== null && $qty > $max) {
-                    throw ValidationException::withMessages([
-                        'lines' => ['Not enough stock for '.$row['name'].' (requested '.$qty.', max '.$max.').'],
-                    ]);
+
+                $deduction = BarcodeScanStockService::applyScanDeduction($row['code'], $qty);
+                $allocations = $deduction['inventory_lot_allocations'] ?? [];
+
+                foreach (OrderItemLotAllocation::expandSnapshotLine($row, $qty, $allocations) as $snap) {
+                    $snapshot[] = $snap;
                 }
-
-                BarcodeScanStockService::applyScanDeduction($row['code'], $qty);
-
-                $snapshot[] = [
-                    'code' => $row['code'],
-                    'name' => $row['name'],
-                    'qty' => $qty,
-                    'unit_price' => round((float) $row['price'], 2),
-                ];
             }
 
             $subtotal = round(
@@ -98,7 +91,18 @@ class PosSaleController extends Controller
             ]);
 
             foreach ($snapshot as $s) {
-                $this->createOrderItemForLine($order->id, $s['code'], $s['name'], $s['qty'], $s['unit_price']);
+                $this->createOrderItemForLine(
+                    $order->id,
+                    $s['code'],
+                    $s['name'],
+                    $s['qty'],
+                    $s['unit_price'],
+                    $s['inventory_lot_id'] ?? null,
+                    $s['unit_cost_at_sale'] ?? null,
+                    $s['listing_status_at_sale'] ?? null,
+                    $s['lot_tier_at_sale'] ?? null,
+                    $s['lot_number_at_sale'] ?? null,
+                );
             }
 
             $khqrOut = null;
@@ -190,12 +194,6 @@ class PosSaleController extends Controller
                     ]);
                 }
                 $qty = (int) $line['qty'];
-                $max = $row['max_sellable_qty'];
-                if ($max !== null && $qty > $max) {
-                    throw ValidationException::withMessages([
-                        'lines' => ['Not enough stock for '.$row['name'].' (requested '.$qty.', max '.$max.').'],
-                    ]);
-                }
 
                 $snapshot[] = [
                     'code' => $row['code'],
@@ -281,8 +279,18 @@ class PosSaleController extends Controller
         return $n;
     }
 
-    private function createOrderItemForLine(int $orderId, string $code, string $name, int $qty, float $unitPrice): void
-    {
+    private function createOrderItemForLine(
+        int $orderId,
+        string $code,
+        string $name,
+        int $qty,
+        float $unitPrice,
+        ?int $inventoryLotId = null,
+        ?float $unitCostAtSale = null,
+        ?string $listingStatusAtSale = null,
+        ?string $lotTierAtSale = null,
+        ?string $lotNumberAtSale = null,
+    ): void {
         $candidates = BarcodeScanStockService::collectScanCandidates($code);
         $variantMatch = \App\Services\ProductVariantInventory::findBySkuBarcodeCandidates($candidates);
         $bundle = BarcodeScanStockService::findBundleAmongCandidates($candidates);
@@ -295,11 +303,16 @@ class PosSaleController extends Controller
         OrderItem::create([
             'order_id' => $orderId,
             'product_id' => $product?->id,
+            'inventory_lot_id' => $inventoryLotId,
             'size' => $variant['size'] ?? null,
             'color' => $variant['color'] ?? null,
             'name' => $name,
             'sku' => $sku,
             'price' => $unitPrice,
+            'unit_cost_at_sale' => $unitCostAtSale,
+            'listing_status_at_sale' => $listingStatusAtSale,
+            'lot_tier_at_sale' => $lotTierAtSale,
+            'lot_number_at_sale' => $lotNumberAtSale,
             'qty' => $qty,
             'line_total' => $lineTotal,
         ]);

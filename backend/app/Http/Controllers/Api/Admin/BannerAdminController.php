@@ -9,6 +9,32 @@ use Illuminate\Http\Request;
 
 class BannerAdminController extends BaseAdminController
 {
+    private const AUDIENCE_TARGETS = ['all', 'guest', 'bronze', 'silver', 'gold', 'vip'];
+    private const PRIORITY_SEGMENTS = ['guest', 'bronze', 'silver', 'gold', 'vip'];
+
+    private function normalizeAudienceTargets(mixed $targets): array
+    {
+        if (!is_array($targets) || empty($targets)) {
+            return ['all'];
+        }
+
+        $normalized = collect($targets)
+            ->map(fn ($value) => strtolower(trim((string) $value)))
+            ->filter(fn ($value) => in_array($value, self::AUDIENCE_TARGETS, true))
+            ->values()
+            ->all();
+
+        if (empty($normalized)) {
+            return ['all'];
+        }
+
+        if (in_array('all', $normalized, true) && count($normalized) > 1) {
+            return ['all'];
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
     private function formatBanner(Banner $b): array
     {
         return [
@@ -19,6 +45,8 @@ class BannerAdminController extends BaseAdminController
             'subtitle' => $b->subtitle,
             'link_url' => $b->link_url,
             'position' => $b->position,
+            'audience_targets' => $this->normalizeAudienceTargets($b->audience_targets),
+            'audience_priority_map' => $this->normalizeAudiencePriorityMap($b->audience_priority_map),
             'is_active' => (bool) $b->is_active,
             'order' => (int) ($b->order ?? 0),
             'show_badge' => $b->show_badge !== false,
@@ -72,6 +100,10 @@ class BannerAdminController extends BaseAdminController
             'link_url' => ['nullable','string','max:500'],
             'position' => ['required','in:hero,mid,sidebar,popup,promo,discounts'],
             'media_url' => ['nullable','string','max:1000'],
+            'audience_targets' => ['nullable', 'array'],
+            'audience_targets.*' => ['string', 'in:all,guest,bronze,silver,gold,vip'],
+            'audience_priority_map' => ['nullable', 'array'],
+            'audience_priority_map.*' => ['nullable', 'integer', 'min:0', 'max:9999'],
             'is_active' => ['nullable','boolean'],
             'order' => ['nullable','integer','min:0'],
             'image' => ['nullable','file','mimes:jpg,jpeg,png,webp,avif,svg,gif,mp4,webm,ogg','max:51200'],
@@ -92,6 +124,8 @@ class BannerAdminController extends BaseAdminController
             'subtitle' => $validated['subtitle'] ?? null,
             'link_url' => $validated['link_url'] ?? null,
             'position' => $validated['position'],
+            'audience_targets' => $this->normalizeAudienceTargets($validated['audience_targets'] ?? ['all']),
+            'audience_priority_map' => $this->normalizeAudiencePriorityMap($validated['audience_priority_map'] ?? []),
             'is_active' => $validated['is_active'] ?? true,
             'order' => $validated['order'] ?? 0,
             'image_url' => $path,
@@ -116,6 +150,10 @@ class BannerAdminController extends BaseAdminController
             'link_url' => ['nullable','string','max:500'],
             'position' => ['required','in:hero,mid,sidebar,popup,promo,discounts'],
             'media_url' => ['nullable','string','max:1000'],
+            'audience_targets' => ['nullable', 'array'],
+            'audience_targets.*' => ['string', 'in:all,guest,bronze,silver,gold,vip'],
+            'audience_priority_map' => ['nullable', 'array'],
+            'audience_priority_map.*' => ['nullable', 'integer', 'min:0', 'max:9999'],
             'is_active' => ['nullable','boolean'],
             'order' => ['nullable','integer','min:0'],
             'image' => ['nullable','file','mimes:jpg,jpeg,png,webp,avif,svg,gif,mp4,webm,ogg','max:51200'],
@@ -137,6 +175,12 @@ class BannerAdminController extends BaseAdminController
         $banner->subtitle = $validated['subtitle'] ?? $banner->subtitle;
         $banner->link_url = $validated['link_url'] ?? $banner->link_url;
         $banner->position = $validated['position'];
+        if (array_key_exists('audience_targets', $validated)) {
+            $banner->audience_targets = $this->normalizeAudienceTargets($validated['audience_targets']);
+        }
+        if (array_key_exists('audience_priority_map', $validated)) {
+            $banner->audience_priority_map = $this->normalizeAudiencePriorityMap($validated['audience_priority_map']);
+        }
         $banner->is_active = $validated['is_active'] ?? $banner->is_active;
         $banner->order = $validated['order'] ?? ($banner->order ?? 0);
 
@@ -156,6 +200,18 @@ class BannerAdminController extends BaseAdminController
         $banner->save();
 
         return response()->json(['data' => $this->formatBanner($banner)]);
+    }
+
+    private function normalizeAudiencePriorityMap(mixed $priorityMap): array
+    {
+        $map = is_array($priorityMap) ? $priorityMap : [];
+        $normalized = [];
+
+        foreach (self::PRIORITY_SEGMENTS as $segment) {
+            $normalized[$segment] = isset($map[$segment]) ? max(0, min(9999, (int) $map[$segment])) : 100;
+        }
+
+        return $normalized;
     }
 
     public function destroy(Banner $banner)

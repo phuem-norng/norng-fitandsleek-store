@@ -9,6 +9,9 @@ import { useLanguage } from "../lib/i18n.jsx";
 import Swal, { errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../lib/swal";
 import TwoFactorSettings from "../components/security/TwoFactorSettings.jsx";
 import ReplacementRequestModal, { ReplacementCaseItemsList } from "../components/ReplacementRequestModal.jsx";
+import OrderTrackingCard from "../components/OrderTrackingCard.jsx";
+import TrustedDeviceSessionsList from "../components/security/TrustedDeviceSessionsList.jsx";
+import ExternalCourierTrackButton from "../components/ExternalCourierTrackButton.jsx";
 
 const createEmptyAddress = () => ({
   label: "Home",
@@ -46,10 +49,6 @@ export default function CustomerProfile() {
     : "info";
   const [activeTab, setActiveTab] = useState(initialTab); // info, orders, addresses, track, settings
   const [editForm, setEditForm] = useState({});
-  const [trackOrderId, setTrackOrderId] = useState("");
-  const [trackedOrder, setTrackedOrder] = useState(null);
-  const [trackError, setTrackError] = useState("");
-  const [trackLoading, setTrackLoading] = useState(false);
   const [newAddress, setNewAddress] = useState(createEmptyAddress());
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [editAddressForm, setEditAddressForm] = useState(null);
@@ -64,6 +63,7 @@ export default function CustomerProfile() {
   const [editingReplacementSubmitting, setEditingReplacementSubmitting] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [loyalty, setLoyalty] = useState(null);
 
   const PROFILE_SUCCESS_MESSAGE = "ព័ត៌មានត្រូវបានរក្សាទុកដោយជោគជ័យ! (Profile updated successfully!)";
   const GENERIC_ERROR_MESSAGE = "មានបញ្ហាបច្ចេកទេស! សូមព្យាយាមម្តងទៀត (Update failed! Please try again)";
@@ -122,11 +122,12 @@ export default function CustomerProfile() {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const [profileRes, ordersRes, addressRes, replacementRes] = await Promise.all([
+      const [profileRes, ordersRes, addressRes, replacementRes, loyaltyRes] = await Promise.all([
         api.get("/user/profile"),
         api.get("/user/orders"),
         api.get("/user/addresses"),
         api.get("/replacement-cases"),
+        api.get("/user/loyalty").catch(() => ({ data: { data: null } })),
       ]);
 
       setProfile(profileRes.data);
@@ -134,6 +135,7 @@ export default function CustomerProfile() {
       setAddresses(addressRes.data?.data || []);
       setReplacementCases(replacementRes.data?.data?.data || replacementRes.data?.data || []);
       setEditForm(profileRes.data);
+      setLoyalty(loyaltyRes.data?.data || null);
     } catch (error) {
       console.error("Error loading profile:", error);
     } finally {
@@ -520,56 +522,9 @@ export default function CustomerProfile() {
     await logout();
   };
 
-  const handleTrackOrder = async (e) => {
-    e.preventDefault();
-    const trimmedId = trackOrderId.trim();
-
-    if (!trimmedId) {
-      setTrackError('Please enter an order ID');
-      return;
-    }
-
-    setTrackLoading(true);
-    setTrackError('');
-    setTrackedOrder(null);
-
-    try {
-      const { data } = await api.get(`/orders/${trimmedId}/track`);
-      setTrackedOrder(data.order);
-    } catch (error) {
-      setTrackError(error.response?.data?.message || 'Order not found. Please check your order ID.');
-    } finally {
-      setTrackLoading(false);
-    }
-  };
-
-  const getStatusStep = (status) => {
-    const steps = { pending: 0, confirmed: 1, processing: 2, shipped: 3, delivered: 4 };
-    return steps[status?.toLowerCase()] || 0;
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      pending: 'bg-yellow-500',
-      confirmed: 'bg-[#6F8B7F]',
-      processing: 'bg-indigo-500',
-      shipped: 'bg-purple-500',
-      delivered: 'bg-emerald-500',
-    };
-    return colors[status?.toLowerCase()] || 'bg-gray-500';
-  };
-
-  const getStatusIcon = (status) => {
-    const statusLower = status?.toLowerCase();
-    if (statusLower === 'delivered') return <CheckCircle className="w-5 h-5" />;
-    if (statusLower === 'shipped') return <Truck className="w-5 h-5" />;
-    if (statusLower === 'processing') return <Package className="w-5 h-5" />;
-    return <ShoppingBag className="w-5 h-5" />;
-  };
-
   if (loading) {
     return (
-      <div className="container-safe py-20">
+      <div className="container-safe-inset py-20">
         <div className="text-center">
           <div className="animate-spin w-12 h-12 border-4 border-gray-200 border-t-[#6F8B7F] rounded-full mx-auto"></div>
           <p className="text-gray-600 mt-4">Loading profile...</p>
@@ -580,7 +535,7 @@ export default function CustomerProfile() {
 
   if (!user) {
     return (
-      <div className="container-safe py-20 text-center">
+      <div className="container-safe-inset py-20 text-center">
         <p className="text-lg text-gray-600">Please log in to view your profile</p>
       </div>
     );
@@ -588,7 +543,7 @@ export default function CustomerProfile() {
 
   return (
     <>
-      <div className="container-safe fs-customer-profile py-4 sm:py-6 lg:py-8">
+      <div className="container-safe-inset fs-customer-profile py-4 sm:py-6 lg:py-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#6F8B7F] to-[#5f786d] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 text-white mb-4 sm:mb-6 lg:mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -747,10 +702,24 @@ export default function CustomerProfile() {
                         <p className="text-xs sm:text-sm text-gray-600">Saved Addresses</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-2xl sm:text-3xl font-black text-[#6F8B7F]">🏆</p>
-                        <p className="text-xs sm:text-sm text-gray-600">Customer</p>
+                        <p className="text-2xl sm:text-3xl font-black text-[#6F8B7F]">
+                          {String(loyalty?.tier || "bronze").toUpperCase()}
+                        </p>
+                        <p className="text-xs sm:text-sm text-gray-600">
+                          {Number(loyalty?.points || 0).toLocaleString()} pts
+                        </p>
                       </div>
                     </div>
+                    {loyalty ? (
+                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                        Loyalty tier discount: <span className="font-bold">{Number(loyalty?.discount_percent || 0)}%</span>
+                        {loyalty?.next_tier ? (
+                          <span className="ml-2 text-emerald-600">
+                            · Need {Math.max(Number(loyalty.next_tier.min_points || 0) - Number(loyalty.points || 0), 0)} pts for {String(loyalty.next_tier.tier).toUpperCase()}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div>
@@ -873,7 +842,24 @@ export default function CustomerProfile() {
                             ))}
                           </div>
                         ) : null}
+                        {order.shipment?.external_tracking_url ? (
+                          <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <ExternalCourierTrackButton
+                              url={order.shipment.external_tracking_url}
+                              provider={order.shipment.provider}
+                              label={t("trackPackage") || "Track package"}
+                              compact
+                            />
+                          </div>
+                        ) : null}
                         <div className="mt-4 flex flex-wrap gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setTab("track")}
+                            className="text-xs font-semibold px-4 py-2 rounded-full border border-gray-200 hover:bg-gray-50"
+                          >
+                            {t("trackOrder")}
+                          </button>
                           <button
                             type="button"
                             onClick={() => orderAgain(order)}
@@ -1171,37 +1157,28 @@ export default function CustomerProfile() {
                   </div>
 
                   <div className="border-b border-gray-200 pb-6">
-                    <h3 className="font-bold text-lg mb-2">Active Sessions</h3>
-                    <p className="text-gray-600 text-sm mb-4">Trusted devices currently logged in to your account.</p>
+                    <h3 className="font-bold text-lg mb-2">{t("trustedDevices") || "Trusted Devices"}</h3>
+                    <p className="text-gray-600 text-sm mb-4">
+                      {t("trustedDevicesHint") || "Devices signed in to your account. Tap the arrow to see older sessions on the same device."}
+                    </p>
                     {sessionsLoading ? (
                       <p className="text-sm text-gray-500">Loading sessions...</p>
                     ) : sessions.length === 0 ? (
                       <p className="text-sm text-gray-500">No active sessions found.</p>
                     ) : (
-                      <div className="space-y-3">
-                        {sessions.map((session) => (
-                          <div key={session.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="font-semibold text-gray-800">{session.device_name || "Unknown device"}</p>
-                                <p className="text-xs text-gray-600">{session.browser || "Unknown browser"} • {session.os || "Unknown OS"}</p>
-                                <p className="text-xs text-gray-500">IP: {session.ip_address || "-"} • Last used: {session.last_used_at || "-"}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {session.is_current ? (
-                                  <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">Current</span>
-                                ) : null}
-                                <button
-                                  onClick={() => revokeSession(session.id)}
-                                  className="px-3 py-1.5 rounded-lg border border-red-300 text-xs font-semibold text-red-700 hover:bg-red-50"
-                                >
-                                  Logout
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <TrustedDeviceSessionsList
+                        sessions={sessions}
+                        onRevoke={revokeSession}
+                        compactMeta
+                        titleClassName="font-semibold text-gray-800"
+                        metaClassName="text-gray-600"
+                        mutedMetaClassName="text-gray-500"
+                        cardClassName="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                        nestedCardClassName="rounded-lg border border-gray-200 bg-white p-3 ml-8"
+                        currentBadgeClassName="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700"
+                        revokeButtonClassName="px-3 py-1.5 rounded-lg border border-red-300 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        expandButtonClassName="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-[#6F8B7F] hover:bg-[#eef3f0] transition-colors"
+                      />
                     )}
                   </div>
 
@@ -1220,110 +1197,18 @@ export default function CustomerProfile() {
 
             {activeTab === "track" && (
               <div className="bg-white rounded-2xl p-8 border border-gray-200">
-                <h2 className="text-2xl font-black mb-6">Track Your Order</h2>
+                <h2 className="text-2xl font-black mb-2">{t("trackYourOrder")}</h2>
+                <p className="mb-6 text-sm text-gray-600">{t("accountTrackOrderHint")}</p>
 
-                <form onSubmit={handleTrackOrder} className="mb-8">
-                  <div className="flex gap-3">
-                    <input
-                      type="text"
-                      placeholder="Enter your order ID"
-                      value={trackOrderId}
-                      onChange={(e) => setTrackOrderId(e.target.value)}
-                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#6F8B7F] outline-none"
-                    />
-                    <button
-                      type="submit"
-                      disabled={trackLoading}
-                      className="px-6 py-3 bg-[#6F8B7F] hover:bg-[#5f786d] disabled:opacity-50 text-white font-semibold rounded-lg transition-all"
-                    >
-                      {trackLoading ? "Tracking..." : "Track"}
-                    </button>
+                {orders.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 py-12 text-center text-gray-600">
+                    {t("trackNoOrders")}
                   </div>
-                </form>
-
-                {trackError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-                    {trackError}
-                  </div>
-                )}
-
-                {trackedOrder && (
-                  <div className="space-y-6">
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="font-bold text-lg mb-4">Order #{trackedOrder.id}</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div>
-                          <p className="text-sm text-gray-600">Order Date</p>
-                          <p className="font-semibold">{new Date(trackedOrder.created_at).toLocaleDateString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Total</p>
-                          <p className="font-semibold text-lg text-[#6F8B7F]">${Number(trackedOrder.total || 0).toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Status</p>
-                          <p className={`font-semibold capitalize px-3 py-1 rounded-full inline-block text-white ${getStatusColor(trackedOrder.status)}`}>
-                            {trackedOrder.status}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Items</p>
-                          <p className="font-semibold">{trackedOrder.items?.length || 0} item(s)</p>
-                        </div>
-                      </div>
-
-                      {/* Progress Timeline */}
-                      <div className="mt-8">
-                        <h4 className="font-bold mb-4">Tracking Timeline</h4>
-                        <div className="relative">
-                          <div className="flex flex-col space-y-4">
-                            {[
-                              { status: 'pending', label: 'Order Placed', icon: <ShoppingBag className="w-5 h-5" /> },
-                              { status: 'confirmed', label: 'Confirmed', icon: <CheckCircle className="w-5 h-5" /> },
-                              { status: 'processing', label: 'Processing', icon: <Package className="w-5 h-5" /> },
-                              { status: 'shipped', label: 'Shipped', icon: <Truck className="w-5 h-5" /> },
-                              { status: 'delivered', label: 'Delivered', icon: <CheckCircle className="w-5 h-5" /> },
-                            ].map((step, idx) => {
-                              const currentStep = getStatusStep(trackedOrder.status);
-                              const stepNum = getStatusStep(step.status);
-                              const isCompleted = stepNum <= currentStep;
-                              const isCurrent = stepNum === currentStep;
-
-                              return (
-                                <div key={step.status} className="flex items-center gap-4">
-                                  <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-white ${isCompleted ? 'bg-emerald-500' : 'bg-gray-300'
-                                    }`}>
-                                    {isCompleted ? step.icon : idx + 1}
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className={`font-semibold ${isCurrent ? 'text-[#6F8B7F]' : isCompleted ? 'text-emerald-600' : 'text-gray-500'}`}>
-                                      {step.label}
-                                    </p>
-                                    {isCurrent && <p className="text-sm text-[#6F8B7F]">Current status</p>}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Items List */}
-                    <div>
-                      <h4 className="font-bold text-lg mb-4">Items in This Order</h4>
-                      <div className="space-y-3">
-                        {trackedOrder.items?.map((item) => (
-                          <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
-                            <div className="flex-1">
-                              <p className="font-semibold">{item.name || item.product_name || "Product"}</p>
-                              <p className="text-sm text-gray-600">Qty: {item.quantity ?? item.qty ?? 0}</p>
-                            </div>
-                            <p className="font-semibold text-lg">${Number(item.subtotal ?? ((item.price ?? 0) * (item.quantity ?? item.qty ?? 0))).toFixed(2)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                ) : (
+                  <div className="space-y-4">
+                    {orders.map((order) => (
+                      <OrderTrackingCard key={order.id} order={order} t={t} />
+                    ))}
                   </div>
                 )}
               </div>

@@ -7,6 +7,9 @@ use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Services\DeliveryFeeService;
+use App\Services\InventoryLotService;
+use App\Services\LoyaltyService;
 use App\Services\ProductVariantInventory;
 use App\Services\SecurityAuditService;
 use Illuminate\Http\Request;
@@ -16,14 +19,24 @@ use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function __construct(private SecurityAuditService $securityAudit)
-    {
+    public function __construct(
+        private SecurityAuditService $securityAudit,
+        private LoyaltyService $loyaltyService,
+        private InventoryLotService $inventoryLots,
+        private DeliveryFeeService $deliveryFees,
+    ) {
     }
 
     private function resolveUnitPrice($cartItem): float
     {
         if ($cartItem->product) {
-            return (float) ($cartItem->product->final_price ?? $cartItem->product->price ?? $cartItem->unit_price ?? 0);
+            $cartItem->product->loadMissing('activeDiscount');
+
+            return $this->inventoryLots->resolveStorefrontCustomerPrice(
+                $cartItem->product,
+                $cartItem->size ?? null,
+                $cartItem->color ?? null,
+            );
         }
 
         return (float) ($cartItem->unit_price ?? 0);
@@ -39,23 +52,30 @@ class OrderController extends Controller
 
     public function myOrders(Request $request)
     {
-        $orders = Order::with(['items.product.category'])
+        $orders = Order::with(['items.product.category', 'shipment'])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('id')
             ->paginate(10);
+
+        $orders->getCollection()->transform(function (Order $order) {
+            $payload = $order->toArray();
+            $payload['shipment'] = $this->shipmentPayload($order);
+
+            return $payload;
+        });
 
         return response()->json($orders);
     }
 
     public function trackOrder($orderNumber, Request $request)
     {
-        $order = Order::with(['items.product'])
+        $order = Order::with(['items.product', 'shipment'])
             ->where('order_number', $orderNumber)
             ->first();
 
         if (!$order) {
             // Also check by ID
-            $order = Order::with(['items.product'])
+            $order = Order::with(['items.product', 'shipment'])
                 ->where('id', (int) $orderNumber)
                 ->first();
         }
@@ -71,17 +91,21 @@ class OrderController extends Controller
                 'total' => $order->total,
                 'created_at' => $order->created_at,
                 'shipping_address' => $order->shipping_address ?? 'N/A',
-                'tracking_number' => $order->tracking_number,
+                'tracking_number' => $order->shipment?->tracking_code,
+                'shipment' => $this->shipmentPayload($order),
                 'items' => $order->items->map(function ($item) {
                     $qty = $item->qty ?? $item->quantity ?? 0;
                     $price = $item->price ?? $item->unit_price ?? 0;
                     $subtotal = $item->line_total ?? ((float) $price * (int) $qty);
                     return [
-                        'name' => $item->product->name ?? $item->name ?? 'Product',
+                        'name' => $item->name ?? $item->product->name ?? 'Product',
                         'quantity' => (int) $qty,
                         'price' => (float) $price,
                         'subtotal' => round((float) $subtotal, 2),
                         'image_url' => $item->product->image_url ?? null,
+                        'lot_tier_at_sale' => $item->lot_tier_at_sale,
+                        'lot_number_at_sale' => $item->lot_number_at_sale,
+                        'listing_status_at_sale' => $item->listing_status_at_sale,
                     ];
                 }),
             ],
@@ -92,7 +116,8 @@ class OrderController extends Controller
     {
         $validated = $request->validate([
             'payment_method' => 'required|in:bakong_khqr,card_visa',
-            'shipping_address' => 'nullable|array',
+            'shipping_address' => 'required|array',
+            'shipping_address.province' => 'required|string|max:120',
             'billing_address' => 'nullable|array',
         ]);
 
@@ -121,7 +146,12 @@ class OrderController extends Controller
             }
         }
 
-        $order = DB::transaction(function () use ($userId, $cart, $validated) {
+        $shippingProvince = (string) ($validated['shipping_address']['province'] ?? '');
+        $shippingFee = $this->deliveryFees->resolveForProvince($shippingProvince);
+        $deliveryZone = $this->deliveryFees->resolveZone($shippingProvince);
+
+        $discountPercent = $this->loyaltyService->discountPercentForUser($request->user());
+        $order = DB::transaction(function () use ($userId, $cart, $validated, $discountPercent, $shippingFee, $deliveryZone) {
             $total = 0;
             $validatedProducts = [];
             $validatedUnitPrices = [];
@@ -144,16 +174,25 @@ class OrderController extends Controller
                 $total += $unitPrice * (int) $i->quantity;
             }
 
+            $discountAmount = round($total * ($discountPercent / 100), 2);
+            $finalTotal = max(round($total - $discountAmount + $shippingFee, 2), 0);
+
             $order = Order::create([
                 'user_id' => $userId,
                 'order_number' => $this->generateOrderNumber(),
                 'status' => 'pending_payment',
                 'payment_status' => 'pending',
                 'subtotal' => round($total, 2),
-                'total' => round($total, 2),
+                'shipping' => round($shippingFee, 2),
+                'discount' => $discountAmount,
+                'total' => $finalTotal,
                 'payment_method' => $validated['payment_method'],
                 'shipping_address' => $validated['shipping_address'] ?? null,
                 'billing_address' => $validated['billing_address'] ?? null,
+                'pos_meta' => [
+                    'loyalty_discount_percent' => $discountPercent,
+                    'delivery_zone' => $deliveryZone,
+                ],
             ]);
 
             foreach ($cart->items as $ci) {
@@ -202,5 +241,22 @@ class OrderController extends Controller
             'message' => 'Checkout successful. Please complete payment.',
             'order' => $order,
         ], 201);
+    }
+
+    private function shipmentPayload(Order $order): ?array
+    {
+        $shipment = $order->relationLoaded('shipment') ? $order->shipment : $order->shipment()->first();
+
+        if (! $shipment) {
+            return null;
+        }
+
+        return [
+            'provider' => $shipment->provider,
+            'tracking_code' => $shipment->tracking_code,
+            'external_tracking_url' => $shipment->external_tracking_url,
+            'status' => $shipment->status,
+            'shipped_at' => $shipment->shipped_at,
+        ];
     }
 }

@@ -30,7 +30,7 @@ name: fitandsleek_ai
 services:
   db:
     image: postgres:15-alpine
-    container_name: fitandsleek_db
+    container_name: fitandsleek_db1
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_DATABASE:-fitandsleek_v4}

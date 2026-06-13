@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Order;
 use App\Models\Address;
+use App\Models\LoyaltyProfile;
+use App\Services\LoyaltyService;
 use App\Support\Media;
 use Illuminate\Http\Request;
 
 class CustomerProfileController extends Controller
 {
+    public function __construct(private LoyaltyService $loyaltyService)
+    {
+    }
     private function normalizeLegacyAddress(array $legacy): array
     {
         $street = trim((string) ($legacy['street'] ?? ''));
@@ -109,7 +114,7 @@ class CustomerProfileController extends Controller
     public function getOrders(Request $request)
     {
         $orders = Order::where('user_id', auth()->id())
-            ->with(['items.product'])
+            ->with(['items.product', 'shipment'])
             ->orderByDesc('created_at')
             ->paginate($request->get('per_page', 10));
 
@@ -378,6 +383,36 @@ class CustomerProfileController extends Controller
 
         return response()->json([
             'data' => $activity,
+        ]);
+    }
+
+    public function getLoyalty()
+    {
+        $userId = (int) auth()->id();
+        $profile = LoyaltyProfile::firstOrCreate(
+            ['user_id' => $userId],
+            ['points' => 0, 'tier' => 'bronze', 'orders_count' => 0, 'lifetime_spend' => 0]
+        );
+        $tiers = $this->loyaltyService->tiers();
+        $currentTier = strtolower((string) $profile->tier);
+        $nextTier = null;
+        foreach ($tiers as $key => $rule) {
+            if ((int) $rule['min_points'] > (int) $profile->points) {
+                $nextTier = ['tier' => $key, 'min_points' => (int) $rule['min_points']];
+                break;
+            }
+        }
+
+        return response()->json([
+            'data' => [
+                'points' => (int) $profile->points,
+                'tier' => $currentTier,
+                'orders_count' => (int) $profile->orders_count,
+                'lifetime_spend' => (float) $profile->lifetime_spend,
+                'discount_percent' => (int) ($tiers[$currentTier]['discount_percent'] ?? 0),
+                'next_tier' => $nextTier,
+                'tiers' => $tiers,
+            ],
         ]);
     }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
+import ChromeBackgroundImageField from '../components/admin/ChromeBackgroundImageField.jsx';
 
 export default function ExtendedHomepageManager() {
   const [activeTab, setActiveTab] = useState('hero');
@@ -76,6 +77,8 @@ export default function ExtendedHomepageManager() {
     logo_text: 'Fitandsleek',
     logo_url: '/logo.png',
     background_color: '#6e8b7e',
+    background_image: '',
+    text_color: '#ffffff',
     search_placeholder: 'Search items...',
     search_enabled: true,
     cart_enabled: true,
@@ -92,18 +95,6 @@ export default function ExtendedHomepageManager() {
     },
     custom_nav: [],
     left_menu: [
-      {
-        title: 'Menu Visibility',
-        items: [
-          { label: 'NEW IN', to: '/search?tab=new', image: '/placeholder.svg' },
-          { label: 'Discounts', to: '/discounts', image: '/placeholder.svg' },
-          { label: 'Women', to: '/search?gender=women', image: '/placeholder.svg' },
-          { label: 'Men', to: '/search?gender=men', image: '/placeholder.svg' },
-          { label: 'Boys', to: '/search?gender=boys', image: '/placeholder.svg' },
-          { label: 'Girls', to: '/search?gender=girls', image: '/placeholder.svg' },
-          { label: 'Sale', to: '/search?tab=sale', image: '/placeholder.svg' },
-        ],
-      },
       {
         title: 'New Product',
         items: [
@@ -169,6 +160,8 @@ export default function ExtendedHomepageManager() {
     contact_address: 'Phnom Penh, Cambodia',
     copyright_text: '© 2026 Fitandsleek. All rights reserved.',
     background_color: '#6e8b7e',
+    background_image: '',
+    text_color: '#ffffff',
     social_title: 'FOLLOW US',
     social_enabled: true,
     support_enabled: true,
@@ -201,7 +194,7 @@ export default function ExtendedHomepageManager() {
     tracking: {
       title: 'TRACKING',
       items: [
-        { label: 'Track Order', link: '/track-order' },
+        { label: 'Track Order', link: '/profile?tab=track' },
         { label: 'Returns', link: '/returns' },
         { label: 'Shipping Info', link: '/shipping' },
       ],
@@ -226,7 +219,7 @@ export default function ExtendedHomepageManager() {
     { label: 'Cart', value: '/cart' },
     { label: 'Contact', value: '/contact' },
     { label: 'Support', value: '/support' },
-    { label: 'Track Order', value: '/track-order' },
+    { label: 'Track Order', value: '/profile?tab=track' },
     { label: 'Privacy', value: '/privacy' },
   ];
 
@@ -319,14 +312,23 @@ export default function ExtendedHomepageManager() {
         sections: allSections,
         subsections 
       });
-      const chrome =
+      const chromeBg =
         headerSettings.background_color || footerSettings.background_color || '#6e8b7e';
+      const chromeText =
+        headerSettings.text_color || footerSettings.text_color || '#ffffff';
       await api.put('/admin/homepage-settings/header-extended', {
         ...headerSettings,
-        background_color: chrome,
+        background_color: chromeBg,
+        background_image: headerSettings.background_image || '',
+        text_color: chromeText,
       });
       await api.put('/admin/homepage-settings/footer-extended', {
-        footer: { ...footerSettings, background_color: chrome },
+        footer: {
+          ...footerSettings,
+          background_color: chromeBg,
+          background_image: footerSettings.background_image || '',
+          text_color: chromeText,
+        },
         footer_sections: footerSections,
         footer_section_titles: footerSectionTitles,
         footer_socials: footerSocials
@@ -389,6 +391,41 @@ export default function ExtendedHomepageManager() {
     setHeaderSettings((prev) => ({ ...prev, background_color: color }));
     setFooterSettings((prev) => ({ ...prev, background_color: color }));
   };
+
+  const handleSharedChromeTextColor = (color) => {
+    setHeaderSettings((prev) => ({ ...prev, text_color: color }));
+    setFooterSettings((prev) => ({ ...prev, text_color: color }));
+  };
+
+  const uploadChromeBackground = async (file, target) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('target', target);
+    try {
+      setLoading(true);
+      const { data } = await api.post('/admin/homepage-settings/chrome-background-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (data?.background_image) {
+        if (target === 'header' || target === 'both') {
+          setHeaderSettings((prev) => ({ ...prev, background_image: data.background_image }));
+        }
+        if (target === 'footer' || target === 'both') {
+          setFooterSettings((prev) => ({ ...prev, background_image: data.background_image }));
+        }
+      }
+      setSuccess('✅ Background image uploaded!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError('Failed to upload image: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sharedChromeBg = () =>
+    headerSettings.background_color || footerSettings.background_color || '#6e8b7e';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
@@ -484,17 +521,61 @@ export default function ExtendedHomepageManager() {
             <h2 className="text-3xl font-bold mb-6">Homepage Sections</h2>
 
             <div className="mb-8 rounded-lg border border-gray-200 p-5 bg-gray-50">
-              <h3 className="mb-2 text-lg font-semibold text-gray-900">Header &amp; footer background</h3>
+              <h3 className="mb-2 text-lg font-semibold text-gray-900">Header &amp; footer appearance</h3>
               <p className="mb-4 text-sm text-gray-600">
-                One color for both header and footer. Save with <strong>Save All Sections</strong> below.
+                Separate header/footer images, or upload one file for both. Save with <strong>Save All Sections</strong> below.
               </p>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">Shared background color</label>
-              <input
-                type="color"
-                value={headerSettings.background_color || footerSettings.background_color || '#6e8b7e'}
-                onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
-                className="w-20 h-10 border border-gray-300 rounded"
-              />
+              <div className="mb-4 grid gap-4 lg:grid-cols-2">
+                <ChromeBackgroundImageField
+                  label="Header background image"
+                  imageUrl={headerSettings.background_image}
+                  tintColor={sharedChromeBg()}
+                  disabled={loading}
+                  onFileSelect={(file) => uploadChromeBackground(file, 'header')}
+                  onRemove={() => setHeaderSettings((p) => ({ ...p, background_image: '' }))}
+                />
+                <ChromeBackgroundImageField
+                  label="Footer background image"
+                  imageUrl={footerSettings.background_image}
+                  tintColor={sharedChromeBg()}
+                  disabled={loading}
+                  onFileSelect={(file) => uploadChromeBackground(file, 'footer')}
+                  onRemove={() => setFooterSettings((p) => ({ ...p, background_image: '' }))}
+                />
+              </div>
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-2">One image for both header and footer</p>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/avif"
+                  disabled={loading}
+                  onChange={(e) => {
+                    uploadChromeBackground(e.target.files?.[0], 'both');
+                    e.target.value = '';
+                  }}
+                  className="block w-full max-w-md text-sm"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">Background color</label>
+                  <input
+                    type="color"
+                    value={headerSettings.background_color || footerSettings.background_color || '#6e8b7e'}
+                    onChange={(e) => handleSharedChromeBackgroundColor(e.target.value)}
+                    className="w-20 h-10 border border-gray-300 rounded cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">Text color</label>
+                  <input
+                    type="color"
+                    value={headerSettings.text_color || footerSettings.text_color || '#ffffff'}
+                    onChange={(e) => handleSharedChromeTextColor(e.target.value)}
+                    className="w-20 h-10 border border-gray-300 rounded cursor-pointer"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -655,35 +736,6 @@ export default function ExtendedHomepageManager() {
                       className="w-5 h-5 text-blue-600"
                     />
                     <span className="font-medium text-gray-900">{feature.replace(/_/g, ' ').toUpperCase()}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h3 className="font-semibold text-gray-900 mb-4">Menu Visibility</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  { key: 'newIn', label: 'NEW IN' },
-                  { key: 'discounts', label: 'Discounts' },
-                  { key: 'women', label: 'Women' },
-                  { key: 'men', label: 'Men' },
-                  { key: 'sale', label: 'Sale' },
-                ].map((item) => (
-                  <label key={item.key} className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                    <input
-                      type="checkbox"
-                      checked={headerSettings.nav_visibility?.[item.key] !== false}
-                      onChange={(e) => setHeaderSettings({
-                        ...headerSettings,
-                        nav_visibility: {
-                          ...(headerSettings.nav_visibility || {}),
-                          [item.key]: e.target.checked,
-                        }
-                      })}
-                      className="rounded border-gray-300"
-                    />
-                    {item.label}
                   </label>
                 ))}
               </div>

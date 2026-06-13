@@ -4,6 +4,11 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Support\ContactPageContent;
+use App\Support\FaqContent;
+use App\Support\PrivacyPageContent;
+use App\Support\TermsPageContent;
+use App\Support\CookiesPageContent;
 use App\Support\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -78,6 +83,8 @@ class HomepageSettingsController extends Controller
                     'logo_text' => 'Fitandsleek',
                     'logo_url' => $appLogoUrl,
                     'background_color' => '#6e8b7e',
+                    'background_image' => '',
+                    'text_color' => '#ffffff',
                     'search_placeholder' => 'Search products...',
                     'search_enabled' => true,
                     'cart_enabled' => true,
@@ -94,18 +101,6 @@ class HomepageSettingsController extends Controller
                     ],
                     'custom_nav' => [],
                     'left_menu' => [
-                        [
-                            'title' => 'Menu Visibility',
-                            'items' => [
-                                ['label' => 'NEW IN', 'to' => '/search?tab=new', 'image' => '/placeholder.svg'],
-                                ['label' => 'Discounts', 'to' => '/discounts', 'image' => '/placeholder.svg'],
-                                ['label' => 'Women', 'to' => '/search?gender=women', 'image' => '/placeholder.svg'],
-                                ['label' => 'Men', 'to' => '/search?gender=men', 'image' => '/placeholder.svg'],
-                                ['label' => 'Boys', 'to' => '/search?gender=boys', 'image' => '/placeholder.svg'],
-                                ['label' => 'Girls', 'to' => '/search?gender=girls', 'image' => '/placeholder.svg'],
-                                ['label' => 'Sale', 'to' => '/search?tab=sale', 'image' => '/placeholder.svg'],
-                            ],
-                        ],
                         [
                             'title' => 'New Product',
                             'items' => [
@@ -157,6 +152,114 @@ class HomepageSettingsController extends Controller
                                 ['label' => 'Clothes', 'to' => '/search?q=Clothes', 'image' => '/placeholder.svg'],
                                 ['label' => 'Accessories', 'to' => '/search?q=Accessories', 'image' => '/placeholder.svg'],
                             ],
+                        ],
+                    ],
+                    'nav_dropdowns' => [
+                        'newIn' => [
+                            ['label' => 'New Arrivals', 'to' => '/search?tab=new'],
+                            ['label' => 'Trending Now', 'to' => '/search?tab=trending'],
+                            ['label' => 'This Week', 'to' => '/search?tab=this-week'],
+                        ],
+                        'discounts' => [
+                            ['label' => 'All Discounts', 'to' => '/discounts'],
+                            ['label' => 'Clothes', 'to' => '/discounts/clothes'],
+                            ['label' => 'Shoes', 'to' => '/discounts/shoes'],
+                            ['label' => 'Bags', 'to' => '/discounts/bags'],
+                            ['label' => 'Belts', 'to' => '/discounts/belts'],
+                            ['label' => 'Accessories', 'to' => '/discounts/accessories'],
+                        ],
+                        'women' => [
+                            [
+                                'type' => 'section',
+                                'label' => 'Clothing',
+                                'items' => [
+                                    ['label' => 'Tops', 'to' => '/search?gender=women&category=tops'],
+                                    ['label' => 'Bottoms', 'to' => '/search?gender=women&category=bottoms'],
+                                    ['label' => 'Dresses', 'to' => '/search?gender=women&category=dresses'],
+                                    ['label' => 'Outerwear', 'to' => '/search?gender=women&category=outerwear'],
+                                    ['label' => 'Activewear', 'to' => '/search?gender=women&category=activewear'],
+                                ],
+                            ],
+                            [
+                                'type' => 'section',
+                                'label' => 'Shoes',
+                                'items' => [
+                                    ['label' => 'Sneakers', 'to' => '/search?gender=women&category=sneakers'],
+                                    ['label' => 'Slides', 'to' => '/search?gender=women&category=slides'],
+                                    ['label' => 'Heels', 'to' => '/search?gender=women&category=heels'],
+                                    ['label' => 'Boots', 'to' => '/search?gender=women&category=boots'],
+                                ],
+                            ],
+                            [
+                                'type' => 'section',
+                                'label' => 'Accessories',
+                                'items' => [
+                                    ['label' => 'Bags', 'to' => '/search?gender=women&category=bags'],
+                                    ['label' => 'Belts', 'to' => '/search?gender=women&category=belts'],
+                                    ['label' => 'Hats', 'to' => '/search?gender=women&category=hats'],
+                                    ['label' => 'Jewelry', 'to' => '/search?gender=women&category=jewelry'],
+                                ],
+                            ],
+                            [
+                                'type' => 'section',
+                                'label' => 'Featured',
+                                'description' => 'Curated picks for her',
+                                'items' => [
+                                    ['label' => 'View All Women', 'to' => '/search?parent_category=Women'],
+                                    ['label' => 'New Arrivals', 'to' => '/search?tab=new&gender=women'],
+                                    ['label' => 'Trending Now', 'to' => '/search?tab=trending&gender=women'],
+                                    ['label' => 'This Week', 'to' => '/search?tab=this-week&gender=women'],
+                                ],
+                            ],
+                        ],
+                        'men' => [
+                            [
+                                'type' => 'section',
+                                'label' => 'Clothing',
+                                'items' => [
+                                    ['label' => 'T-Shirts', 'to' => '/search?gender=men&category=t-shirts'],
+                                    ['label' => 'Shirts', 'to' => '/search?gender=men&category=shirts'],
+                                    ['label' => 'Hoodies', 'to' => '/search?gender=men&category=hoodies'],
+                                    ['label' => 'Jeans', 'to' => '/search?gender=men&category=jeans'],
+                                    ['label' => 'Shorts', 'to' => '/search?gender=men&category=shorts'],
+                                ],
+                            ],
+                            [
+                                'type' => 'section',
+                                'label' => 'Shoes',
+                                'items' => [
+                                    ['label' => 'Sneakers', 'to' => '/search?gender=men&category=sneakers'],
+                                    ['label' => 'Running', 'to' => '/search?gender=men&category=running'],
+                                    ['label' => 'Slides', 'to' => '/search?gender=men&category=slides'],
+                                    ['label' => 'Boots', 'to' => '/search?gender=men&category=boots'],
+                                ],
+                            ],
+                            [
+                                'type' => 'section',
+                                'label' => 'Accessories',
+                                'items' => [
+                                    ['label' => 'Bags', 'to' => '/search?gender=men&category=bags'],
+                                    ['label' => 'Belts', 'to' => '/search?gender=men&category=belts'],
+                                    ['label' => 'Caps & Hats', 'to' => '/search?gender=men&category=caps-hats'],
+                                    ['label' => 'Watches', 'to' => '/search?gender=men&category=watches'],
+                                ],
+                            ],
+                            [
+                                'type' => 'section',
+                                'label' => 'Featured',
+                                'description' => 'Curated picks for him',
+                                'items' => [
+                                    ['label' => 'View All Men', 'to' => '/search?parent_category=Men'],
+                                    ['label' => 'New Arrivals', 'to' => '/search?tab=new&gender=men'],
+                                    ['label' => 'Trending Now', 'to' => '/search?tab=trending&gender=men'],
+                                    ['label' => 'This Week', 'to' => '/search?tab=this-week&gender=men'],
+                                ],
+                            ],
+                        ],
+                        'sale' => [
+                            ['label' => 'All Sale Items', 'to' => '/search?tab=sale'],
+                            ['label' => "Women's Sale", 'to' => '/search?tab=sale&gender=women'],
+                            ['label' => "Men's Sale", 'to' => '/search?tab=sale&gender=men'],
                         ],
                     ],
                     'nav_labels' => [
@@ -212,6 +315,8 @@ class HomepageSettingsController extends Controller
                     'contact_address' => 'Phnom Penh, Cambodia',
                     'copyright_text' => '© 2026 Fitandsleek. All rights reserved.',
                     'background_color' => '#6e8b7e',
+                    'background_image' => '',
+                    'text_color' => '#ffffff',
                     'social_title' => 'FOLLOW US',
                     'social_enabled' => true,
                     'support_enabled' => true,
@@ -241,7 +346,7 @@ class HomepageSettingsController extends Controller
                     'tracking' => [
                         'title' => 'TRACKING',
                         'items' => [
-                            ['label' => 'Track Order', 'link' => '/track-order'],
+                            ['label' => 'Track Order', 'link' => '/profile?tab=track'],
                             ['label' => 'Returns', 'link' => '/returns'],
                             ['label' => 'Shipping Info', 'link' => '/shipping'],
                         ],
@@ -260,6 +365,12 @@ class HomepageSettingsController extends Controller
                     'tracking' => 'TRACKING',
                     'legal' => 'LEGAL',
                 ],
+                'footer_section_order' => ['support', 'tracking', 'legal'],
+                'faq' => FaqContent::defaults(),
+                'contact_page' => ContactPageContent::defaults(),
+                'privacy_page' => PrivacyPageContent::defaults(),
+                'terms_page' => TermsPageContent::defaults(),
+                'cookies_page' => CookiesPageContent::defaults(),
             ];
 
             // Merge with defaults
@@ -292,6 +403,23 @@ class HomepageSettingsController extends Controller
             $currentNavLabels = is_array($header['nav_labels'] ?? null) ? $header['nav_labels'] : [];
             $mergedNavLabels = array_merge($defaultNavLabels, $currentNavLabels);
             $header['nav_labels'] = $mergedNavLabels;
+
+            $defaultNavDropdowns = $defaultHeader['nav_dropdowns'] ?? [];
+            $currentNavDropdowns = is_array($header['nav_dropdowns'] ?? null) ? $header['nav_dropdowns'] : [];
+            $mergedNavDropdowns = [];
+            foreach ($defaultNavDropdowns as $navKey => $defaultItems) {
+                $stored = $currentNavDropdowns[$navKey] ?? null;
+                $storedCount = $this->countNavDropdownLinks($stored);
+                $defaultCount = $this->countNavDropdownLinks($defaultItems);
+                $isSparseGender = in_array($navKey, ['women', 'men'], true)
+                    && $storedCount > 0
+                    && $storedCount < $defaultCount;
+                $mergedNavDropdowns[$navKey] = (is_array($stored) && $stored !== [] && ! $isSparseGender)
+                    ? $stored
+                    : $defaultItems;
+            }
+            $header['nav_dropdowns'] = $mergedNavDropdowns;
+
             $header['logo_url'] = $appLogoUrl;
             $parsedSettings['header'] = $header;
 
@@ -306,53 +434,54 @@ class HomepageSettingsController extends Controller
                 'khmer' => $fontSettings['font_km'] ?? $defaults['fonts']['khmer'],
             ];
 
-            // Normalize footer sections (support both old and new structures)
+            // Normalize footer sections (support legacy list format and custom sections)
             $footerSectionTitles = $parsedSettings['footer_section_titles'] ?? $defaults['footer_section_titles'];
             $footerSections = $parsedSettings['footer_sections'] ?? $defaults['footer_sections'];
 
             if (is_array($footerSections)) {
-                $isOldSupportList = isset($footerSections['support']) && is_array($footerSections['support']) && array_is_list($footerSections['support']);
-                $isOldTrackingList = isset($footerSections['tracking']) && is_array($footerSections['tracking']) && array_is_list($footerSections['tracking']);
-                $isOldLegalList = isset($footerSections['legal']) && is_array($footerSections['legal']) && array_is_list($footerSections['legal']);
+                $parsedSettings['footer_sections'] = $this->normalizeFooterSections(
+                    $footerSections,
+                    $defaults,
+                    is_array($footerSectionTitles) ? $footerSectionTitles : []
+                );
+            }
 
-                if ($isOldSupportList || $isOldTrackingList || $isOldLegalList) {
-                    $parsedSettings['footer_sections'] = [
-                        'support' => [
-                            'title' => $footerSectionTitles['support'] ?? 'HELP',
-                            'items' => $footerSections['support'] ?? [],
-                        ],
-                        'tracking' => [
-                            'title' => $footerSectionTitles['tracking'] ?? 'TRACKING',
-                            'items' => $footerSections['tracking'] ?? [],
-                        ],
-                        'legal' => [
-                            'title' => $footerSectionTitles['legal'] ?? 'LEGAL',
-                            'items' => $footerSections['legal'] ?? [],
-                        ],
-                    ];
-                } else {
-                    // Ensure titles exist when using new structure
-                    $parsedSettings['footer_sections'] = [
-                        'support' => [
-                            'title' => $footerSections['support']['title'] ?? ($footerSectionTitles['support'] ?? 'HELP'),
-                            'items' => $footerSections['support']['items'] ?? [],
-                        ],
-                        'tracking' => [
-                            'title' => $footerSections['tracking']['title'] ?? ($footerSectionTitles['tracking'] ?? 'TRACKING'),
-                            'items' => $footerSections['tracking']['items'] ?? [],
-                        ],
-                        'legal' => [
-                            'title' => $footerSections['legal']['title'] ?? ($footerSectionTitles['legal'] ?? 'LEGAL'),
-                            'items' => $footerSections['legal']['items'] ?? [],
-                        ],
-                    ];
-                }
+            $storedFooterSectionOrder = $parsedSettings['footer_section_order'] ?? $defaults['footer_section_order'];
+            $parsedSettings['footer_section_order'] = $this->normalizeFooterSectionOrder(
+                is_array($storedFooterSectionOrder) ? $storedFooterSectionOrder : [],
+                is_array($parsedSettings['footer_sections'] ?? null) ? $parsedSettings['footer_sections'] : []
+            );
+            if (is_array($parsedSettings['footer_sections'] ?? null)) {
+                $parsedSettings['footer_sections'] = $this->reorderFooterSections(
+                    $parsedSettings['footer_sections'],
+                    $parsedSettings['footer_section_order']
+                );
             }
 
             $parsedSettings['footer_section_titles'] = $footerSectionTitles;
             if (empty($parsedSettings['footer_socials'])) {
                 $parsedSettings['footer_socials'] = $defaults['footer_socials'];
             }
+
+            $parsedSettings['faq'] = FaqContent::normalize(
+                is_array($parsedSettings['faq'] ?? null) ? $parsedSettings['faq'] : FaqContent::defaults()
+            );
+
+            $parsedSettings['contact_page'] = ContactPageContent::normalize(
+                is_array($parsedSettings['contact_page'] ?? null) ? $parsedSettings['contact_page'] : ContactPageContent::defaults()
+            );
+
+            $parsedSettings['privacy_page'] = PrivacyPageContent::normalize(
+                is_array($parsedSettings['privacy_page'] ?? null) ? $parsedSettings['privacy_page'] : PrivacyPageContent::defaults()
+            );
+
+            $parsedSettings['terms_page'] = TermsPageContent::normalize(
+                is_array($parsedSettings['terms_page'] ?? null) ? $parsedSettings['terms_page'] : TermsPageContent::defaults()
+            );
+
+            $parsedSettings['cookies_page'] = CookiesPageContent::normalize(
+                is_array($parsedSettings['cookies_page'] ?? null) ? $parsedSettings['cookies_page'] : CookiesPageContent::defaults()
+            );
 
             $parsedSettings['app_logo_url'] = $appLogoUrl;
 
@@ -576,6 +705,8 @@ class HomepageSettingsController extends Controller
             'logo_text' => 'string|max:100',
             'logo_url' => 'string|max:255',
             'background_color' => 'string|max:20',
+            'background_image' => 'nullable|string|max:500',
+            'text_color' => 'string|max:20',
             'search_placeholder' => 'string|max:100',
             'search_enabled' => 'boolean',
             'cart_enabled' => 'boolean',
@@ -587,6 +718,7 @@ class HomepageSettingsController extends Controller
             'custom_nav' => 'array',
             'left_menu' => 'array',
             'nav_labels' => 'array',
+            'nav_dropdowns' => 'array',
         ]);
 
         Setting::updateOrCreate(
@@ -606,6 +738,7 @@ class HomepageSettingsController extends Controller
             'footer' => 'array',
             'sections' => 'array',
             'footer_sections' => 'array',
+            'footer_section_order' => 'array',
             'footer_section_titles' => 'array',
             'footer_socials' => 'array',
         ]);
@@ -631,6 +764,13 @@ class HomepageSettingsController extends Controller
             );
         }
 
+        if (!empty($validated['footer_section_order'])) {
+            Setting::updateOrCreate(
+                ['key' => 'footer_section_order', 'group' => 'homepage'],
+                ['value' => $validated['footer_section_order']]
+            );
+        }
+
         if (!empty($validated['footer_section_titles'])) {
             Setting::updateOrCreate(
                 ['key' => 'footer_section_titles', 'group' => 'homepage'],
@@ -649,8 +789,193 @@ class HomepageSettingsController extends Controller
     }
 
     /**
+     * Save FAQ page content
+     */
+    public function updateFaq(Request $request)
+    {
+        $validated = $request->validate([
+            'faq' => 'required|array',
+            'faq.title' => 'nullable|string|max:255',
+            'faq.subtitle' => 'nullable|string|max:500',
+            'faq.sections' => 'nullable|array',
+            'faq.section_order' => 'nullable|array',
+            'faq.locales' => 'nullable|array',
+            'faq.locales.en' => 'nullable|array',
+            'faq.locales.km' => 'nullable|array',
+        ]);
+
+        $faq = FaqContent::normalize($validated['faq']);
+
+        Setting::updateOrCreate(
+            ['key' => 'faq', 'group' => 'homepage'],
+            ['value' => $faq]
+        );
+
+        return response()->json([
+            'message' => 'FAQ updated successfully',
+            'faq' => $faq,
+        ], 200);
+    }
+
+    /**
+     * Save Contact page content
+     */
+    public function updateContactPage(Request $request)
+    {
+        $validated = $request->validate([
+            'contact_page' => 'required|array',
+            'contact_page.title' => 'nullable|string|max:255',
+            'contact_page.subtitle' => 'nullable|string|max:500',
+            'contact_page.form' => 'nullable|array',
+            'contact_page.info_cards' => 'nullable|array',
+            'contact_page.info_card_order' => 'nullable|array',
+            'contact_page.locales' => 'nullable|array',
+            'contact_page.locales.en' => 'nullable|array',
+            'contact_page.locales.km' => 'nullable|array',
+        ]);
+
+        $contactPage = ContactPageContent::normalize($validated['contact_page']);
+
+        Setting::updateOrCreate(
+            ['key' => 'contact_page', 'group' => 'homepage'],
+            ['value' => $contactPage]
+        );
+
+        return response()->json([
+            'message' => 'Contact page updated successfully',
+            'contact_page' => $contactPage,
+        ], 200);
+    }
+
+    /**
+     * Save Privacy page content
+     */
+    public function updatePrivacyPage(Request $request)
+    {
+        $validated = $request->validate([
+            'privacy_page' => 'required|array',
+            'privacy_page.title' => 'nullable|string|max:255',
+            'privacy_page.last_updated' => 'nullable|string|max:255',
+            'privacy_page.sections' => 'nullable|array',
+            'privacy_page.section_order' => 'nullable|array',
+            'privacy_page.inquiry' => 'nullable|array',
+            'privacy_page.locales' => 'nullable|array',
+            'privacy_page.locales.en' => 'nullable|array',
+            'privacy_page.locales.km' => 'nullable|array',
+        ]);
+
+        $privacyPage = PrivacyPageContent::normalize($validated['privacy_page']);
+
+        Setting::updateOrCreate(
+            ['key' => 'privacy_page', 'group' => 'homepage'],
+            ['value' => $privacyPage]
+        );
+
+        return response()->json([
+            'message' => 'Privacy page updated successfully',
+            'privacy_page' => $privacyPage,
+        ], 200);
+    }
+
+    /**
+     * Save Terms page content
+     */
+    public function updateTermsPage(Request $request)
+    {
+        $validated = $request->validate([
+            'terms_page' => 'required|array',
+            'terms_page.title' => 'nullable|string|max:255',
+            'terms_page.last_updated' => 'nullable|string|max:255',
+            'terms_page.sections' => 'nullable|array',
+            'terms_page.section_order' => 'nullable|array',
+            'terms_page.locales' => 'nullable|array',
+            'terms_page.locales.en' => 'nullable|array',
+            'terms_page.locales.km' => 'nullable|array',
+        ]);
+
+        $termsPage = TermsPageContent::normalize($validated['terms_page']);
+
+        Setting::updateOrCreate(
+            ['key' => 'terms_page', 'group' => 'homepage'],
+            ['value' => $termsPage]
+        );
+
+        return response()->json([
+            'message' => 'Terms page updated successfully',
+            'terms_page' => $termsPage,
+        ], 200);
+    }
+
+    /**
+     * Save Cookies page content
+     */
+    public function updateCookiesPage(Request $request)
+    {
+        $validated = $request->validate([
+            'cookies_page' => 'required|array',
+            'cookies_page.title' => 'nullable|string|max:255',
+            'cookies_page.last_updated' => 'nullable|string|max:255',
+            'cookies_page.sections' => 'nullable|array',
+            'cookies_page.section_order' => 'nullable|array',
+            'cookies_page.locales' => 'nullable|array',
+            'cookies_page.locales.en' => 'nullable|array',
+            'cookies_page.locales.km' => 'nullable|array',
+        ]);
+
+        $cookiesPage = CookiesPageContent::normalize($validated['cookies_page']);
+
+        Setting::updateOrCreate(
+            ['key' => 'cookies_page', 'group' => 'homepage'],
+            ['value' => $cookiesPage]
+        );
+
+        return response()->json([
+            'message' => 'Cookies page updated successfully',
+            'cookies_page' => $cookiesPage,
+        ], 200);
+    }
+
+    /**
      * Upload header logo image
      */
+    public function uploadChromeBackground(Request $request)
+    {
+        $validated = $request->validate([
+            'image' => 'required|file|mimes:jpg,jpeg,png,webp,avif|max:8192',
+            'target' => 'nullable|string|in:header,footer,both',
+        ]);
+
+        $target = $validated['target'] ?? 'header';
+        $path = Media::storeUploaded($request->file('image'), 'chrome-backgrounds', $this->mediaDisk());
+        $url = Media::url($path);
+
+        if ($target === 'header' || $target === 'both') {
+            $headerSetting = Setting::where('key', 'header')->where('group', 'homepage')->first();
+            $header = $headerSetting ? (array) $headerSetting->value : [];
+            $header['background_image'] = $url;
+            Setting::updateOrCreate(
+                ['key' => 'header', 'group' => 'homepage'],
+                ['value' => $header]
+            );
+        }
+
+        if ($target === 'footer' || $target === 'both') {
+            $footerSetting = Setting::where('key', 'footer')->where('group', 'homepage')->first();
+            $footer = $footerSetting ? (array) $footerSetting->value : [];
+            $footer['background_image'] = $url;
+            Setting::updateOrCreate(
+                ['key' => 'footer', 'group' => 'homepage'],
+                ['value' => $footer]
+            );
+        }
+
+        return response()->json([
+            'message' => 'Chrome background uploaded',
+            'target' => $target,
+            'background_image' => $url,
+        ], 200);
+    }
+
     public function uploadLogo(Request $request)
     {
         $validated = $request->validate([
@@ -691,5 +1016,125 @@ class HomepageSettingsController extends Controller
             'message' => 'Image uploaded',
             'image_url' => $url,
         ], 200);
+    }
+
+    private function normalizeFooterSectionOrder(array $order, array $sections): array
+    {
+        $keys = array_keys($sections);
+        $normalized = [];
+
+        foreach ($order as $key) {
+            if (is_string($key) && $key !== '' && in_array($key, $keys, true) && ! in_array($key, $normalized, true)) {
+                $normalized[] = $key;
+            }
+        }
+
+        foreach ($keys as $key) {
+            if (! in_array($key, $normalized, true)) {
+                $normalized[] = $key;
+            }
+        }
+
+        return $normalized;
+    }
+
+    private function reorderFooterSections(array $sections, array $order): array
+    {
+        $normalizedOrder = $this->normalizeFooterSectionOrder($order, $sections);
+        $reordered = [];
+
+        foreach ($normalizedOrder as $key) {
+            if (isset($sections[$key])) {
+                $reordered[$key] = $sections[$key];
+            }
+        }
+
+        return $reordered;
+    }
+
+    private function normalizeFooterSections(array $footerSections, array $defaults, array $footerSectionTitles = []): array
+    {
+        $knownKeys = ['support', 'tracking', 'legal'];
+        $defaultSections = is_array($defaults['footer_sections'] ?? null) ? $defaults['footer_sections'] : [];
+        $normalized = [];
+
+        foreach ($knownKeys as $key) {
+            $fallbackTitle = $footerSectionTitles[$key]
+                ?? ($defaultSections[$key]['title'] ?? strtoupper($key));
+            $entry = $footerSections[$key] ?? ($defaultSections[$key] ?? ['title' => $fallbackTitle, 'items' => []]);
+            $normalized[$key] = $this->normalizeFooterSectionEntry($entry, $fallbackTitle);
+        }
+
+        foreach ($footerSections as $key => $entry) {
+            if (! is_string($key) || $key === '' || in_array($key, $knownKeys, true)) {
+                continue;
+            }
+            $normalized[$key] = $this->normalizeFooterSectionEntry($entry);
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeFooterSectionEntry(mixed $entry, ?string $fallbackTitle = null): array
+    {
+        if (is_array($entry) && array_is_list($entry)) {
+            return [
+                'title' => $fallbackTitle ?? 'Links',
+                'items' => $this->normalizeFooterSectionItems($entry),
+            ];
+        }
+
+        if (! is_array($entry)) {
+            return [
+                'title' => $fallbackTitle ?? 'Links',
+                'items' => [],
+            ];
+        }
+
+        return [
+            'title' => (string) ($entry['title'] ?? $fallbackTitle ?? 'Links'),
+            'items' => $this->normalizeFooterSectionItems($entry['items'] ?? []),
+        ];
+    }
+
+    private function normalizeFooterSectionItems(mixed $items): array
+    {
+        if (! is_array($items)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $normalized[] = [
+                'label' => (string) ($item['label'] ?? ''),
+                'link' => (string) ($item['link'] ?? ''),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function countNavDropdownLinks(mixed $items): int
+    {
+        if (! is_array($items)) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (($item['type'] ?? null) === 'section' && is_array($item['items'] ?? null)) {
+                $count += count($item['items']);
+            } elseif (! empty($item['to'])) {
+                $count += 1;
+            }
+        }
+
+        return $count;
     }
 }

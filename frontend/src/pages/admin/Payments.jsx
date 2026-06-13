@@ -1,687 +1,614 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { errorAlert, toastSuccess, warningConfirm } from "../../lib/swal";
 import AdminModal from "../../components/admin/AdminModal.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import {
- buildAllColumnsVisibility,
- loadTableColumnVisibility,
- TableColumnVisibilityMenu,
+  buildAllColumnsVisibility,
+  loadTableColumnVisibility,
+  TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { useTheme } from "../../state/theme.jsx";
-import AdminYearMonthFilter from "../../components/admin/AdminYearMonthFilter.jsx";
-import { EMPTY_YEAR_MONTH, yearMonthToDateRange } from "../../lib/adminYearMonthFilter.js";
+import AdminListQueryToolbar from "../../components/admin/AdminListQueryToolbar.jsx";
+import {
+  ADMIN_LIST_PAGINATE_AT,
+  PAYMENT_METHOD_FILTER_OPTIONS,
+  PAYMENT_STATUS_FILTER_OPTIONS,
+} from "../../lib/adminListQuery.js";
+import AdminListPaginationBar from "../../components/admin/AdminListPaginationBar.jsx";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 const PAYMENTS_TABLE_COLUMNS = [
- { id: "id", label: "ID" },
- { id: "order", label: "Order" },
- { id: "customer", label: "Customer" },
- { id: "amount", label: "Amount" },
- { id: "method", label: "Method" },
- { id: "status", label: "Status" },
- { id: "date", label: "Date" },
- { id: "actions", label: "Actions" },
+  { id: "id", label: "ID" },
+  { id: "order", label: "Order" },
+  { id: "customer", label: "Customer" },
+  { id: "amount", label: "Amount" },
+  { id: "method", label: "Method" },
+  { id: "status", label: "Status" },
+  { id: "date", label: "Date" },
+  { id: "actions", label: "Actions" },
 ];
 
 const PAYMENTS_COLUMNS_STORAGE_KEY = "fitandsleek-payments-columns";
+const PAYMENTS_PER_PAGE = 15;
 
 export default function AdminPayments() {
- const { primaryColor, mode } = useTheme();
- const [payments, setPayments] = useState([]);
- const [loading, setLoading] = useState(true);
- const [filters, setFilters] = useState({
- status: "all",
- method: "all",
- year: EMPTY_YEAR_MONTH.year,
- month: EMPTY_YEAR_MONTH.month,
- });
- const [currentPage, setCurrentPage] = useState(1);
- const [totalPages, setTotalPages] = useState(1);
- const [selectedPayment, setSelectedPayment] = useState(null);
- const [showDetails, setShowDetails] = useState(false);
- const [search, setSearch] = useState("");
- const [columnVisibility, setColumnVisibility] = useState(() =>
- loadTableColumnVisibility(PAYMENTS_COLUMNS_STORAGE_KEY, PAYMENTS_TABLE_COLUMNS),
- );
+  const { user, can, permissionsReady } = useAdminPermissions();
+  const canViewPayments = can("payments", "view");
+  const canEditPayments = can("payments", "edit");
+  const { mode } = useTheme();
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useAdminUiPreference("payments.list.search", "");
+  const [statusFilter, setStatusFilter] = useAdminUiPreference("payments.list.status", "all");
+  const [methodFilter, setMethodFilter] = useAdminUiPreference("payments.list.method", "all");
+  const [fromDate, setFromDate] = useAdminUiPreference("payments.list.fromDate", "");
+  const [toDate, setToDate] = useAdminUiPreference("payments.list.toDate", "");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [columnVisibility, setColumnVisibility] = useState(() =>
+    loadTableColumnVisibility(PAYMENTS_COLUMNS_STORAGE_KEY, PAYMENTS_TABLE_COLUMNS),
+  );
 
- const loadPayments = async (page = 1) => {
- setLoading(true);
- try {
- const params = new URLSearchParams();
- if (filters.status !== "all") params.append("status", filters.status);
- if (filters.method !== "all") params.append("method", filters.method);
- const { from, to } = yearMonthToDateRange(filters.year, filters.month);
- if (from) params.append("from_date", from);
- if (to) params.append("to_date", to);
- params.append("page", page);
- params.append("per_page", 15);
+  const hasDateRangeFilter = Boolean(fromDate || toDate);
 
- const { data } = await api.get(`/admin/payments?${params}`);
- setPayments(data.data.data || []);
- setTotalPages(data.data.last_page || 1);
- setCurrentPage(page);
- } catch (e) {
- console.error("Failed to load payments", e);
- } finally {
- setLoading(false);
- }
- };
+  const loadPayments = useCallback(async (page = 1) => {
+    if (!canViewPayments) {
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (methodFilter !== "all") params.append("method", methodFilter);
+      if (fromDate) params.append("from_date", fromDate);
+      if (toDate) params.append("to_date", toDate);
+      params.append("page", page);
+      params.append("per_page", PAYMENTS_PER_PAGE);
 
- useEffect(() => {
- loadPayments(1);
- }, [filters]);
+      const { data } = await api.get(`/admin/payments?${params}`);
+      const paginator = data?.data;
+      setPayments(paginator?.data || []);
+      setTotalPages(paginator?.last_page || 1);
+      setTotalItems(paginator?.total || 0);
+      setCurrentPage(paginator?.current_page || page);
+    } catch (e) {
+      console.error("Failed to load payments", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [canViewPayments, statusFilter, methodFilter, fromDate, toDate]);
 
- useEffect(() => {
- try {
- localStorage.setItem(PAYMENTS_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
- } catch { /* ignore quota */ }
- }, [columnVisibility]);
+  useEffect(() => {
+    if (!permissionsReady) return;
+    loadPayments(1);
+  }, [loadPayments, permissionsReady]);
 
- const isColVisible = (columnId) => columnVisibility[columnId] !== false;
+  useEffect(() => {
+    try {
+      localStorage.setItem(PAYMENTS_COLUMNS_STORAGE_KEY, JSON.stringify(columnVisibility));
+    } catch {
+      /* ignore quota */
+    }
+  }, [columnVisibility]);
 
- const toggleTableColumn = (columnId) => {
- setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
- };
+  const isColVisible = (columnId) => columnVisibility[columnId] !== false;
 
- const setAllTableColumnsVisible = (visible) => {
- setColumnVisibility(buildAllColumnsVisibility(PAYMENTS_TABLE_COLUMNS, visible, "id"));
- };
+  const toggleTableColumn = (columnId) => {
+    setColumnVisibility((prev) => ({ ...prev, [columnId]: !isColVisible(columnId) }));
+  };
 
- const handleVerify = async (payment) => {
- const confirmRes = await warningConfirm({
- enTitle: "Verify payment?",
- enText: `Mark payment #${payment.id} as successful? Customers will see a completed status.`,
- enConfirm: "Verify",
- intent: "primary",
- });
- if (!confirmRes.isConfirmed) return;
- try {
- await api.post(`/admin/payments/${payment.id}/verify`);
- loadPayments(currentPage);
- setShowDetails(false);
- setSelectedPayment(null);
- await toastSuccess({
- khText: "បានបញ្ជាក់ការទូទាត់ដោយជោគជ័យ",
- enText: "Payment verified successfully",
- });
- } catch (e) {
- console.error("Failed to verify payment", e);
- await errorAlert({
- khTitle: "បញ្ជាក់ការទូទាត់បរាជ័យ",
- enTitle: "Verification failed",
- detail: "Failed to verify payment: " + (e.response?.data?.message || e.message),
- });
- }
- };
+  const setAllTableColumnsVisible = (visible) => {
+    setColumnVisibility(buildAllColumnsVisibility(PAYMENTS_TABLE_COLUMNS, visible, "id"));
+  };
 
- const handleReject = async (payment) => {
- const confirmRes = await warningConfirm({
- enTitle: "Reject payment?",
- enText: `Mark payment #${payment.id} as failed? This may affect fulfillment.`,
- enConfirm: "Reject",
- intent: "destructive",
- });
- if (!confirmRes.isConfirmed) return;
- try {
- await api.post(`/admin/payments/${payment.id}/reject`);
- loadPayments(currentPage);
- setShowDetails(false);
- setSelectedPayment(null);
- await toastSuccess({
- khText: "បានបដិសេធការទូទាត់ដោយជោគជ័យ",
- enText: "Payment rejected successfully",
- });
- } catch (e) {
- console.error("Failed to reject payment", e);
- await errorAlert({
- khTitle: "បដិសេធការទូទាត់បរាជ័យ",
- enTitle: "Rejection failed",
- detail: "Failed to reject payment: " + (e.response?.data?.message || e.message),
- });
- }
- };
+  const clearAllFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setMethodFilter("all");
+    setFromDate("");
+    setToDate("");
+  };
 
- const showPaymentDetails = async (payment) => {
- try {
- const { data } = await api.get(`/admin/payments/${payment.id}`);
- setSelectedPayment(data.data);
- setShowDetails(true);
- } catch (e) {
- console.error("Failed to fetch payment details", e);
- }
- };
+  const handleVerify = async (payment) => {
+    if (!canEditPayments) return;
+    const confirmRes = await warningConfirm({
+      enTitle: "Verify payment?",
+      enText: `Mark payment #${payment.id} as successful? Customers will see a completed status.`,
+      enConfirm: "Verify",
+      intent: "primary",
+    });
+    if (!confirmRes.isConfirmed) return;
+    try {
+      await api.post(`/admin/payments/${payment.id}/verify`);
+      loadPayments(currentPage);
+      setShowDetails(false);
+      setSelectedPayment(null);
+      await toastSuccess({
+        khText: "បានបញ្ជាក់ការទូទាត់ដោយជោគជ័យ",
+        enText: "Payment verified successfully",
+      });
+    } catch (e) {
+      console.error("Failed to verify payment", e);
+      await errorAlert({
+        khTitle: "បញ្ជាក់ការទូទាត់បរាជ័យ",
+        enTitle: "Verification failed",
+        detail: "Failed to verify payment: " + (e.response?.data?.message || e.message),
+      });
+    }
+  };
 
- const closePaymentDetails = () => {
- setShowDetails(false);
- setSelectedPayment(null);
- };
+  const handleReject = async (payment) => {
+    if (!canEditPayments) return;
+    const confirmRes = await warningConfirm({
+      enTitle: "Reject payment?",
+      enText: `Mark payment #${payment.id} as failed? This may affect fulfillment.`,
+      enConfirm: "Reject",
+      intent: "destructive",
+    });
+    if (!confirmRes.isConfirmed) return;
+    try {
+      await api.post(`/admin/payments/${payment.id}/reject`);
+      loadPayments(currentPage);
+      setShowDetails(false);
+      setSelectedPayment(null);
+      await toastSuccess({
+        khText: "បានបដិសេធការទូទាត់ដោយជោគជ័យ",
+        enText: "Payment rejected successfully",
+      });
+    } catch (e) {
+      console.error("Failed to reject payment", e);
+      await errorAlert({
+        khTitle: "បដិសេធការទូទាត់បរាជ័យ",
+        enTitle: "Rejection failed",
+        detail: "Failed to reject payment: " + (e.response?.data?.message || e.message),
+      });
+    }
+  };
 
- const getStatusBadge = (status) => {
- const s = (status || '').toLowerCase();
- const isDark = mode === 'dark';
- if (s === 'success' || s === 'paid') return { backgroundColor: isDark ? '#14532d' : '#dcfce7', color: isDark ? '#bbf7d0' : '#166534', borderColor: isDark ? '#16a34a' : '#86efac' };
- if (s === 'pending') return { backgroundColor: isDark ? '#422006' : '#fef9c3', color: isDark ? '#fcd34d' : '#854d0e', borderColor: isDark ? '#f59e0b' : '#fde68a' };
- if (s === 'failed') return { backgroundColor: isDark ? '#7f1d1d' : '#fee2e2', color: isDark ? '#fecdd3' : '#991b1b', borderColor: isDark ? '#f87171' : '#fecaca' };
- if (s === 'refunded') return { backgroundColor: isDark ? '#0f172a' : '#dbeafe', color: isDark ? '#bfdbfe' : '#1d4ed8', borderColor: isDark ? '#38bdf8' : '#bfdbfe' };
- return { backgroundColor: isDark ? '#334155' : '#f1f5f9', color: isDark ? '#e2e8f0' : '#0f172a', borderColor: isDark ? '#475569' : '#cbd5e1' };
- };
+  const showPaymentDetails = async (payment) => {
+    if (!canViewPayments) return;
+    try {
+      const { data } = await api.get(`/admin/payments/${payment.id}`);
+      setSelectedPayment(data.data);
+      setShowDetails(true);
+    } catch (e) {
+      console.error("Failed to fetch payment details", e);
+    }
+  };
 
- const formatAmount = (value) => {
- const num = Number(value);
- return Number.isFinite(num) ? num.toFixed(2) : "0.00";
- };
+  const closePaymentDetails = () => {
+    setShowDetails(false);
+    setSelectedPayment(null);
+  };
 
- const getMethodBadge = (method) => {
- const methodMap = {
- card: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200",
- bank: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200",
- wallet: "bg-[rgba(var(--admin-primary-rgb),0.12)] text-[color:var(--admin-primary)] dark:bg-[rgba(var(--admin-primary-rgb),0.18)] dark:text-[color:var(--admin-primary)]",
- crypto: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200",
- };
- return methodMap[method] || "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100";
- };
+  const getStatusBadge = (status) => {
+    const s = (status || "").toLowerCase();
+    const isDark = mode === "dark";
+    if (s === "success" || s === "paid")
+      return {
+        backgroundColor: isDark ? "#14532d" : "#dcfce7",
+        color: isDark ? "#bbf7d0" : "#166534",
+        borderColor: isDark ? "#16a34a" : "#86efac",
+      };
+    if (s === "pending")
+      return {
+        backgroundColor: isDark ? "#422006" : "#fef9c3",
+        color: isDark ? "#fcd34d" : "#854d0e",
+        borderColor: isDark ? "#f59e0b" : "#fde68a",
+      };
+    if (s === "failed")
+      return {
+        backgroundColor: isDark ? "#7f1d1d" : "#fee2e2",
+        color: isDark ? "#fecdd3" : "#991b1b",
+        borderColor: isDark ? "#f87171" : "#fecaca",
+      };
+    if (s === "refunded")
+      return {
+        backgroundColor: isDark ? "#0f172a" : "#dbeafe",
+        color: isDark ? "#bfdbfe" : "#1d4ed8",
+        borderColor: isDark ? "#38bdf8" : "#bfdbfe",
+      };
+    return {
+      backgroundColor: isDark ? "#334155" : "#f1f5f9",
+      color: isDark ? "#e2e8f0" : "#0f172a",
+      borderColor: isDark ? "#475569" : "#cbd5e1",
+    };
+  };
 
- const filteredPayments = payments.filter((payment) => {
- const q = search.trim().toLowerCase();
- if (!q) return true;
- return (
- String(payment.id || "").toLowerCase().includes(q) ||
- String(payment.order?.order_number || "").toLowerCase().includes(q) ||
- String(payment.order?.user?.name || "").toLowerCase().includes(q) ||
- String(payment.method || "").toLowerCase().includes(q) ||
- String(payment.status || "").toLowerCase().includes(q)
- );
- });
+  const formatAmount = (value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num.toFixed(2) : "0.00";
+  };
 
- const accentColor = primaryColor;
+  const getMethodBadge = (method) => {
+    const methodMap = {
+      card: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200",
+      bank: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200",
+      wallet:
+        "bg-[rgba(var(--admin-primary-rgb),0.12)] text-[color:var(--admin-primary)] dark:bg-[rgba(var(--admin-primary-rgb),0.18)] dark:text-[color:var(--admin-primary)]",
+      crypto: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200",
+      bakong_khqr: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-200",
+    };
+    return methodMap[method] || "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100";
+  };
 
- const showInitialSkeleton = loading && payments.length === 0;
- if (showInitialSkeleton) return <AdminContentSkeleton title="Payments" />;
+  const filteredPayments = payments.filter((payment) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(payment.id || "").toLowerCase().includes(q) ||
+      String(payment.order?.order_number || "").toLowerCase().includes(q) ||
+      String(payment.order?.user?.name || "").toLowerCase().includes(q) ||
+      String(payment.method || "").toLowerCase().includes(q) ||
+      String(payment.status || "").toLowerCase().includes(q)
+    );
+  });
 
- return (
- <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
- <div className="w-full min-w-0">
- {/* Header */}
- <div className="mb-8">
- <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">
- Payments Management
- </h1>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- View and manage all payment transactions
- </p>
- </div>
+  if (!permissionsReady || (loading && payments.length === 0)) {
+    return <AdminContentSkeleton title="Payments" />;
+  }
 
- {/* Filters */}
- <div className="admin-surface rounded-xl border admin-border p-6 mb-6 ">
- <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
- Status
- </label>
- <select
- value={filters.status}
- onChange={(e) =>
- setFilters({ ...filters, status: e.target.value })
- }
- className="w-full px-4 py-2 border admin-border admin-surface text-slate-800 dark:text-slate-100 rounded-lg focus:border-[var(--admin-primary)] focus:outline-none"
- >
- <option value="all">All Statuses</option>
- <option value="pending">Pending</option>
- <option value="paid">Paid</option>
- <option value="success">Success</option>
- <option value="failed">Failed</option>
- <option value="refunded">Refunded</option>
- </select>
- </div>
+  if (!canViewPayments) {
+    return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+  }
 
- <div>
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
- Method
- </label>
- <select
- value={filters.method}
- onChange={(e) =>
- setFilters({ ...filters, method: e.target.value })
- }
- className="w-full px-4 py-2 border admin-border admin-surface text-slate-800 dark:text-slate-100 rounded-lg focus:border-[var(--admin-primary)] focus:outline-none"
- >
- <option value="all">All Methods</option>
- <option value="card">Card</option>
- <option value="bank">Bank Transfer</option>
- <option value="wallet">Wallet</option>
- <option value="crypto">Crypto</option>
- </select>
- </div>
+  const showInitialSkeleton = loading && payments.length === 0;
+  if (showInitialSkeleton) return <AdminContentSkeleton title="Payments" />;
 
- <div className="md:col-span-2">
- <AdminYearMonthFilter
- value={{ year: filters.year, month: filters.month }}
- onChange={(next) => setFilters((f) => ({ ...f, year: next.year, month: next.month }))}
- startYear={2020}
- title="Payment date"
- hint="All years shows every payment. Pick a year for the full year, or add a month."
- />
- </div>
+  return (
+    <div className="w-full min-w-0 space-y-5 text-slate-800 dark:text-slate-100">
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Payments Management</h1>
+        <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+          View and manage all payment transactions
+        </p>
+      </div>
 
- <div className="flex items-end">
- <button
- onClick={() =>
- setFilters({
- status: "all",
- method: "all",
- year: EMPTY_YEAR_MONTH.year,
- month: EMPTY_YEAR_MONTH.month,
- })
- }
- className="w-full px-4 py-2 border admin-border text-slate-700 dark:text-slate-200 rounded-lg admin-surface hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition"
- >
- Reset
- </button>
- </div>
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="space-y-3 border-b border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">All payments</h2>
+            <button
+              type="button"
+              onClick={() => loadPayments(currentPage)}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Refresh
+            </button>
+          </div>
 
- <div className="md:col-span-2">
- <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
- Search
- </label>
- <input
- value={search}
- onChange={(e) => setSearch(e.target.value)}
- placeholder="Search payments..."
- className="w-full px-4 py-2 border admin-border admin-surface text-slate-800 dark:text-slate-100 rounded-lg focus:border-[var(--admin-primary)] focus:outline-none"
- />
- </div>
- </div>
- </div>
+          <AdminListQueryToolbar
+            controlsAlign="right"
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search ID, order, customer, method…"
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            statusOptions={PAYMENT_STATUS_FILTER_OPTIONS}
+            methodFilter={methodFilter}
+            onMethodFilterChange={setMethodFilter}
+            methodOptions={PAYMENT_METHOD_FILTER_OPTIONS}
+            showingCount={filteredPayments.length}
+            totalCount={totalItems}
+            hasDateRangeFilter={hasDateRangeFilter}
+            fromDate={fromDate}
+            onFromDateChange={setFromDate}
+            toDate={toDate}
+            onToDateChange={setToDate}
+            onClearFilters={clearAllFilters}
+          />
+        </div>
 
- {/* Loading */}
- {loading && <AdminSectionLoader rows={6} />}
+        <div className="relative">
+          {loading ? <AdminSectionLoader rows={6} className="absolute inset-0 z-10 bg-white/70 dark:bg-slate-900/70" /> : null}
 
- {/* Payments Table */}
- {!loading && (
- <div className="admin-surface rounded-xl border admin-border">
- <div className="relative z-10 flex flex-col gap-3 border-b admin-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6">
- <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
- {filteredPayments.length} payment{filteredPayments.length !== 1 ? "s" : ""}
- </p>
- <div className="flex justify-end sm:ml-auto">
- <TableColumnVisibilityMenu
- columns={PAYMENTS_TABLE_COLUMNS}
- visibility={columnVisibility}
- onToggle={toggleTableColumn}
- onShowAll={() => setAllTableColumnsVisible(true)}
- onHideAll={() => setAllTableColumnsVisible(false)}
- />
- </div>
- </div>
- {filteredPayments.length === 0 ? (
- <div className="text-center py-12">
- <p className="text-slate-500 dark:text-slate-400">
- No payments found
- </p>
- </div>
- ) : (
- <>
- <div className="overflow-x-auto rounded-b-xl">
- <table className="w-full">
- <thead className="bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800">
- <tr>
- {isColVisible("id") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- ID
- </th>
- ) : null}
- {isColVisible("order") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Order
- </th>
- ) : null}
- {isColVisible("customer") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Customer
- </th>
- ) : null}
- {isColVisible("amount") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Amount
- </th>
- ) : null}
- {isColVisible("method") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Method
- </th>
- ) : null}
- {isColVisible("status") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Status
- </th>
- ) : null}
- {isColVisible("date") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Date
- </th>
- ) : null}
- {isColVisible("actions") ? (
- <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900 dark:text-slate-100">
- Actions
- </th>
- ) : null}
- </tr>
- </thead>
- <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
- {filteredPayments.map((payment) => (
- <tr
- key={payment.id}
- className="hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)] transition"
- >
- {isColVisible("id") ? (
- <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-100 font-medium">
- #{payment.id}
- </td>
- ) : null}
- {isColVisible("order") ? (
- <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
- {payment.order?.order_number || "N/A"}
- </td>
- ) : null}
- {isColVisible("customer") ? (
- <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
- {payment.order?.user?.name || "N/A"}
- </td>
- ) : null}
- {isColVisible("amount") ? (
- <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
- ${formatAmount(payment.amount)}
- </td>
- ) : null}
- {isColVisible("method") ? (
- <td className="px-6 py-4 text-sm">
- <span
- className={`px-3 py-1 rounded-full text-xs font-medium ${getMethodBadge(
- payment.method
- )}`}
- >
- {payment.method}
- </span>
- </td>
- ) : null}
- {isColVisible("status") ? (
- <td className="px-6 py-4 text-sm">
- <span
- className="px-3 py-1 rounded-full text-xs font-medium border"
- style={getStatusBadge(payment.status)}
- >
- {payment.status}
- </span>
- </td>
- ) : null}
- {isColVisible("date") ? (
- <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
- {new Date(payment.created_at).toLocaleDateString()}
- </td>
- ) : null}
- {isColVisible("actions") ? (
- <td className="px-6 py-4">
- <div className="flex items-center gap-1.5">
- {/* View */}
- <button
- onClick={() => showPaymentDetails(payment)}
- title="View details"
- className="h-9 w-9 border admin-border text-slate-600 dark:text-slate-300 hover:bg-[rgba(var(--admin-primary-rgb),0.12)] rounded-lg transition-colors inline-flex items-center justify-center admin-surface"
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
- </button>
- {payment.status === "pending" && (
- <>
- {/* Verify */}
- <button
- onClick={() => handleVerify(payment)}
- title="Verify payment"
- aria-label="Verify payment"
- className="h-9 w-9 rounded-lg transition-colors inline-flex items-center justify-center"
- style={{
- color: mode === 'dark' ? '#bbf7d0' : '#15803d',
- border: `1px solid ${mode === 'dark' ? '#22c55e' : '#86efac'}`,
- backgroundColor: mode === 'dark' ? 'rgba(34,197,94,0.12)' : '#fff',
- cursor: 'pointer',
- }}
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
- </button>
- {/* Reject */}
- <button
- onClick={() => handleReject(payment)}
- title="Reject payment"
- aria-label="Reject payment"
- className="h-9 w-9 rounded-lg transition-colors inline-flex items-center justify-center"
- style={{
- color: mode === 'dark' ? '#fca5a5' : '#dc2626',
- border: `1px solid ${mode === 'dark' ? '#fca5a5' : '#fecaca'}`,
- backgroundColor: mode === 'dark' ? 'rgba(248,113,113,0.12)' : '#fff',
- cursor: 'pointer',
- }}
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
- </button>
- </>
- )}
- </div>
- </td>
- ) : null}
- </tr>
- ))}
- </tbody>
- </table>
- </div>
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6 dark:border-slate-800">
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {totalItems >= ADMIN_LIST_PAGINATE_AT ? (
+                <>
+                  {filteredPayments.length} on this page
+                  <span className="font-normal text-slate-500 dark:text-slate-400">
+                    {" "}
+                    · {totalItems} total
+                  </span>
+                </>
+              ) : totalItems > 0 ? (
+                <span className="font-normal text-slate-500 dark:text-slate-400">
+                  Showing {totalItems} of {totalItems}
+                </span>
+              ) : (
+                "No payments"
+              )}
+            </p>
+            <TableColumnVisibilityMenu
+              columns={PAYMENTS_TABLE_COLUMNS}
+              visibility={columnVisibility}
+              onToggle={toggleTableColumn}
+              onShowAll={() => setAllTableColumnsVisible(true)}
+              onHideAll={() => setAllTableColumnsVisible(false)}
+            />
+          </div>
 
- {/* Pagination */}
- {totalPages > 1 && (
- <div className="px-6 py-4 border-t admin-border flex flex-col sm:flex-row items-center justify-between gap-3">
- <p className="text-sm text-slate-500 dark:text-slate-300 shrink-0">
- Page <span className="font-medium text-slate-700 dark:text-slate-100">{currentPage}</span> of <span className="font-medium text-slate-700 dark:text-slate-100">{totalPages}</span>
- </p>
+          {filteredPayments.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+              <p>No payments found</p>
+              {hasDateRangeFilter ? (
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Only payments within the selected date range are listed. Clear dates to see all payments.
+                </p>
+              ) : null}
+              {search.trim() || hasDateRangeFilter || statusFilter !== "all" || methodFilter !== "all" ? (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="mt-2 font-semibold text-[color:var(--admin-primary)] hover:underline"
+                >
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b border-slate-200 bg-slate-50/95 text-sm dark:border-slate-800 dark:bg-slate-950/90">
+                    <tr>
+                      {isColVisible("id") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          ID
+                        </th>
+                      ) : null}
+                      {isColVisible("order") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Order
+                        </th>
+                      ) : null}
+                      {isColVisible("customer") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Customer
+                        </th>
+                      ) : null}
+                      {isColVisible("amount") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Amount
+                        </th>
+                      ) : null}
+                      {isColVisible("method") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Method
+                        </th>
+                      ) : null}
+                      {isColVisible("status") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Status
+                        </th>
+                      ) : null}
+                      {isColVisible("date") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Date
+                        </th>
+                      ) : null}
+                      {isColVisible("actions") ? (
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      ) : null}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {filteredPayments.map((payment) => (
+                      <tr
+                        key={payment.id}
+                        className="transition hover:bg-[rgba(var(--admin-primary-rgb),0.06)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.1)]"
+                      >
+                        {isColVisible("id") ? (
+                          <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
+                            #{payment.id}
+                          </td>
+                        ) : null}
+                        {isColVisible("order") ? (
+                          <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
+                            {payment.order?.order_number || "N/A"}
+                          </td>
+                        ) : null}
+                        {isColVisible("customer") ? (
+                          <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-300">
+                            {payment.order?.user?.name || "N/A"}
+                          </td>
+                        ) : null}
+                        {isColVisible("amount") ? (
+                          <td className="px-6 py-4 text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                            ${formatAmount(payment.amount)}
+                          </td>
+                        ) : null}
+                        {isColVisible("method") ? (
+                          <td className="px-6 py-4 text-sm">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-medium ${getMethodBadge(payment.method)}`}
+                            >
+                              {payment.method}
+                            </span>
+                          </td>
+                        ) : null}
+                        {isColVisible("status") ? (
+                          <td className="px-6 py-4 text-sm">
+                            <span
+                              className="inline-flex rounded-full border px-3 py-1 text-xs font-medium"
+                              style={getStatusBadge(payment.status)}
+                            >
+                              {payment.status}
+                            </span>
+                          </td>
+                        ) : null}
+                        {isColVisible("date") ? (
+                          <td className="px-6 py-4 text-sm tabular-nums text-slate-500 dark:text-slate-300">
+                            {new Date(payment.created_at).toLocaleDateString()}
+                          </td>
+                        ) : null}
+                        {isColVisible("actions") ? (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => showPaymentDetails(payment)}
+                                title="View details"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                              </button>
+                              {payment.status === "pending" && canEditPayments ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleVerify(payment)}
+                                    title="Verify payment"
+                                    aria-label="Verify payment"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReject(payment)}
+                                    title="Reject payment"
+                                    aria-label="Reject payment"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-600 transition hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
- <div className="inline-flex items-center gap-1">
- {/* First */}
- <button
- onClick={() => loadPayments(1)}
- disabled={currentPage === 1}
- className="h-9 w-9 flex items-center justify-center rounded-lg border admin-border text-slate-500 dark:text-slate-300 hover:bg-[rgba(var(--admin-primary-rgb),0.12)] hover:border-[rgba(var(--admin-primary-rgb),0.5)] disabled:opacity-35 disabled:cursor-not-allowed transition text-xs"
- title="First page"
- >
- <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
- </button>
+              <AdminListPaginationBar
+                page={currentPage}
+                lastPage={totalPages}
+                total={totalItems}
+                onPageChange={loadPayments}
+              />
+            </>
+          )}
+        </div>
+      </div>
 
- {/* Prev */}
- <button
- onClick={() => loadPayments(currentPage - 1)}
- disabled={currentPage === 1}
- className="h-9 w-9 flex items-center justify-center rounded-lg border admin-border text-slate-500 dark:text-slate-300 hover:bg-[rgba(var(--admin-primary-rgb),0.12)] hover:border-[rgba(var(--admin-primary-rgb),0.5)] disabled:opacity-35 disabled:cursor-not-allowed transition"
- title="Previous page"
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
- </button>
+      <AdminModal
+        open={showDetails && !!selectedPayment}
+        onClose={closePaymentDetails}
+        title="Payment Details"
+        titleId="payment-details-title"
+        maxWidthClass="max-w-md"
+      >
+        {selectedPayment ? (
+          <>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Payment ID</p>
+                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">#{selectedPayment.id}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Order</p>
+                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedPayment.order?.order_number}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Customer</p>
+                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedPayment.order?.user?.name}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Amount</p>
+                <p className="text-xl font-bold text-slate-900 dark:text-white">
+                  ${formatAmount(selectedPayment.amount)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Method</p>
+                <p className="text-lg capitalize text-slate-900 dark:text-slate-100">{selectedPayment.method}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Status</p>
+                <span
+                  className="inline-flex rounded-full border px-3 py-1 text-sm font-medium"
+                  style={getStatusBadge(selectedPayment.status)}
+                >
+                  {selectedPayment.status}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Transaction ID</p>
+                <p className="break-all font-mono text-sm text-slate-900 dark:text-slate-100">
+                  {selectedPayment.transaction_id || "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Date</p>
+                <p className="text-sm text-slate-900 dark:text-slate-100">
+                  {new Date(selectedPayment.created_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
 
- {/* Smart page numbers */}
- {(() => {
- const delta = 1;
- const range = [];
- const rangeWithDots = [];
- let l;
- for (let i = 1; i <= totalPages; i++) {
- if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
- range.push(i);
- }
- }
- for (const i of range) {
- if (l !== undefined) {
- if (i - l === 2) rangeWithDots.push(l + 1);
- else if (i - l > 2) rangeWithDots.push("...");
- }
- rangeWithDots.push(i);
- l = i;
- }
- return rangeWithDots.map((item, idx) =>
- item === "..." ? (
- <span key={"dot-" + idx} className="h-9 w-9 flex items-center justify-center text-sm text-slate-400 select-none">…</span>
- ) : (
- <button
- key={item}
- onClick={() => loadPayments(item)}
- className={"h-9 w-9 flex items-center justify-center rounded-lg text-sm font-medium transition " + (currentPage === item
- ? "bg-slate-900 text-white "
- : "border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
- )}
- >
- {item}
- </button>
- )
- );
- })()}
-
- {/* Next */}
- <button
- onClick={() => loadPayments(currentPage + 1)}
- disabled={currentPage === totalPages}
- className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 disabled:opacity-35 disabled:cursor-not-allowed transition"
- title="Next page"
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
- </button>
-
- {/* Last */}
- <button
- onClick={() => loadPayments(totalPages)}
- disabled={currentPage === totalPages}
- className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 disabled:opacity-35 disabled:cursor-not-allowed transition text-xs"
- title="Last page"
- >
- <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
- </button>
- </div>
- </div>
- )}
- </>
- )}
- </div>
- )}
-
- {/* Payment Details Modal */}
- <AdminModal
- open={showDetails && !!selectedPayment}
- onClose={closePaymentDetails}
- title="Payment Details"
- titleId="payment-details-title"
- maxWidthClass="max-w-md"
- >
- {selectedPayment ? (
- <>
- <div className="space-y-4">
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Payment ID
- </p>
- <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
- #{selectedPayment.id}
- </p>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Order
- </p>
- <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
- {selectedPayment.order?.order_number}
- </p>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Customer
- </p>
- <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
- {selectedPayment.order?.user?.name}
- </p>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Amount
- </p>
- <p className="text-xl font-bold text-slate-900 dark:text-white">
- ${formatAmount(selectedPayment.amount)}
- </p>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Method
- </p>
- <p className="text-lg capitalize text-slate-900 dark:text-slate-100">
- {selectedPayment.method}
- </p>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Status
- </p>
- <span
- className="px-3 py-1 rounded-full text-sm font-medium inline-block border"
- style={getStatusBadge(selectedPayment.status)}
- >
- {selectedPayment.status}
- </span>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Transaction ID
- </p>
- <p className="text-sm font-mono text-slate-900 dark:text-slate-100 break-all">
- {selectedPayment.transaction_id || "N/A"}
- </p>
- </div>
-
- <div>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Date
- </p>
- <p className="text-sm text-slate-900 dark:text-slate-100">
- {new Date(selectedPayment.created_at).toLocaleString()}
- </p>
- </div>
- </div>
-
- <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800 flex justify-end gap-2">
- {selectedPayment.status === "pending" && (
- <>
- <button
- onClick={() => handleVerify(selectedPayment)}
- className="inline-flex items-center gap-2 px-4 h-9 border border-[rgba(var(--admin-primary-rgb),0.4)] dark:border-[rgba(var(--admin-primary-rgb),0.5)] text-[color:var(--admin-primary)] dark:text-[color:var(--admin-primary)] text-sm font-medium rounded-lg hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.14)] transition-colors"
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
- Verify
- </button>
- <button
- onClick={() => handleReject(selectedPayment)}
- className="inline-flex items-center gap-2 px-4 h-9 border border-red-200 dark:border-red-700 text-red-500 dark:text-red-200 text-sm font-medium rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
- >
- <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
- Reject
- </button>
- </>
- )}
- <button
- onClick={closePaymentDetails}
- className="inline-flex items-center gap-2 px-4 h-9 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
- >
- Close
- </button>
- </div>
- </>
- ) : null}
- </AdminModal>
- </div>
- </div>
- );
+            <div className="mt-6 flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+              {selectedPayment.status === "pending" && canEditPayments ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleVerify(selectedPayment)}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-[rgba(var(--admin-primary-rgb),0.4)] px-4 text-sm font-medium text-[color:var(--admin-primary)] transition hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:border-[rgba(var(--admin-primary-rgb),0.5)]"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Verify
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReject(selectedPayment)}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 px-4 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/40"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Reject
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={closePaymentDetails}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+          </>
+        ) : null}
+      </AdminModal>
+    </div>
+  );
 }

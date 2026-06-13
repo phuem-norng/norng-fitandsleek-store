@@ -158,16 +158,19 @@ export default function NotificationDrawer({
             <ul className="divide-y divide-zinc-100">
               {notifications.map((item) => {
                 const storefrontPath = resolveStorefrontPath(item.link_url);
+                const rowClassName = `flex w-full gap-3 px-4 py-3.5 text-left transition-colors hover:bg-zinc-50 ${
+                  item.is_read ? "bg-white" : "bg-emerald-50/40"
+                } ${storefrontPath ? "cursor-pointer" : ""}`;
 
-                return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => onMarkRead(item)}
-                    className={`flex w-full gap-3 px-4 py-3.5 text-left transition-colors hover:bg-zinc-50 ${
-                      item.is_read ? "bg-white" : "bg-emerald-50/40"
-                    }`}
-                  >
+                const handleOpen = () => {
+                  onMarkRead(item);
+                  if (storefrontPath) {
+                    onClose();
+                  }
+                };
+
+                const rowContent = (
+                  <>
                     <div className="relative shrink-0 pt-0.5">
                       <NotificationThumbnail item={item} />
                       {!item.is_read ? (
@@ -176,17 +179,15 @@ export default function NotificationDrawer({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p
-                          className={`text-sm leading-snug ${
-                            item.is_read
-                              ? "font-medium text-zinc-700"
-                              : "font-semibold text-zinc-900"
-                          }`}
-                        >
-                          {item.title || "Notification"}
-                        </p>
-                      </div>
+                      <p
+                        className={`text-sm leading-snug ${
+                          item.is_read
+                            ? "font-medium text-zinc-700"
+                            : "font-semibold text-zinc-900"
+                        }`}
+                      >
+                        {item.title || "Notification"}
+                      </p>
 
                       {item.message ? (
                         <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-zinc-500">
@@ -201,22 +202,28 @@ export default function NotificationDrawer({
                           </span>
                         ) : null}
                         {storefrontPath ? (
-                          <Link
-                            to={storefrontPath}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onClose();
-                            }}
-                            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[#6F8B7F] hover:text-[#5a7368]"
-                          >
+                          <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[#6F8B7F]">
                             View
-                            <ExternalLink className="h-3 w-3" />
-                          </Link>
+                            <ExternalLink className="h-3 w-3" aria-hidden />
+                          </span>
                         ) : null}
                       </div>
                     </div>
-                  </button>
-                </li>
+                  </>
+                );
+
+                return (
+                  <li key={item.id}>
+                    {storefrontPath ? (
+                      <Link to={storefrontPath} onClick={handleOpen} className={rowClassName}>
+                        {rowContent}
+                      </Link>
+                    ) : (
+                      <button type="button" onClick={handleOpen} className={rowClassName}>
+                        {rowContent}
+                      </button>
+                    )}
+                  </li>
                 );
               })}
             </ul>

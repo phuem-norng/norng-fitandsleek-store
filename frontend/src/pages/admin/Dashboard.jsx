@@ -1,10 +1,17 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { useAdminAccents } from "../../lib/adminAccents.js";
 import { useTheme } from "../../state/theme.jsx";
 import { useLanguage } from "../../lib/i18n.jsx";
 import ChartResizeMenu from "../../components/admin/ChartResizeMenu.jsx";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import {
+  ADMIN_NUMBER_FORMAT,
+  formatNumber,
+  formatUsd,
+  formatUsdFull,
+} from "../../lib/adminNumberFormat.js";
 import {
   Area,
   AreaChart,
@@ -18,23 +25,11 @@ import {
   YAxis,
 } from "recharts";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 const pad = (n) => String(n).padStart(2, "0");
 const fmtYmd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-const compactUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-const fullUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function hexToRgb(hex) {
   const h = (hex || "").replace(/^#/, "");
@@ -135,7 +130,7 @@ function RevenueTooltip({ active, payload, mode }) {
       <p className="font-semibold text-slate-800 dark:text-slate-100">{row.dateLong}</p>
       <p className="mt-1 tabular-nums text-slate-600 dark:text-slate-300">
         Revenue:{" "}
-        <span className="font-semibold text-slate-900 dark:text-white">{fullUsd.format(row.revenue || 0)}</span>
+        <span className="font-semibold text-slate-900 dark:text-white">{formatUsdFull(row.revenue || 0)}</span>
       </p>
       <p className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">Orders: {row.orders ?? 0}</p>
     </div>
@@ -261,16 +256,20 @@ function PeriodTabs({ days, value, onChange }) {
 }
 
 export default function AdminDashboard() {
+  const { user, can, permissionsReady } = useAdminPermissions();
+  const canViewReports = can("reports", "view");
+  const canViewOrders = can("orders", "view");
   const { primaryColor, mode } = useTheme();
   const { isSpectrum, iconBoxStyle, barFill } = useAdminAccents();
   const { t } = useLanguage();
   const gid = useId().replace(/:/g, "");
 
   const [periodDays, setPeriodDays] = useState(30);
+  const [numberFormat] = useAdminUiPreference("dashboard.numberFormat", ADMIN_NUMBER_FORMAT.COMPACT);
 
   /* ── Chart resize state (xl col-span, max 3 in the 3-col grid) ── */
-  const [revenueSpan, setRevenueSpan] = useState(2);
-  const [statusSpan, setStatusSpan] = useState(1);
+  const [revenueSpan, setRevenueSpan] = useAdminUiPreference("charts.dashboard.revenueSpan", 2);
+  const [statusSpan, setStatusSpan] = useAdminUiPreference("charts.dashboard.statusSpan", 1);
 
   const [stats, setStats] = useState({
     revenue: { total: 0, month: 0, today: 0 },
@@ -298,6 +297,23 @@ export default function AdminDashboard() {
     let cancelled = false;
     const skipFullScreenLoad = hasLoadedOnceRef.current;
     if (!skipFullScreenLoad) setLoading(true);
+
+    if (!permissionsReady) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!canViewReports) {
+      if (!cancelled) {
+        setSalesSeriesRaw([]);
+        setStats((prev) => ({ ...prev, ordersByStatus: [] }));
+        setLoading(false);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
 
     (async () => {
       try {
@@ -346,7 +362,7 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [periodDays]);
+  }, [periodDays, permissionsReady, canViewReports]);
 
   useEffect(() => {
     if (loading) return undefined;
@@ -375,6 +391,14 @@ export default function AdminDashboard() {
     return rows;
   }, [stats.ordersByStatus]);
 
+  if (!permissionsReady) {
+    return <AdminContentSkeleton lines={3} imageHeight={220} />;
+  }
+
+  if (!canViewReports) {
+    return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+  }
+
   if (loading) return <AdminContentSkeleton lines={3} imageHeight={220} />;
 
   const pctActive =
@@ -384,28 +408,68 @@ export default function AdminDashboard() {
     {
       id: "kpi-revenue",
       title: `${t('dashboardRevenue')} (${periodDays}d)`,
-      value: <AnimatedNumber value={stats.revenue.total || 0} prefix="$" decimals={2} />,
-      sub: <>{t('dashboardToday')} · <AnimatedNumber value={stats.revenue.today || 0} prefix="$" decimals={2} /></>,
+      value:
+        numberFormat === ADMIN_NUMBER_FORMAT.FULL ? (
+          <AnimatedNumber value={stats.revenue.total || 0} prefix="$" decimals={2} />
+        ) : (
+          formatUsd(stats.revenue.total || 0, numberFormat)
+        ),
+      sub: (
+        <>
+          {t('dashboardToday')} ·{" "}
+          {numberFormat === ADMIN_NUMBER_FORMAT.FULL ? (
+            <AnimatedNumber value={stats.revenue.today || 0} prefix="$" decimals={2} />
+          ) : (
+            formatUsd(stats.revenue.today || 0, numberFormat)
+          )}
+        </>
+      ),
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
     },
     {
       id: "kpi-mtd",
       title: t('dashboardMonthToDate'),
-      value: <AnimatedNumber value={stats.revenue.month || 0} prefix="$" decimals={2} />,
+      value:
+        numberFormat === ADMIN_NUMBER_FORMAT.FULL ? (
+          <AnimatedNumber value={stats.revenue.month || 0} prefix="$" decimals={2} />
+        ) : (
+          formatUsd(stats.revenue.month || 0, numberFormat)
+        ),
       sub: <>{t('dashboardNewCustomers')} ({periodDays}d): <AnimatedNumber value={stats.customers.new_this_month ?? 0} /></>,
       icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
     },
     {
       id: "kpi-orders",
       title: `${t('dashboardOrders')} (${periodDays}d)`,
-      value: <AnimatedNumber value={stats.ordersHead.total || 0} />,
-      sub: <><AnimatedNumber value={stats.ordersHead.pending ?? 0} /> {t('dashboardPending')} · <AnimatedNumber value={stats.ordersHead.completed ?? 0} /> {t('dashboardCompleted')}</>,
+      value:
+        numberFormat === ADMIN_NUMBER_FORMAT.FULL ? (
+          <AnimatedNumber value={stats.ordersHead.total || 0} />
+        ) : (
+          formatNumber(stats.ordersHead.total || 0, numberFormat)
+        ),
+      sub: (
+        <>
+          {numberFormat === ADMIN_NUMBER_FORMAT.FULL
+            ? <AnimatedNumber value={stats.ordersHead.pending ?? 0} />
+            : formatNumber(stats.ordersHead.pending ?? 0, numberFormat)}{" "}
+          {t('dashboardPending')} ·{" "}
+          {numberFormat === ADMIN_NUMBER_FORMAT.FULL
+            ? <AnimatedNumber value={stats.ordersHead.completed ?? 0} />
+            : formatNumber(stats.ordersHead.completed ?? 0, numberFormat)}{" "}
+          {t('dashboardCompleted')}
+        </>
+      ),
       icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
     },
     {
       id: "kpi-customers",
       title: t('dashboardCustomersTotal'),
-      value: <AnimatedNumber value={stats.customers.total || 0} />,
+      value:
+        numberFormat === ADMIN_NUMBER_FORMAT.FULL ? (
+          <AnimatedNumber value={stats.customers.total || 0} />
+        ) : (
+          formatNumber(stats.customers.total || 0, numberFormat)
+        ),
       sub: pctActive !== null ? <>{t('dashboardCatalog')} · <AnimatedNumber value={pctActive} suffix="%" /> {t('dashboardProductsActive')}</> : t('dashboardRegisteredAccounts'),
       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
     },
@@ -445,12 +509,14 @@ export default function AdminDashboard() {
             action={
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <PeriodTabs days={[7, 30, 90]} value={periodDays} onChange={setPeriodDays} />
+                {canViewReports ? (
                 <Link
                   to="/admin/reports"
                   className="rounded-lg border admin-border px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-[rgba(var(--admin-primary-rgb),0.08)] dark:text-slate-300 dark:hover:bg-[rgba(var(--admin-primary-rgb),0.12)]"
                 >
                   {t('dashboardFullReports')}
                 </Link>
+                ) : null}
                 <ChartResizeMenu colSpan={revenueSpan} maxCols={3} onChange={setRevenueSpan} />
               </div>
             }
@@ -478,7 +544,7 @@ export default function AdminDashboard() {
                     dy={periodDays > 31 ? 4 : 0}
                   />
                   <YAxis
-                    tickFormatter={(v) => compactUsd.format(v)}
+                    tickFormatter={(v) => formatUsd(v, numberFormat)}
                     tick={{ fill: chartTickColor, fontSize: 11 }}
                     axisLine={{ stroke: chartAxisLine }}
                     tickLine={{ stroke: chartAxisLine }}
@@ -623,6 +689,7 @@ export default function AdminDashboard() {
             </tbody>
           </table>
         </div>
+        {canViewOrders ? (
         <div className="border-t admin-border px-5 py-3 text-right">
           <Link
             to="/admin/orders"
@@ -631,6 +698,7 @@ export default function AdminDashboard() {
             {t('dashboardViewAllOrders')} →
           </Link>
         </div>
+        ) : null}
       </CardChrome>
 
       <style>{`

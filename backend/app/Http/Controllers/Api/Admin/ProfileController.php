@@ -28,6 +28,7 @@ class ProfileController extends Controller
                 'phone' => $user->phone,
                 'address' => $user->address,
                 'role' => $user->role,
+                'effective_admin_permissions' => $user->effective_admin_permissions,
                 'created_at' => $user->created_at,
                 'profile_image_url' => $user->profile_image_url,
             ],

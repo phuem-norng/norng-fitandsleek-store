@@ -38,40 +38,6 @@ export default function SupportPage() {
     }
   };
 
-  const faqs = [
-    {
-      category: t('faqOrdersShipping'),
-      items: [
-        { q: t('faqTrackOrderQ'), a: t('faqTrackOrderA') },
-        { q: t('faqShippingTimeQ'), a: t('faqShippingTimeA') },
-        { q: t('faqInternationalShippingQ'), a: t('faqInternationalShippingA') },
-      ]
-    },
-    {
-      category: t('faqReturnsRefunds'),
-      items: [
-        { q: t('faqReturnPolicyQ'), a: t('faqReturnPolicyA') },
-        { q: t('faqReturnStartQ'), a: t('faqReturnStartA') },
-        { q: t('faqRefundTimeQ'), a: t('faqRefundTimeA') },
-      ]
-    },
-    {
-      category: t('faqPayments'),
-      items: [
-        { q: t('faqPaymentMethodsQ'), a: t('faqPaymentMethodsA') },
-        { q: t('faqPaymentSecureQ'), a: t('faqPaymentSecureA') },
-      ]
-    },
-    {
-      category: t('faqAccountOrders'),
-      items: [
-        { q: t('faqCreateAccountQ'), a: t('faqCreateAccountA') },
-        { q: t('faqModifyOrderQ'), a: t('faqModifyOrderA') },
-        { q: t('faqForgotPasswordQ'), a: t('faqForgotPasswordA') },
-      ]
-    }
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:bg-gradient-to-br dark:from-slate-900 dark:to-slate-800 py-12">
       <div className="max-w-4xl mx-auto px-4">
@@ -89,16 +55,7 @@ export default function SupportPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
-          <a href="/track-order" className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all group">
-            <div className="w-12 h-12 bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/30 dark:to-emerald-800/30 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-6 h-6 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
-            </div>
-            <h3 className="font-bold text-slate-800 dark:text-white mb-1">{t('trackOrder')}</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('trackOrderDesc')}</p>
-          </a>
+        <div className="grid md:grid-cols-2 gap-4 mb-8">
           <a href="/contact" className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all group">
             <div className="w-12 h-12 bg-gradient-to-br from-amber-100 to-orange-200 dark:from-amber-900/30 dark:to-orange-800/30 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <svg className="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,7 +87,7 @@ export default function SupportPage() {
             </h2>
             <p className="text-amber-100 text-sm">{t('sendMessageSubtitle')}</p>
           </div>
-          
+
           <div className="p-6 text-center">
             <button
               onClick={() => setIsFormOpen(true)}
@@ -267,30 +224,6 @@ export default function SupportPage() {
             </div>
           </DialogPopup>
         </Dialog>
-
-        {/* FAQs */}
-        <div className="space-y-6">
-          {faqs.map((section, idx) => (
-            <div key={idx} className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-700 dark:to-slate-800 border-b border-slate-100 dark:border-slate-700">
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">{section.category}</h2>
-              </div>
-              <div className="p-6 space-y-4">
-                {section.items.map((item, i) => (
-                  <details key={i} className="group">
-                    <summary className="flex items-center justify-between cursor-pointer list-none">
-                      <span className="font-medium text-slate-800 dark:text-white group-open:text-amber-600 transition-colors">{item.q}</span>
-                      <svg className="w-5 h-5 text-slate-400 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </summary>
-                    <p className="mt-3 text-slate-600 dark:text-slate-300 leading-relaxed">{item.a}</p>
-                  </details>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
 
         {/* Contact CTA */}
         <div className="mt-8 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-8 text-center text-white">

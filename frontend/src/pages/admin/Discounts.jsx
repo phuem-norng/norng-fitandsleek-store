@@ -1,6 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { useTheme } from "../../state/theme.jsx";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
@@ -10,12 +13,15 @@ import {
   loadTableColumnVisibility,
   TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
+import AdminListPaginationBar from "../../components/admin/AdminListPaginationBar.jsx";
+import { sliceAdminListPage } from "../../lib/adminListQuery.js";
 
 const DISCOUNTS_TABLE_COLUMNS = [
   { id: "product", label: "Product" },
   { id: "discount", label: "Discount" },
   { id: "originalPrice", label: "Original Price" },
   { id: "salePrice", label: "Discounted Price" },
+  { id: "quantity", label: "Quantity" },
   { id: "startDate", label: "Start Date" },
   { id: "endDate", label: "End Date" },
   { id: "status", label: "Status" },
@@ -26,6 +32,11 @@ const DISCOUNTS_COLUMNS_STORAGE_KEY = "fitandsleek-discounts-columns";
 
 export default function AdminDiscounts() {
   const { refresh: refreshAuth } = useAuth();
+  const { user, can, permissionsReady } = useAdminPermissions();
+  const canViewDiscounts = can("discounts", "view");
+  const canCreateDiscounts = can("discounts", "create");
+  const canEditDiscounts = can("discounts", "edit");
+  const canDeleteDiscounts = can("discounts", "delete");
   const { primaryColor, mode } = useTheme();
   const isDark = mode === "dark";
   const accentIsWhite = (primaryColor || "").toUpperCase() === "#FFFFFF";
@@ -49,6 +60,7 @@ export default function AdminDiscounts() {
     discount_type: "percentage",
     discount_value: "",
     sale_price: "",
+    quantity: "",
     start_date: "",
     end_date: "",
     is_active: true,
@@ -62,9 +74,11 @@ export default function AdminDiscounts() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [columnVisibility, setColumnVisibility] = useState(() =>
     loadTableColumnVisibility(DISCOUNTS_COLUMNS_STORAGE_KEY, DISCOUNTS_TABLE_COLUMNS),
   );
+  const [productSellableStock, setProductSellableStock] = useState(null);
 
   const triggerAuthRefresh = async () => {
     try {
@@ -80,10 +94,41 @@ export default function AdminDiscounts() {
       triggerAuthRefresh();
       return "Unauthorized (401). Please login again.";
     }
+    const fieldErrors = e?.response?.data?.errors;
+    if (fieldErrors?.quantity?.[0]) return fieldErrors.quantity[0];
     return e?.response?.data?.message || "Failed to load/save data.";
   };
 
+  useEffect(() => {
+    if (!form.product_id) {
+      setProductSellableStock(null);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/admin/products/${form.product_id}`);
+        const product = data?.data ?? data;
+        const stock = Number(product?.sellable_stock);
+        if (!cancelled) {
+          setProductSellableStock(Number.isFinite(stock) ? Math.max(0, stock) : null);
+        }
+      } catch {
+        if (!cancelled) setProductSellableStock(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.product_id]);
+
   const load = async () => {
+    if (!canViewDiscounts) {
+      setRows([]);
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data: discountsData } = await api.get("/admin/discounts");
@@ -98,8 +143,9 @@ export default function AdminDiscounts() {
   };
 
   useEffect(() => {
+    if (!permissionsReady) return;
     load();
-  }, []);
+  }, [permissionsReady, canViewDiscounts]);
 
   useEffect(() => {
     try {
@@ -135,12 +181,39 @@ export default function AdminDiscounts() {
       return;
     }
 
+    const qtyRaw = String(form.quantity ?? "").trim();
+    let quantity = null;
+    if (qtyRaw !== "") {
+      quantity = Number.parseInt(qtyRaw, 10);
+      if (!Number.isFinite(quantity) || quantity < 1) {
+        setErr("Quantity must be at least 1, or leave empty for unlimited");
+        return;
+      }
+      if (productSellableStock != null && quantity > productSellableStock) {
+        setErr(`Discount quantity cannot exceed available stock (${productSellableStock} units).`);
+        return;
+      }
+    }
+
+    const payload = {
+      ...form,
+      quantity,
+    };
+
     try {
       if (editing) {
-        await api.put(`/admin/discounts/${editing}`, form);
+        if (!canEditDiscounts) {
+          setErr("You do not have permission to edit discounts.");
+          return;
+        }
+        await api.patch(`/admin/discounts/${editing}`, payload);
         showSuccess("Discount updated successfully");
       } else {
-        await api.post("/admin/discounts", form);
+        if (!canCreateDiscounts) {
+          setErr("You do not have permission to create discounts.");
+          return;
+        }
+        await api.post("/admin/discounts", payload);
         showSuccess("Discount created successfully");
       }
       resetForm();
@@ -157,12 +230,14 @@ export default function AdminDiscounts() {
       discount_type: "percentage",
       discount_value: "",
       sale_price: "",
+      quantity: "",
       start_date: "",
       end_date: "",
       is_active: true,
       description: "",
     });
     setEditing(null);
+    setProductSellableStock(null);
   };
 
   const handleEdit = (discount) => {
@@ -171,6 +246,7 @@ export default function AdminDiscounts() {
       discount_type: discount.discount_type,
       discount_value: discount.discount_value,
       sale_price: discount.sale_price,
+      quantity: discount.quantity ?? "",
       start_date: discount.start_date?.split("T")[0],
       end_date: discount.end_date?.split("T")[0],
       is_active: discount.is_active,
@@ -191,6 +267,11 @@ export default function AdminDiscounts() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    if (!canDeleteDiscounts) {
+      setErr("You do not have permission to delete discounts.");
+      setDeleteTarget(null);
+      return;
+    }
     setDeleteBusy(true);
     setErr("");
     try {
@@ -206,6 +287,10 @@ export default function AdminDiscounts() {
   };
 
   const toggleActive = async (ids, isActive) => {
+    if (!canEditDiscounts) {
+      setErr("You do not have permission to update discounts.");
+      return;
+    }
     try {
       await api.post("/admin/discounts/bulk-toggle", {
         ids,
@@ -241,22 +326,39 @@ export default function AdminDiscounts() {
 
   const selectedOriginalPrice = selectedProduct()?.price;
 
-  const filteredRows = rows.filter((discount) => {
+  const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      String(discount.product?.name || "").toLowerCase().includes(q) ||
-      String(discount.discount_type || "").toLowerCase().includes(q) ||
-      String(discount.description || "").toLowerCase().includes(q)
+    if (!q) return rows;
+    return rows.filter(
+      (discount) =>
+        String(discount.product?.name || "").toLowerCase().includes(q) ||
+        String(discount.discount_type || "").toLowerCase().includes(q) ||
+        String(discount.description || "").toLowerCase().includes(q),
     );
-  });
+  }, [rows, search]);
 
-  if (loading) return <AdminContentSkeleton lines={3} imageHeight={220} />;
+  const listPage = useMemo(() => sliceAdminListPage(filteredRows, page), [filteredRows, page]);
+  const { rows: paginatedRows, lastPage, usePagination } = listPage;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (page > lastPage) setPage(lastPage);
+  }, [page, lastPage]);
+
+  if (!permissionsReady || loading) return <AdminContentSkeleton lines={3} imageHeight={220} />;
+
+  if (!canViewDiscounts) {
+    return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+  }
 
   return (
     <div className="w-full min-w-0 min-h-full admin-soft text-slate-800 dark:text-slate-100">
       <div className="mb-6 flex items-start justify-between gap-4">
         <h1 className="text-3xl md:text-4xl font-semibold text-slate-900 dark:text-slate-100">Manage Discounts</h1>
+        {canCreateDiscounts ? (
         <button
           type="button"
           onClick={() => setShowCreateForm(true)}
@@ -267,6 +369,7 @@ export default function AdminDiscounts() {
           </svg>
           Create Discount
         </button>
+        ) : null}
       </div>
 
       <AdminConfirmDialog
@@ -372,6 +475,31 @@ export default function AdminDiscounts() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Quantity</label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max={productSellableStock != null ? productSellableStock : undefined}
+                value={form.quantity}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                className="w-full h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:border-slate-500"
+                placeholder="e.g. 50"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {productSellableStock != null ? (
+                  <>
+                    Max units at this discounted price (available stock:{" "}
+                    <span className="font-semibold tabular-nums">{productSellableStock}</span>). Leave empty for
+                    unlimited.
+                  </>
+                ) : (
+                  "Max units at this discounted price. Leave empty for unlimited."
+                )}
+              </p>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Start Date *</label>
               <input
                 type="date"
@@ -440,7 +568,16 @@ export default function AdminDiscounts() {
 
       <div className="admin-surface rounded-2xl border admin-border">
         <div className="relative z-10 flex flex-col gap-3 border-b admin-border p-4 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">All Discounts</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">All Discounts</h3>
+            {filteredRows.length > 0 ? (
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                {usePagination
+                  ? `${paginatedRows.length} on this page · ${filteredRows.length} total`
+                  : `${filteredRows.length} discount${filteredRows.length !== 1 ? "s" : ""}`}
+              </p>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
             <input
               value={search}
@@ -465,6 +602,7 @@ export default function AdminDiscounts() {
                 {isColVisible("discount") ? <th className="px-4 py-2 text-left">Discount</th> : null}
                 {isColVisible("originalPrice") ? <th className="px-4 py-2 text-left">Original Price</th> : null}
                 {isColVisible("salePrice") ? <th className="px-4 py-2 text-left">Discounted Price</th> : null}
+                {isColVisible("quantity") ? <th className="px-4 py-2 text-left">Quantity</th> : null}
                 {isColVisible("startDate") ? <th className="px-4 py-2 text-left">Start Date</th> : null}
                 {isColVisible("endDate") ? <th className="px-4 py-2 text-left">End Date</th> : null}
                 {isColVisible("status") ? <th className="px-4 py-2 text-left">Status</th> : null}
@@ -472,7 +610,7 @@ export default function AdminDiscounts() {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((discount) => (
+              {paginatedRows.map((discount) => (
                 <tr key={discount.id} className="border-t admin-border hover:bg-[rgba(var(--admin-primary-rgb),0.06)] dark:hover:bg-[rgba(var(--admin-primary-rgb),0.08)]">
                   {isColVisible("product") ? (
                     <td className="px-4 py-2">
@@ -518,6 +656,11 @@ export default function AdminDiscounts() {
                       ${parseFloat(discount.sale_price).toFixed(2)}
                     </td>
                   ) : null}
+                  {isColVisible("quantity") ? (
+                    <td className="px-4 py-2 tabular-nums text-slate-700 dark:text-slate-300">
+                      {discount.quantity != null && discount.quantity !== "" ? discount.quantity : "Unlimited"}
+                    </td>
+                  ) : null}
                   {isColVisible("startDate") ? (
                     <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
                       {new Date(discount.start_date).toLocaleDateString()}
@@ -530,6 +673,7 @@ export default function AdminDiscounts() {
                   ) : null}
                   {isColVisible("status") ? (
                     <td className="px-4 py-2">
+                      {canEditDiscounts ? (
                       <button
                         onClick={() => toggleActive([discount.id], !discount.is_active)}
                         className={`px-3 py-1 rounded-full text-xs font-semibold border ${
@@ -540,10 +684,20 @@ export default function AdminDiscounts() {
                       >
                         {discount.is_active ? "Active" : "Inactive"}
                       </button>
+                      ) : (
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                        discount.is_active
+                          ? "bg-[rgba(var(--admin-primary-rgb),0.14)] text-[color:var(--admin-primary)] border-[rgba(var(--admin-primary-rgb),0.4)]"
+                          : "bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                      }`}>
+                        {discount.is_active ? "Active" : "Inactive"}
+                      </span>
+                      )}
                     </td>
                   ) : null}
                   {isColVisible("actions") ? (
                     <td className="px-4 py-2 flex gap-2">
+                      {canEditDiscounts ? (
                       <button
                         onClick={() => handleEdit(discount)}
                         className="p-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
@@ -553,6 +707,8 @@ export default function AdminDiscounts() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </button>
+                      ) : null}
+                      {canDeleteDiscounts ? (
                       <button
                         onClick={() => handleDelete(discount.id)}
                         className="transition-colors"
@@ -564,6 +720,7 @@ export default function AdminDiscounts() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
+                      ) : null}
                     </td>
                   ) : null}
                 </tr>
@@ -571,6 +728,12 @@ export default function AdminDiscounts() {
             </tbody>
           </table>
         </div>
+        <AdminListPaginationBar
+          page={page}
+          lastPage={lastPage}
+          total={filteredRows.length}
+          onPageChange={setPage}
+        />
         {filteredRows.length === 0 && (
           <div className="p-4 text-center text-slate-500 dark:text-slate-400">No discounts found</div>
         )}

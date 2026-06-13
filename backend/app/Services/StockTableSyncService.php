@@ -27,7 +27,7 @@ class StockTableSyncService
         );
     }
 
-    public function syncReceiveFromCategory(Category $batch, ?int $productId = null): ?StockReceived
+    public function syncReceiveFromCategory(Category $batch, ?int $productId = null, array $overrides = []): ?StockReceived
     {
         if (! $this->tablesReady() || ! $this->isReceiveBatch($batch)) {
             return null;
@@ -51,25 +51,29 @@ class StockTableSyncService
         }
 
         $quantity = $this->receivedQuantityFromCategory($batch);
-        $unitCost = round((float) ($batch->cost ?? 0), 2);
+        $unitCost = round((float) ($overrides['unit_cost'] ?? $batch->cost ?? 0), 2);
         $receivedAt = $batch->created_at ?? ($batch->date_in ? $batch->date_in->startOfDay() : now());
+
+        $supplierName = $overrides['supplier_name'] ?? ($batch->origin ? 'Supplier '.strtoupper((string) $batch->origin) : null);
+        $invoiceNumber = $overrides['invoice_number'] ?? ($batch->slug ? 'INV-'.$batch->slug : null);
+        $notes = $overrides['notes'] ?? $batch->description;
 
         return StockReceived::query()->updateOrCreate(
             ['category_id' => $batch->id],
             [
                 'stock_inventory_id' => $inventory?->id,
                 'product_id' => $productId,
-                'created_by' => null,
+                'created_by' => $overrides['created_by'] ?? null,
                 'corrects_stock_received_id' => null,
                 'entry_type' => 'receive',
                 'quantity' => $quantity,
                 'unit_cost' => $unitCost,
                 'total_cost' => round($unitCost * $quantity, 2),
-                'supplier_name' => $batch->origin ? 'Supplier '.strtoupper((string) $batch->origin) : null,
-                'invoice_number' => $batch->slug ? 'INV-'.$batch->slug : null,
+                'supplier_name' => $supplierName,
+                'invoice_number' => $invoiceNumber,
                 'date_in' => $batch->date_in,
                 'received_at' => $receivedAt,
-                'notes' => $batch->description,
+                'notes' => $notes,
             ],
         );
     }

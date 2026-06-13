@@ -11,9 +11,6 @@ use App\Http\Controllers\Api\SecurityAuditController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\BakongPaymentController;
-use App\Http\Controllers\Api\TelegramWebhookController;
-use App\Http\Controllers\Api\TelegramLinkController;
-
 // Storefront
 use App\Http\Controllers\Api\Storefront\CategoryController;
 use App\Http\Controllers\Api\Storefront\ProductController;
@@ -22,6 +19,7 @@ use App\Http\Controllers\Api\Storefront\OrderController;
 use App\Http\Controllers\Api\Storefront\PaymentController;
 use App\Http\Controllers\Api\Storefront\BannerController;
 use App\Http\Controllers\Api\Storefront\CollectionController as StorefrontCollectionController;
+use App\Http\Controllers\Api\Admin\DeliveryFeeAdminController;
 use App\Http\Controllers\Api\Admin\ShipmentQrController;
 use App\Http\Controllers\Api\Storefront\BrandController as StorefrontBrandController;
 use App\Http\Controllers\Api\Storefront\MenuController as StorefrontMenuController;
@@ -32,7 +30,14 @@ use App\Http\Controllers\Api\Storefront\CustomerProfileController;
 use App\Http\Controllers\Api\Storefront\ReplacementCaseController as StorefrontReplacementCaseController;
 use App\Http\Controllers\Api\Storefront\ChatbotController;
 use App\Http\Controllers\Api\Storefront\LegalContentController;
+use App\Http\Controllers\Api\Storefront\FaqController;
+use App\Http\Controllers\Api\Storefront\ContactPageController;
+use App\Http\Controllers\Api\Storefront\PrivacyPageController;
+use App\Http\Controllers\Api\Storefront\TermsPageController;
+use App\Http\Controllers\Api\Storefront\CookiesPageController;
+use App\Http\Controllers\Api\Storefront\DeliveryFeeController;
 use App\Http\Controllers\Api\Storefront\PublicMediaController;
+use App\Http\Controllers\Api\Storefront\PersonalizationController;
 use App\Http\Controllers\Api\Admin\ChatbotSettingsController;
 
 // Admin
@@ -42,34 +47,42 @@ use App\Http\Controllers\Api\Admin\BarcodeScanController;
 use App\Http\Controllers\Api\Admin\PosSaleController;
 use App\Http\Controllers\Api\Admin\PosSaleHistoryController;
 use App\Http\Controllers\Api\Admin\CategoryAdminController;
-use App\Http\Controllers\Api\Admin\InventoryIntegrityController;
 use App\Http\Controllers\Api\Admin\ProductAdminController;
+use App\Http\Controllers\Api\Admin\InventoryLotAdminController;
+use App\Http\Controllers\Api\Admin\InventorySettingsAdminController;
+use App\Http\Controllers\Api\Admin\StockInventoryAdminController;
+use App\Http\Controllers\Api\Admin\StockReceivedAdminController;
+use App\Http\Controllers\Api\Admin\PurchaseOrderAdminController;
 use App\Http\Controllers\Api\Admin\OrderAdminController;
 use App\Http\Controllers\Api\Admin\InvoiceAdminController;
 use App\Http\Controllers\Api\Admin\CustomerAdminController;
+use App\Http\Controllers\Api\Admin\UserProfileAdminController;
 use App\Http\Controllers\Api\Admin\BannerAdminController;
 use App\Http\Controllers\Api\Admin\CollectionAdminController;
 use App\Http\Controllers\Api\Admin\SettingAdminController;
 use App\Http\Controllers\Api\Admin\ReportController;
 use App\Http\Controllers\Api\Admin\BrandAdminController;
+use App\Http\Controllers\Api\Admin\SupplierAdminController;
 use App\Http\Controllers\Api\Admin\MenuAdminController;
 use App\Http\Controllers\Api\Admin\PaymentAdminController;
 use App\Http\Controllers\Api\Admin\PaymentSettingsController;
 use App\Http\Controllers\Api\Admin\ShipmentAdminController;
 use App\Http\Controllers\Api\Admin\ReplacementCaseAdminController;
+use App\Http\Controllers\Api\Admin\AdminPermissionController;
 use App\Http\Controllers\Api\Admin\SuperAdminController;
-use App\Http\Controllers\Api\Admin\TelegramUserAdminController;
 use App\Http\Controllers\Api\Driver\ShipmentDriverController;
 
 // Admin - Search & Notifications
 use App\Http\Controllers\Api\Admin\AdminSearchController;
 use App\Http\Controllers\Api\Admin\AdminNotificationController;
+use App\Http\Controllers\Api\Admin\AdminUiPreferenceController;
 use App\Http\Controllers\Api\Admin\ContactController;
 use App\Http\Controllers\Api\Admin\ProfileController;
 use App\Http\Controllers\Api\Admin\FooterHeaderController;
 use App\Http\Controllers\Api\Admin\DiscountAdminController;
 use App\Http\Controllers\Api\Admin\DriverAdminController;
 use App\Http\Controllers\Api\Admin\AdminAiChatController;
+use App\Http\Controllers\Api\Admin\LoyaltyAdminController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
 
@@ -120,8 +133,6 @@ Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])-
 Route::post('/auth/reset-password-otp', [AuthController::class, 'resetPasswordOtp'])->middleware('throttle:10,1');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 Route::post('/auth/two-factor/challenge', [TwoFactorController::class, 'challenge'])->middleware('throttle:auth-two-factor');
-Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
-
 // -------------------------
 // PUBLIC STOREFRONT
 // -------------------------
@@ -131,8 +142,11 @@ Route::get('/homepage', [HomepageAdminController::class, 'show']); // public hom
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/filter-options', [ProductController::class, 'filterOptions']);
+Route::get('/products/facets', [ProductController::class, 'filterFacets']);
 Route::get('/products/discounts', [ProductController::class, 'discounts']);
+Route::get('/products/recommended', [ProductController::class, 'recommendations']);
 Route::get('/products/{slug}', [ProductController::class, 'show']);
+Route::post('/storefront/events', [PersonalizationController::class, 'trackEvent'])->middleware('throttle:api-sensitive');
 
 Route::get('/banners', [BannerController::class, 'all']);
 Route::get('/banners/{position}', [BannerController::class, 'index']);
@@ -167,13 +181,18 @@ Route::get('/legal-content', [LegalContentController::class, 'index']);
 // Public footer & header content
 Route::get('/footer-header', [FooterHeaderController::class, 'index']);
 Route::get('/homepage-settings', [HomepageSettingsController::class, 'getSettings']);
+Route::get('/faq', [FaqController::class, 'show']);
+Route::get('/contact-page', [ContactPageController::class, 'show']);
+Route::get('/privacy-page', [PrivacyPageController::class, 'show']);
+Route::get('/terms-page', [TermsPageController::class, 'show']);
+Route::get('/cookies-page', [CookiesPageController::class, 'show']);
+Route::get('/delivery-fees', [DeliveryFeeController::class, 'rates']);
+Route::post('/delivery-fees/quote', [DeliveryFeeController::class, 'quote']);
 
 // -------------------------
 // AUTH STOREFRONT
 // -------------------------
 Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
-    Route::post('/telegram/link-webapp', [TelegramLinkController::class, 'link']);
-
     Route::get('/auth/two-factor', [TwoFactorController::class, 'status']);
     Route::post('/auth/two-factor/preferred-method', [TwoFactorController::class, 'updatePreferredMethod']);
     Route::post('/auth/two-factor/setup', [TwoFactorController::class, 'setup']);
@@ -231,6 +250,7 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
     Route::delete('/user/addresses/{id}', [CustomerProfileController::class, 'deleteAddress']);
     Route::get('/user/wishlist', [CustomerProfileController::class, 'getWishlist']);
     Route::get('/user/activity', [CustomerProfileController::class, 'getActivity']);
+    Route::get('/user/loyalty', [CustomerProfileController::class, 'getLoyalty']);
 
     // Replacement Cases (Customer)
     Route::get('/replacement-cases', [StorefrontReplacementCaseController::class, 'index']);
@@ -265,7 +285,13 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::put('/homepage-settings/sections-extended', [HomepageSettingsController::class, 'updateSectionsExtended']);
     Route::put('/homepage-settings/header-extended', [HomepageSettingsController::class, 'updateHeaderExtended']);
     Route::put('/homepage-settings/footer-extended', [HomepageSettingsController::class, 'updateFooterExtended']);
+    Route::put('/homepage-settings/faq', [HomepageSettingsController::class, 'updateFaq']);
+    Route::put('/homepage-settings/contact-page', [HomepageSettingsController::class, 'updateContactPage']);
+    Route::put('/homepage-settings/privacy-page', [HomepageSettingsController::class, 'updatePrivacyPage']);
+    Route::put('/homepage-settings/terms-page', [HomepageSettingsController::class, 'updateTermsPage']);
+    Route::put('/homepage-settings/cookies-page', [HomepageSettingsController::class, 'updateCookiesPage']);
     Route::post('/homepage-settings/logo-upload', [HomepageSettingsController::class, 'uploadLogo']);
+    Route::post('/homepage-settings/chrome-background-upload', [HomepageSettingsController::class, 'uploadChromeBackground']);
     Route::post('/homepage-settings/menu-image-upload', [HomepageSettingsController::class, 'uploadMenuImage']);
 
     // Product gallery image upload
@@ -283,10 +309,30 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     // CRUD
     Route::post('categories/image-upload', [CategoryAdminController::class, 'uploadImage']);
     Route::post('categories/{category}/quick-restock', [CategoryAdminController::class, 'quickRestock']);
-    Route::get('inventory-integrity', [InventoryIntegrityController::class, 'index']);
-    Route::post('inventory-integrity/repair', [InventoryIntegrityController::class, 'repair']);
     Route::apiResource('categories', CategoryAdminController::class);
     Route::apiResource('brands', BrandAdminController::class);
+    Route::apiResource('suppliers', SupplierAdminController::class);
+    Route::get('stock-received', [StockReceivedAdminController::class, 'index']);
+    Route::get('stock-inventory', [StockInventoryAdminController::class, 'index']);
+    Route::get('stock-inventory/{product}/movements', [StockInventoryAdminController::class, 'movements']);
+    Route::get('stock-inventory/{product}/movement-detail', [StockInventoryAdminController::class, 'movementDetail']);
+    Route::get('inventory-lots/catalog', [InventoryLotAdminController::class, 'catalog']);
+    Route::get('inventory-lots', [InventoryLotAdminController::class, 'index']);
+    Route::post('inventory-lots', [InventoryLotAdminController::class, 'store']);
+    Route::patch('inventory-lots/{inventoryLot}', [InventoryLotAdminController::class, 'update']);
+    Route::get('inventory-lots/{inventoryLot}/price-events', [InventoryLotAdminController::class, 'priceEvents']);
+    Route::get('inventory-lots/{inventoryLot}/detail-events', [InventoryLotAdminController::class, 'detailEvents']);
+    Route::post('inventory-lots/{inventoryLot}/mark-clearance', [InventoryLotAdminController::class, 'markClearance']);
+    Route::post('inventory-lots/{inventoryLot}/revert-clearance', [InventoryLotAdminController::class, 'revertFromClearance']);
+    Route::post('inventory-lots/{inventoryLot}/on-hold', [InventoryLotAdminController::class, 'setOnHold']);
+    Route::post('inventory-lots/{inventoryLot}/release-hold', [InventoryLotAdminController::class, 'releaseFromHold']);
+    Route::post('inventory-lots/{inventoryLot}/lot-discount', [InventoryLotAdminController::class, 'applyLotDiscount']);
+    Route::delete('inventory-lots/{inventoryLot}/lot-discount', [InventoryLotAdminController::class, 'clearLotDiscount']);
+    Route::get('inventory-settings', [InventorySettingsAdminController::class, 'show']);
+    Route::put('inventory-settings', [InventorySettingsAdminController::class, 'update']);
+    Route::patch('purchase-orders/{purchase_order}/status', [PurchaseOrderAdminController::class, 'updateStatus']);
+    Route::apiResource('purchase-orders', PurchaseOrderAdminController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+    Route::get('products/{product}/variant-pricing', [ProductAdminController::class, 'variantPricing']);
     Route::apiResource('products', ProductAdminController::class);
     Route::apiResource('banners', BannerAdminController::class);
     Route::apiResource('collections', CollectionAdminController::class);
@@ -305,24 +351,16 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::patch('orders/{order}', [OrderAdminController::class, 'update']);
     Route::delete('orders/{order}', [OrderAdminController::class, 'destroy']);
 
+    // Unified user profile (admin view)
+    Route::get('users/{user}/profile', [UserProfileAdminController::class, 'show']);
+    Route::put('users/{user}/password', [UserProfileAdminController::class, 'resetPassword']);
+
     // Customers (full CRUD) - Using explicit routes to avoid implicit model binding
     Route::get('customers', [CustomerAdminController::class, 'index']);
     Route::post('customers', [CustomerAdminController::class, 'store']);
     Route::get('customers/{customer}', [CustomerAdminController::class, 'show']);
-    Route::patch('customers/{customer}', [CustomerAdminController::class, 'update']);
+    Route::match(['put', 'patch'], 'customers/{customer}', [CustomerAdminController::class, 'update']);
     Route::delete('customers/{customer}', [CustomerAdminController::class, 'destroy']);
-
-    // Telegram Users
-    Route::get('/telegram-users', [TelegramUserAdminController::class, 'index']);
-    Route::post('/telegram-users/broadcast', [TelegramUserAdminController::class, 'broadcast']);
-    Route::get('/telegram-users/broadcasts', [TelegramUserAdminController::class, 'broadcasts']);
-    Route::patch('/telegram-users/broadcasts/{broadcastId}/cancel', [TelegramUserAdminController::class, 'cancel']);
-    Route::patch('/telegram-users/broadcasts/{broadcastId}/pause', [TelegramUserAdminController::class, 'pause']);
-    Route::patch('/telegram-users/broadcasts/{broadcastId}/resume', [TelegramUserAdminController::class, 'resume']);
-    Route::post('/telegram-users/broadcasts/{broadcastId}/retry-failed', [TelegramUserAdminController::class, 'retryFailed']);
-    Route::get('/telegram-users/broadcasts/{broadcastId}/progress', [TelegramUserAdminController::class, 'progress']);
-    Route::get('/telegram-users/broadcasts/{broadcastId}/stats', [TelegramUserAdminController::class, 'stats']);
-    Route::get('/telegram-users/maintenance-stats', [TelegramUserAdminController::class, 'maintenanceStats']);
 
     // Reports
     Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
@@ -347,6 +385,11 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
 
     // Admin Search & Notifications
     Route::get('/search', [AdminSearchController::class, 'search']);
+    Route::get('/ui-preferences', [AdminUiPreferenceController::class, 'show']);
+    Route::put('/ui-preferences', [AdminUiPreferenceController::class, 'update']);
+    Route::get('/loyalty/top-fans', [LoyaltyAdminController::class, 'topFans']);
+    Route::get('/loyalty/rules', [LoyaltyAdminController::class, 'getRules']);
+    Route::put('/loyalty/rules', [LoyaltyAdminController::class, 'updateRules']);
     Route::get('/notifications', [AdminNotificationController::class, 'index']);
     Route::patch('/notifications/{id}/read', [AdminNotificationController::class, 'markAsRead']);
     Route::post('/notifications/mark-all-read', [AdminNotificationController::class, 'markAllRead']);
@@ -381,9 +424,13 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::put('/chatbot/settings', [ChatbotSettingsController::class, 'update']);
 
     // Product discount management
-    Route::apiResource('discounts', DiscountAdminController::class);
-    Route::post('/discounts/bulk-toggle', [DiscountAdminController::class, 'bulkToggle']);
     Route::get('/discounts/active/all', [DiscountAdminController::class, 'getActiveDiscounts']);
+    Route::post('/discounts/bulk-toggle', [DiscountAdminController::class, 'bulkToggle']);
+    Route::get('discounts', [DiscountAdminController::class, 'index']);
+    Route::post('discounts', [DiscountAdminController::class, 'store']);
+    Route::get('discounts/{discount}', [DiscountAdminController::class, 'show']);
+    Route::match(['put', 'patch'], 'discounts/{discount}', [DiscountAdminController::class, 'update']);
+    Route::delete('discounts/{discount}', [DiscountAdminController::class, 'destroy']);
 
     // Payments Management
     Route::get('/payments', [PaymentAdminController::class, 'index']);
@@ -391,6 +438,10 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::post('/payments/{payment}/verify', [PaymentAdminController::class, 'verify']);
     Route::post('/payments/{payment}/reject', [PaymentAdminController::class, 'reject']);
     Route::get('/payments/statistics', [PaymentAdminController::class, 'statistics']);
+
+    // Delivery fees (checkout auto-pricing)
+    Route::get('/delivery-fees', [DeliveryFeeAdminController::class, 'show']);
+    Route::put('/delivery-fees', [DeliveryFeeAdminController::class, 'update']);
 
     // Shipments Management
     Route::get('/shipments', [ShipmentAdminController::class, 'index']);
@@ -420,6 +471,12 @@ Route::middleware(['auth:sanctum', 'device.bound', 'admin'])->prefix('admin')->g
     Route::middleware('superadmin')->group(function () {
         Route::get('/superadmin/users', [SuperAdminController::class, 'allUsers']);
         Route::post('/superadmin/admin-users', [SuperAdminController::class, 'createAdmin']);
+        Route::put('/superadmin/admin-users/{user}', [SuperAdminController::class, 'updateAdmin']);
+        Route::delete('/superadmin/admin-users/{user}', [SuperAdminController::class, 'deleteAdmin']);
+        Route::get('/superadmin/permissions/catalog', [AdminPermissionController::class, 'catalog']);
+        Route::get('/superadmin/users/{user}/permissions', [AdminPermissionController::class, 'show']);
+        Route::patch('/superadmin/users/{user}/permissions', [AdminPermissionController::class, 'update']);
+        Route::post('/superadmin/users/{user}/permissions/reset', [AdminPermissionController::class, 'reset']);
         Route::patch('/superadmin/users/{user}/role', [SuperAdminController::class, 'updateRole']);
         Route::patch('/superadmin/users/{user}/status', [SuperAdminController::class, 'updateStatus']);
         Route::get('/superadmin/users/{user}/sessions', [SuperAdminController::class, 'userSessions']);

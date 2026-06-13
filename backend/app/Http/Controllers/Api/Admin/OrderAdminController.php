@@ -31,7 +31,7 @@ class OrderAdminController extends Controller
             ])->with(['user:id,name,email'])
                 ->withCount('items');
         } else {
-            $query->with(['user', 'items.product']);
+            $query->with(['user', 'items.product', 'items.inventoryLot']);
         }
 
         OrderAdminFilters::applyListFilters($query, $request);
@@ -64,7 +64,7 @@ class OrderAdminController extends Controller
 
     public function show(Order $order)
     {
-        return $order->load(['user', 'items.product.category']);
+        return $order->load(['user', 'items.product.category', 'items.inventoryLot', 'shipment.trackingEvents']);
     }
 
     public function update(Request $request, Order $order)

@@ -23,14 +23,21 @@ class AuthSessionController extends Controller
 
         $sessions = UserDeviceSession::query()
             ->where('user_id', $user->id)
+            ->where(function ($query) {
+                $query->whereNotNull('personal_access_token_id')
+                    ->orWhere('last_used_at', '>=', now()->subDays(90));
+            })
             ->orderByDesc('last_used_at')
             ->orderByDesc('last_login_at')
             ->get()
             ->map(function (UserDeviceSession $session) use ($currentTokenId, $trustedDeviceIds) {
+                $isActive = $session->personal_access_token_id !== null;
+
                 return [
                     'id' => $session->id,
                     'device_id' => $session->device_id,
                     'is_trusted' => in_array($session->device_id, $trustedDeviceIds, true),
+                    'is_active' => $isActive,
                     'device_name' => $session->device_name,
                     'browser' => $session->browser,
                     'os' => $session->os,
@@ -41,7 +48,7 @@ class AuthSessionController extends Controller
                     'last_login_at' => optional($session->last_login_at)?->toDateTimeString(),
                     'last_used_at' => optional($session->last_used_at)?->toDateTimeString(),
                     'created_at' => optional($session->created_at)?->toDateTimeString(),
-                    'is_current' => (int) $session->personal_access_token_id === (int) $currentTokenId,
+                    'is_current' => $isActive && (int) $session->personal_access_token_id === (int) $currentTokenId,
                 ];
             })
             ->values();

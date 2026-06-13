@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
 
 const ASSISTANT_TITLE = "Fit & Sleek AI Assistant";
 
@@ -266,6 +267,7 @@ function AssistantStatsTable({ table }) {
 }
 
 function AssistantProductTable({ table }) {
+  const { canPath } = useAdminPermissions();
   if (!table?.rows?.length) return null;
 
   const isSales = table.variant === "sales";
@@ -313,7 +315,7 @@ function AssistantProductTable({ table }) {
                   <div className="flex items-center gap-2">
                     <ProductThumb name={row.name} imageUrl={row.image_url} />
                     <div className="min-w-0">
-                      {row.admin_url ? (
+                      {row.admin_url && canPath(row.admin_url) ? (
                         <Link
                           to={row.admin_url}
                           className="line-clamp-2 font-medium text-[color:var(--admin-primary)] hover:underline"
@@ -339,7 +341,7 @@ function AssistantProductTable({ table }) {
                           {row.reason_km || row.reason}
                         </p>
                       ) : null}
-                      {isDiscount ? (
+                      {isDiscount && canPath("/admin/discounts") ? (
                         <Link
                           to="/admin/discounts"
                           className="mt-0.5 inline-block text-[10px] font-medium text-[color:var(--admin-primary)] hover:underline"

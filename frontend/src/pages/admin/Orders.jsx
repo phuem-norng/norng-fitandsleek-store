@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
@@ -12,6 +13,12 @@ import {
  TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import { useTheme } from "../../state/theme.jsx";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
+import AdminListPaginationBar from "../../components/admin/AdminListPaginationBar.jsx";
+import { ADMIN_LIST_PAGE_SIZE, ADMIN_LIST_PAGINATE_AT } from "../../lib/adminListQuery.js";
+import { listingStatusLabel, lotTierLabel } from "../../lib/inventoryLotHelpers.js";
+import OrderShipmentPanel from "../../components/admin/OrderShipmentPanel.jsx";
 
 const ORDERS_TABLE_COLUMNS = [
  { id: "select", label: "Select" },
@@ -219,6 +226,11 @@ const formatDate = (dateString) => {
 
 export default function AdminOrders() {
  const { primaryColor, mode } = useTheme();
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewOrders = can("orders", "view");
+ const canEditOrders = can("orders", "edit");
+ const canEditShipments = can("shipments", "edit") || can("shipments", "create");
+ const canDeleteOrders = can("orders", "delete");
  const [rows, setRows] = useState([]);
  const [currentPage, setCurrentPage] = useState(1);
  const [totalPages, setTotalPages] = useState(1);
@@ -287,6 +299,12 @@ export default function AdminOrders() {
  ]);
 
  useEffect(() => {
+ if (!permissionsReady || !canViewOrders) {
+  setLoading(false);
+  setRows([]);
+  return undefined;
+ }
+
  fetchAbortRef.current?.abort();
  const ac = new AbortController();
  fetchAbortRef.current = ac;
@@ -296,7 +314,7 @@ export default function AdminOrders() {
 
  (async () => {
  try {
- const params = { per_page: 25, compact: 1, page: parsed.page || 1, include_summary: 0 };
+ const params = { per_page: ADMIN_LIST_PAGE_SIZE, compact: 1, page: parsed.page || 1, include_summary: 0 };
  if (parsed.from) params.from_date = parsed.from;
  if (parsed.to) params.to_date = parsed.to;
  if (parsed.status?.length) params.statuses = parsed.status;
@@ -331,7 +349,7 @@ export default function AdminOrders() {
  })();
 
  return () => ac.abort();
- }, [ordersQueryKey]);
+ }, [ordersQueryKey, permissionsReady, canViewOrders]);
 
  const openFilterDrawer = () => {
  yearMonthFilter.syncDraftFromApplied();
@@ -396,7 +414,7 @@ export default function AdminOrders() {
  };
 
  const save = async () => {
- if (viewLoading || !selected?.id) return;
+ if (!canEditOrders || viewLoading || !selected?.id) return;
  setErr("");
  try {
  const { data } = await api.patch(`/admin/orders/${selected.id}`, { status });
@@ -520,6 +538,14 @@ export default function AdminOrders() {
  ];
  }, [rows]);
 
+ if (!permissionsReady) {
+ return <AdminSectionLoader />;
+ }
+
+ if (!canViewOrders) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
+
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
  <div className="w-full min-w-0">
@@ -571,9 +597,20 @@ export default function AdminOrders() {
  <span className="font-semibold text-slate-800 dark:text-slate-100">
  <Money value={summary.total_revenue} />
  </span>
+ {orderTotal >= ADMIN_LIST_PAGINATE_AT && rows.length > 0 ? (
+ <>
+ <span className="mx-1.5 text-slate-300 dark:text-slate-600">·</span>
+ <span>{rows.length} on this page</span>
+ </>
+ ) : null}
  </>
  ) : (
- <>{summary.order_count} total orders</>
+ <>
+ {summary.order_count} total order{summary.order_count === 1 ? "" : "s"}
+ {orderTotal >= ADMIN_LIST_PAGINATE_AT && rows.length > 0 ? (
+ <span className="text-slate-400"> · {rows.length} on this page</span>
+ ) : null}
+ </>
  )}
  </p>
  </div>
@@ -654,6 +691,7 @@ export default function AdminOrders() {
  </svg>
  Print Selected Invoices ({selectedIds.length})
  </button>
+ {canDeleteOrders ? (
  <button
  onClick={deleteSelected}
  className="px-4 py-2 border border-red-200 dark:border-red-800 text-red-600 admin-surface rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors flex items-center gap-2"
@@ -663,6 +701,7 @@ export default function AdminOrders() {
  </svg>
  Delete Selected ({selectedIds.length})
  </button>
+ ) : null}
  </>
  )}
  <button
@@ -701,7 +740,8 @@ export default function AdminOrders() {
  <p className="text-slate-400 dark:text-slate-400 text-sm mt-1">Orders will appear here once customers make purchases</p>
  </div>
  ) : (
- viewMode === "list" ? (
+ <>
+ {viewMode === "list" ? (
  <div className="overflow-x-auto rounded-b-2xl">
  <table className="w-full">
  <thead>
@@ -798,6 +838,7 @@ export default function AdminOrders() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
  </svg>
  </button>
+ {canDeleteOrders ? (
  <button
  onClick={() => del(o.id)}
  title="Delete"
@@ -814,6 +855,7 @@ export default function AdminOrders() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ ) : null}
  </div>
  </td>
  ) : null}
@@ -867,6 +909,7 @@ export default function AdminOrders() {
  >
  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
  </button>
+ {canDeleteOrders ? (
  <button
  onClick={() => del(o.id)}
  title="Delete"
@@ -881,40 +924,22 @@ export default function AdminOrders() {
  >
  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
  </button>
+ ) : null}
  </div>
  </div>
  ))}
  </div>
- )
+ )}
+ <AdminListPaginationBar
+ page={currentPage}
+ lastPage={totalPages}
+ total={orderTotal}
+ onPageChange={setCurrentPage}
+ />
+ </>
  )}
  </div>
  </div>
-
- {totalPages > 1 && (
- <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
- <p className="text-sm text-slate-500 dark:text-slate-400">
- Page {currentPage} of {totalPages} · {orderTotal} order{orderTotal !== 1 ? "s" : ""}
- </p>
- <div className="flex items-center gap-2">
- <button
- type="button"
- onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
- disabled={currentPage === 1 || loading}
- className="h-9 px-3 rounded-lg border admin-border text-sm disabled:opacity-40"
- >
- Previous
- </button>
- <button
- type="button"
- onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
- disabled={currentPage === totalPages || loading}
- className="h-9 px-3 rounded-lg border admin-border text-sm disabled:opacity-40"
- >
- Next
- </button>
- </div>
- </div>
- )}
 
  <AdminConfirmDialog
  open={pendingDeleteId != null || pendingBulkDelete}
@@ -968,7 +993,20 @@ export default function AdminOrders() {
  </div>
  </div>
 
- {/* Update fulfillment status */}
+ {(canEditShipments || selected?.shipment) ? (
+ <OrderShipmentPanel
+ orderId={selected?.id}
+ shipment={selected?.shipment}
+ canEdit={canEditShipments}
+ onSaved={(shipment) => {
+ setSelected((prev) => (prev ? { ...prev, shipment, status: "shipped" } : prev));
+ setStatus("shipped");
+ refetchOrders();
+ }}
+ />
+ ) : null}
+
+ {canEditOrders ? (
  <div className="mb-6">
  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Update fulfillment status</label>
  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
@@ -994,6 +1032,7 @@ export default function AdminOrders() {
  </button>
  </div>
  </div>
+ ) : null}
 
  {/* Order Items */}
  <div className="mb-6">
@@ -1012,10 +1051,24 @@ export default function AdminOrders() {
  )}
  </div>
  <div>
- <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{it.product?.name}</p>
+ <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+ {it.name || it.product?.name}
+ </p>
  <p className="text-xs text-slate-500 dark:text-slate-400">
  Qty: {Number(it.qty ?? it.quantity ?? 0)}
+ {it.lot_tier_at_sale ? (
+ <span className="ml-2 rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+ {lotTierLabel(it.lot_tier_at_sale)}
+ </span>
+ ) : null}
  </p>
+ {it.lot_number_at_sale || it.listing_status_at_sale ? (
+ <p className="text-[11px] text-slate-500 dark:text-slate-400">
+ {it.lot_number_at_sale ? <span className="font-mono">{it.lot_number_at_sale}</span> : null}
+ {it.lot_number_at_sale && it.listing_status_at_sale ? " · " : null}
+ {it.listing_status_at_sale ? listingStatusLabel(it.listing_status_at_sale) : null}
+ </p>
+ ) : null}
  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
  Paid: <Money value={it.price} />
  {Number(it.product?.price || 0) > Number(it.price || 0) && (

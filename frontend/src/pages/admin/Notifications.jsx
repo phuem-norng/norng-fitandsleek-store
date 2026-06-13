@@ -1,10 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { warningConfirm } from "../../lib/swal";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
 import { useTheme } from "../../state/theme.jsx";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 export default function AdminNotifications() {
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewNotifications = can("notifications", "view");
+ const canEditNotifications = can("notifications", "edit");
+ const canDeleteNotifications = can("notifications", "delete");
+ const canBulkSelect = canDeleteNotifications;
  const { mode, primaryColor } = useTheme();
  const [notifications, setNotifications] = useState([]);
  const [loading, setLoading] = useState(true);
@@ -14,7 +22,13 @@ export default function AdminNotifications() {
  const [search, setSearch] = useState("");
  const [selectedIds, setSelectedIds] = useState([]);
 
- const loadNotifications = async () => {
+ const loadNotifications = useCallback(async () => {
+ if (!canViewNotifications) {
+ setNotifications([]);
+ setUnreadCount(0);
+ setLoading(false);
+ return;
+ }
  setLoading(true);
  try {
  const { data } = await api.get("/admin/notifications?limit=50");
@@ -25,18 +39,19 @@ export default function AdminNotifications() {
  } finally {
  setLoading(false);
  }
- };
+ }, [canViewNotifications]);
 
  useEffect(() => {
+ if (!permissionsReady) return;
  loadNotifications();
- }, []);
+ }, [loadNotifications, permissionsReady]);
 
  useEffect(() => {
  setSelectedIds((prev) => prev.filter((id) => notifications.some((n) => n.id === id)));
  }, [notifications]);
 
  const handleMarkAllRead = async () => {
- if (markingAllRead) return;
+ if (!canEditNotifications || markingAllRead) return;
  setMarkingAllRead(true);
  try {
  await api.post("/admin/notifications/mark-all-read");
@@ -50,6 +65,7 @@ export default function AdminNotifications() {
  };
 
  const handleMarkAsRead = async (id) => {
+ if (!canEditNotifications) return;
  try {
  await api.patch(`/admin/notifications/${id}/read`);
  setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
@@ -60,6 +76,7 @@ export default function AdminNotifications() {
  };
 
  const handleDelete = async (id) => {
+ if (!canDeleteNotifications) return;
  try {
  await api.delete(`/admin/notifications/${id}`);
  const wasUnread = notifications.find(n => n.id === id && !n.read);
@@ -154,7 +171,7 @@ export default function AdminNotifications() {
  };
 
  const deleteSelected = async () => {
- if (selectedIds.length === 0) return;
+ if (!canDeleteNotifications || selectedIds.length === 0) return;
  const confirmRes = await warningConfirm({
  enTitle: "Delete selected notifications?",
  enText: `Permanently remove ${selectedIds.length} notification(s)? This cannot be undone.`,
@@ -172,6 +189,14 @@ export default function AdminNotifications() {
  console.error("Failed to delete selected notifications", e);
  }
  };
+
+ if (!permissionsReady || (loading && notifications.length === 0)) {
+ return <AdminContentSkeleton title="Notifications" />;
+ }
+
+ if (!canViewNotifications) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  if (loading) return <AdminContentSkeleton title="Notifications" />;
 
@@ -223,6 +248,7 @@ export default function AdminNotifications() {
  </div>
  </div>
  <div className="flex flex-wrap items-center gap-2">
+ {canBulkSelect ? (
  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900">
  <input
  type="checkbox"
@@ -232,7 +258,8 @@ export default function AdminNotifications() {
  />
  Select all
  </label>
- {selectedIds.length > 0 && (
+ ) : null}
+ {canDeleteNotifications && selectedIds.length > 0 && (
  <button
  onClick={deleteSelected}
  className="px-4 py-2 rounded-xl font-semibold text-sm border border-red-200 text-red-600 hover:bg-red-50 transition-colors dark:border-red-400/60 dark:text-red-200 dark:hover:bg-red-900/30"
@@ -240,7 +267,7 @@ export default function AdminNotifications() {
  Delete ({selectedIds.length})
  </button>
  )}
- {unreadCount > 0 && (
+ {canEditNotifications && unreadCount > 0 && (
  <button
  onClick={handleMarkAllRead}
  disabled={markingAllRead}
@@ -278,6 +305,7 @@ export default function AdminNotifications() {
  className={"p-4 md:p-5 flex items-start gap-4 hover:bg-slate-50 transition-colors duration-200 notif-enter " + (!notification.read ? "bg-slate-50" : "bg-white") + " dark:bg-slate-900 " + (!notification.read ? "dark:bg-slate-800/70" : "") + " dark:hover:bg-slate-800"}
  style={{ animationDelay: `${200 + index * 60}ms` }}
  >
+ {canBulkSelect ? (
  <div className="pt-2">
  <input
  type="checkbox"
@@ -286,6 +314,7 @@ export default function AdminNotifications() {
  className="rounded border-slate-300 dark:border-slate-700 dark:bg-slate-900"
  />
  </div>
+ ) : null}
  {getIcon(notification.type)}
  <div className="flex-1 min-w-0">
  {!notification.read && (
@@ -300,7 +329,7 @@ export default function AdminNotifications() {
  <p className="text-xs text-slate-400 mt-1 dark:text-slate-500">{notification.time}</p>
  </div>
  <div className="flex items-center gap-2">
- {!notification.read && (
+ {canEditNotifications && !notification.read && (
  <button
  onClick={() => handleMarkAsRead(notification.id)}
  className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors dark:text-slate-200 dark:hover:bg-slate-800"
@@ -311,6 +340,7 @@ export default function AdminNotifications() {
  </svg>
  </button>
  )}
+ {canDeleteNotifications ? (
  <button
  onClick={() => handleDelete(notification.id)}
  className="transition-colors"
@@ -322,6 +352,7 @@ export default function AdminNotifications() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
  </svg>
  </button>
+ ) : null}
  </div>
  </div>
  ))}

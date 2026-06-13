@@ -1,5 +1,8 @@
 import React from "react";
 import { ADMIN_APPEARANCE_PRESETS, ADMIN_SPECTRUM_SWATCH, useTheme } from "../../state/theme.jsx";
+import { useLanguage } from "../../lib/i18n.jsx";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import { ADMIN_NUMBER_FORMAT } from "../../lib/adminNumberFormat.js";
 
 const CUSTOM_VALUE = "__custom_accent__";
 
@@ -40,6 +43,7 @@ function Segmented({ label, value, options, onChange }) {
  * Rendered inside the top bar palette dropdown.
  */
 export default function AdminAppearancePanel() {
+  const { t } = useLanguage();
   const {
     mode,
     primaryColor,
@@ -56,6 +60,10 @@ export default function AdminAppearancePanel() {
     saveTheme,
     resetAdminAppearance,
   } = useTheme();
+  const [numberFormat, setNumberFormat] = useAdminUiPreference(
+    "dashboard.numberFormat",
+    ADMIN_NUMBER_FORMAT.COMPACT
+  );
 
   const selectValue = presetId === "custom" ? CUSTOM_VALUE : presetId;
   const currentPreset = ADMIN_APPEARANCE_PRESETS.find((p) => p.id === presetId);
@@ -103,6 +111,24 @@ export default function AdminAppearancePanel() {
           </select>
         </div>
       </div>
+
+      <Segmented
+        label={t("adminNumberFormat")}
+        value={numberFormat}
+        onChange={setNumberFormat}
+        options={[
+          {
+            value: ADMIN_NUMBER_FORMAT.FULL,
+            label: t("adminNumberFormatFull"),
+            title: "Always show full values",
+          },
+          {
+            value: ADMIN_NUMBER_FORMAT.COMPACT,
+            label: t("adminNumberFormatCompact"),
+            title: "Use compact format (K, M, B)",
+          },
+        ]}
+      />
 
       <Segmented
         label="Scale"

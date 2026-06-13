@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Category;
+use App\Models\InventoryLot;
 use App\Models\Product;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -315,6 +316,14 @@ class BarcodeScanStockService
      */
     public static function lookupDisplay(string $raw): ?array
     {
+        $lotService = app(InventoryLotService::class);
+        foreach (self::collectScanCandidates($raw) as $candidate) {
+            $lot = $lotService->findByBarcode((string) $candidate);
+            if ($lot) {
+                return self::lookupDisplayForLot($lot, $lotService);
+            }
+        }
+
         $candidates = self::collectScanCandidates($raw);
         $bundle = self::findBundleAmongCandidates($candidates);
         $master = $bundle ? PaidOrderInventory::resolveInventoryMaster($bundle) : null;
@@ -338,9 +347,24 @@ class BarcodeScanStockService
         $name = (string) ($variantName ?? $master?->name ?? $bundle?->name ?? $products->first()?->name ?? 'Item');
 
         $price = 0.0;
+        $pricingLot = null;
         if ($variantProduct) {
             $variantProduct->loadMissing('activeDiscount');
-            $price = (float) ($variantProduct->final_price ?? $variantProduct->price ?? 0);
+            $firstLot = $lotService->firstSellableLot(
+                $variantProduct,
+                $variant['size'] ?? null,
+                $variant['color'] ?? null,
+            );
+            if ($firstLot) {
+                $price = $lotService->resolveUnitPrice($firstLot, $variantProduct);
+                $pricingLot = $firstLot;
+            } else {
+                $price = $lotService->resolveStorefrontUnitPrice(
+                    $variantProduct,
+                    $variant['size'] ?? null,
+                    $variant['color'] ?? null,
+                );
+            }
         } elseif ($master && PaidOrderInventory::isAverageBundleCategory($master)) {
             if ($products->isNotEmpty() && ! $labelOnlyScan) {
                 $p = $products->first();
@@ -361,7 +385,13 @@ class BarcodeScanStockService
         } elseif ($products->isNotEmpty()) {
             $p = $products->first();
             $p->loadMissing('activeDiscount');
-            $price = (float) ($p->final_price ?? $p->price ?? 0);
+            $firstLot = $lotService->firstSellableLot($p);
+            if ($firstLot) {
+                $price = $lotService->resolveUnitPrice($firstLot, $p);
+                $pricingLot = $firstLot;
+            } else {
+                $price = $lotService->resolveStorefrontUnitPrice($p);
+            }
         }
 
         $linkedBundle = $master ?? $bundle;
@@ -386,7 +416,7 @@ class BarcodeScanStockService
             ? ProductVariantInventory::effectiveCapForCartLine($variantProduct, $variant['color'], $variant['size'])
             : self::maxSellableQty($bundle, $products, $labelOnlyScan);
 
-        return [
+        $payload = [
             'code' => (string) ($variant['sku_barcode'] ?? $master?->slug ?? $bundle?->slug ?? $canonical),
             'name' => $name,
             'price' => round($price, 2),
@@ -396,6 +426,11 @@ class BarcodeScanStockService
             'manage_label_stock' => (bool) ($linkedBundle?->manage_stock ?? false),
             'max_sellable_qty' => $maxSellable,
         ];
+        if ($pricingLot !== null) {
+            return self::enrichInventoryLotLookup($payload, $pricingLot, $lotService);
+        }
+
+        return $payload;
     }
 
     /**
@@ -411,6 +446,14 @@ class BarcodeScanStockService
             throw ValidationException::withMessages([
                 'code' => ['Scan or enter a code.'],
             ]);
+        }
+
+        $lotService = app(InventoryLotService::class);
+        foreach (self::collectScanCandidates($rawCode) as $candidate) {
+            $lot = $lotService->findByBarcode((string) $candidate);
+            if ($lot) {
+                return self::applyLotScanDeduction($lot, $qty, $lotService);
+            }
         }
 
         $candidates = self::collectScanCandidates($rawCode);
@@ -432,12 +475,6 @@ class BarcodeScanStockService
 
         if ($averageLabelScan) {
             $productsToDeduct = collect();
-            $catalogUnits = self::catalogUnitsForInventoryLabel($bundle);
-            if ($catalogUnits < $qty) {
-                throw ValidationException::withMessages([
-                    'code' => ['Not enough catalog stock for this label (Total price: '.$catalogUnits.' units available).'],
-                ]);
-            }
         }
 
         if (! $bundle && $products->isEmpty() && ! $variantMatch) {
@@ -446,42 +483,11 @@ class BarcodeScanStockService
             ]);
         }
 
-        if ($bundle) {
-            $master = PaidOrderInventory::resolveInventoryMaster($bundle);
-            if (($master->manage_stock ?? false) && $master->stock !== null && (int) $master->stock < $qty) {
-                throw ValidationException::withMessages([
-                    'code' => ['Not enough stock on this label.'],
-                ]);
-            }
-        }
+        self::assertQtyWithinSellableCap($rawCode, $qty);
 
-        foreach ($productsToDeduct as $p) {
-            if ($p->stock !== null && is_numeric($p->stock) && PaidOrderInventory::effectiveProductStockCap($p) < $qty) {
-                throw ValidationException::withMessages([
-                    'code' => ['Not enough stock for product: ' . $p->name],
-                ]);
-            }
+        $lotAllocations = [];
 
-            if (ProductVariantInventory::usesMatrix($p)) {
-                $fallbackVariant = ProductVariantInventory::firstAvailableVariant($p);
-                if (! $fallbackVariant || ProductVariantInventory::effectiveCapForCartLine($p, $fallbackVariant['color'], $fallbackVariant['size']) < $qty) {
-                    throw ValidationException::withMessages([
-                        'code' => ['Not enough stock for product variant: ' . $p->name],
-                    ]);
-                }
-            }
-        }
-
-        if ($variantProduct && $variant) {
-            $cap = ProductVariantInventory::effectiveCapForCartLine($variantProduct, $variant['color'], $variant['size']);
-            if ($cap < $qty) {
-                throw ValidationException::withMessages([
-                    'code' => ['Not enough stock for product variant: '.$variantProduct->name.' '.$variant['color'].' / '.$variant['size']],
-                ]);
-            }
-        }
-
-        DB::transaction(function () use ($bundle, $productsToDeduct, $qty, $variantProduct, $variant, $averageLabelScan, $catalogProducts) {
+        DB::transaction(function () use ($bundle, $productsToDeduct, $qty, $variantProduct, $variant, $averageLabelScan, $catalogProducts, $lotService, &$lotAllocations) {
             // Decrement master sellable pool only; Stock Received rows / stock_received are never touched.
             if ($bundle) {
                 PaidOrderInventory::decrementInventoryMasterStock($bundle, $qty);
@@ -518,6 +524,16 @@ class BarcodeScanStockService
                 }
                 ProductVariantInventory::decrementVariantMatrix($variantProduct, $variant['color'], $variant['size'], $qty);
                 PaidOrderInventory::decrementBarcodeBundleStock((string) ($variantProduct->barcode_code ?? ''), $qty);
+                $lotAllocations = self::consumeInventoryLotsIfPresent(
+                    $lotService,
+                    $variantProduct,
+                    $variant['size'] ?? null,
+                    $variant['color'] ?? null,
+                    $qty,
+                );
+            } elseif ($productsToDeduct->isNotEmpty()) {
+                $primary = $productsToDeduct->first();
+                $lotAllocations = self::consumeInventoryLotsIfPresent($lotService, $primary, null, null, $qty);
             }
         });
 
@@ -550,6 +566,158 @@ class BarcodeScanStockService
                 'name' => $p->name,
                 'stock' => $p->stock,
             ])->values()->all(),
+            'inventory_lot_allocations' => $lotAllocations,
         ];
+    }
+
+    /**
+     * @return array{code: string, name: string, price: float, image_url: ?string, has_label: bool, label_stock: mixed, manage_label_stock: bool, max_sellable_qty: int|null, inventory_lot_id: int, listing_status: string}
+     */
+    private static function lookupDisplayForLot(InventoryLot $lot, InventoryLotService $lotService): array
+    {
+        $lot->loadMissing('product');
+        $product = $lot->product;
+        $price = $lotService->resolveUnitPrice($lot, $product);
+        $name = $lotService->displayNameForLot($lot);
+
+        return self::enrichInventoryLotLookup([
+            'code' => (string) ($lot->barcode ?? $lot->lot_number),
+            'name' => $name,
+            'price' => round($price, 2),
+            'image_url' => $product?->image_url ? (string) $product->image_url : null,
+            'has_label' => false,
+            'label_stock' => null,
+            'manage_label_stock' => false,
+            'max_sellable_qty' => (int) $lot->quantity_on_hand,
+        ], $lot, $lotService);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private static function enrichInventoryLotLookup(array $payload, InventoryLot $lot, InventoryLotService $lotService): array
+    {
+        $payload['inventory_lot_id'] = (int) $lot->id;
+        $payload['listing_status'] = (string) $lot->listing_status;
+        $payload['price_source'] = 'inventory_lot';
+
+        $meta = $lotService->lotDiscountMeta($lot);
+        if ($meta) {
+            $payload['compare_price'] = $meta['compare_price'];
+            $payload['discount_percent_off'] = $meta['percent_off'];
+            $payload['lot_discount_source'] = $meta['source'];
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @return array{slug: string, qty: int, label: null, products: array<int, array<string, mixed>>, inventory_lot_allocations: array<int, array<string, mixed>>}
+     */
+    private static function applyLotScanDeduction(InventoryLot $lot, int $qty, InventoryLotService $lotService): array
+    {
+        if ($qty > (int) $lot->quantity_on_hand) {
+            throw ValidationException::withMessages([
+                'code' => ['Not enough quantity in this inventory lot.'],
+            ]);
+        }
+
+        $lot->loadMissing('product');
+        $product = $lot->product;
+        if (! $product) {
+            throw ValidationException::withMessages([
+                'code' => ['Inventory lot is not linked to a product.'],
+            ]);
+        }
+
+        $allocations = [];
+
+        DB::transaction(function () use ($lot, $qty, $product, $lotService, &$allocations) {
+            $allocations = $lotService->consumeForSale(
+                $product,
+                $lot->size,
+                $lot->color,
+                $qty,
+                (int) $lot->id,
+            );
+
+            if ($product->stock !== null && is_numeric($product->stock)) {
+                $product->refresh();
+                $product->update([
+                    'stock' => max(0, (int) $product->stock - $qty),
+                ]);
+            }
+
+            ProductVariantInventory::decrementVariantMatrix(
+                $product,
+                $lot->color,
+                $lot->size,
+                $qty,
+            );
+
+            if (! empty($product->stock_label_id)) {
+                PaidOrderInventory::decrementStockLabelPool($product, $qty);
+            } else {
+                PaidOrderInventory::decrementBarcodeBundleStock((string) ($product->barcode_code ?? ''), $qty);
+            }
+        });
+
+        return [
+            'slug' => (string) ($lot->barcode ?? $lot->lot_number),
+            'qty' => $qty,
+            'label' => null,
+            'products' => [[
+                'id' => $product->id,
+                'name' => $product->name,
+                'stock' => $product->fresh()->stock,
+            ]],
+            'inventory_lot_allocations' => $allocations,
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function consumeInventoryLotsIfPresent(
+        InventoryLotService $lotService,
+        Product $product,
+        ?string $size,
+        ?string $color,
+        int $qty,
+    ): array {
+        $hasLots = InventoryLot::query()
+            ->where('product_id', $product->id)
+            ->where('is_sellable', true)
+            ->where('quantity_on_hand', '>', 0)
+            ->exists();
+
+        if (! $hasLots) {
+            return [];
+        }
+
+        return $lotService->consumeForSale($product, $size, $color, $qty);
+    }
+
+    private static function assertQtyWithinSellableCap(string $rawCode, int $qty): void
+    {
+        $row = self::lookupDisplay($rawCode);
+        if ($row === null) {
+            return;
+        }
+
+        $max = $row['max_sellable_qty'] ?? null;
+        if ($max === null) {
+            return;
+        }
+
+        $cap = max(0, (int) $max);
+        if ($qty > $cap) {
+            throw ValidationException::withMessages([
+                'qty' => [$cap > 0
+                    ? "Only {$cap} available in stock."
+                    : 'This item is out of stock.'],
+            ]);
+        }
     }
 }

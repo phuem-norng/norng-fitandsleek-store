@@ -2,32 +2,36 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\AdminPermissionService;
 use Closure;
 use Illuminate\Http\Request;
 
 class EnsureAdmin
 {
+    public function __construct(
+        private readonly AdminPermissionService $permissions,
+    ) {}
+
     public function handle(Request $request, Closure $next)
     {
         $user = $request->user();
 
-        // Check if user is authenticated and has admin or superadmin role
-        $isAdmin = false;
-
-        if ($user) {
-            // Check role field (admin|superadmin|customer)
-            $role = $user->getAttribute('role');
-            if ($role === 'admin' || $role === 'superadmin') {
-                return $next($request);
-            }
+        if (! $user) {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        return response()->json([
-            'message' => 'Unauthorized',
-            'debug' => [
-                'user' => $user ? $user->toArray() : null,
-                'role' => $user ? $user->getAttribute('role') : null,
-            ]
-        ], 403);
+        $role = $user->getAttribute('role');
+        if ($role !== 'admin' && $role !== 'superadmin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (! $this->permissions->authorizeRequest($user, $request)) {
+            return response()->json([
+                'message' => 'You do not have permission to perform this action.',
+                'error' => 'admin_permission_denied',
+            ], 403);
+        }
+
+        return $next($request);
     }
 }

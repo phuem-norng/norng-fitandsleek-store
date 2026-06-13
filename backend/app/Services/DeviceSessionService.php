@@ -226,6 +226,47 @@ class DeviceSessionService
             ->first();
     }
 
+    /** @return \Illuminate\Support\Collection<int, UserDeviceSession> */
+    private function findSessionsForPhysicalDevice(User $user, array $context): \Illuminate\Support\Collection
+    {
+        $deviceId = (string) ($context['device_id'] ?? '');
+
+        return UserDeviceSession::query()
+            ->where('user_id', $user->id)
+            ->where(function ($query) use ($deviceId, $context) {
+                if ($deviceId !== '') {
+                    $query->where('device_id', $deviceId);
+                    $this->applyPhysicalDeviceFingerprintScope($query, $context, 'or');
+                    return;
+                }
+
+                $this->applyPhysicalDeviceFingerprintScope($query, $context, 'and');
+            })
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('last_login_at')
+            ->get();
+    }
+
+    private function applyPhysicalDeviceFingerprintScope($query, array $context, string $boolean = 'or'): void
+    {
+        $browser = trim((string) ($context['browser'] ?? ''));
+        $os = trim((string) ($context['os'] ?? ''));
+        $deviceName = trim((string) ($context['device_name'] ?? ''));
+
+        if ($browser === '' || $os === '') {
+            return;
+        }
+
+        $method = $boolean === 'and' ? 'where' : 'orWhere';
+
+        $query->{$method}(function ($inner) use ($browser, $os, $deviceName) {
+            $inner->where('browser', $browser)->where('os', $os);
+            if ($deviceName !== '') {
+                $inner->where('device_name', $deviceName);
+            }
+        });
+    }
+
     private function canMigrateToFrontendDeviceId(Request $request, array $context, ?UserDeviceSession $existingSession): bool
     {
         if (!$existingSession) {
@@ -297,28 +338,68 @@ class DeviceSessionService
     public function bindTokenToDevice(User $user, PersonalAccessToken $token, Request $request): array
     {
         $context = $this->resolveDeviceContext($request);
-
         $deviceId = (string) $context['device_id'];
-        $knownDevice = UserDeviceSession::query()
+
+        $relatedSessions = $this->findSessionsForPhysicalDevice($user, $context);
+        $hadVerifiedBefore = $relatedSessions->contains(
+            fn (UserDeviceSession $session) => $session->device_verified_at !== null
+        ) || $this->deviceWasVerifiedBefore($user, $deviceId);
+
+        $verifiedAt = $relatedSessions
+            ->pluck('device_verified_at')
+            ->filter()
+            ->max();
+
+        $canonical = $relatedSessions->sortByDesc(fn (UserDeviceSession $session) => $session->last_used_at?->timestamp ?? 0)
+            ->first();
+
+        foreach ($relatedSessions as $related) {
+            $oldTokenId = (int) $related->personal_access_token_id;
+            if ($oldTokenId > 0 && $oldTokenId !== (int) $token->id) {
+                PersonalAccessToken::query()->where('id', $oldTokenId)->delete();
+            }
+        }
+
+        $existing = UserDeviceSession::query()
             ->where('user_id', $user->id)
             ->where('device_id', $deviceId)
-            ->exists();
+            ->first();
 
-        $verifiedAt = UserDeviceSession::query()
-            ->where('user_id', $user->id)
-            ->where('device_id', $deviceId)
-            ->whereNotNull('device_verified_at')
-            ->orderByDesc('device_verified_at')
-            ->value('device_verified_at');
+        if (
+            $existing
+            && $existing->ip_address
+            && $existing->ip_address !== $context['ip_address']
+        ) {
+            UserDeviceSession::query()->create(array_merge([
+                'user_id' => $user->id,
+                'device_id' => $deviceId.'_hist_'.substr(sha1($existing->ip_address.($existing->last_used_at ?? now())), 0, 10),
+                'personal_access_token_id' => null,
+                'device_name' => $existing->device_name,
+                'browser' => $existing->browser,
+                'os' => $existing->os,
+                'user_agent' => $existing->user_agent,
+                'ip_address' => $existing->ip_address,
+                'device_verified_at' => $existing->device_verified_at,
+                'last_login_at' => $existing->last_login_at,
+                'last_used_at' => $existing->last_used_at,
+            ], array_filter([
+                'ip_city' => $existing->ip_city,
+                'ip_region' => $existing->ip_region,
+                'ip_country' => $existing->ip_country,
+                'ip_country_code' => $existing->ip_country_code,
+            ])));
+        }
 
-        $session = UserDeviceSession::updateOrCreate(
-            ['personal_access_token_id' => $token->id],
-            array_merge([
+        $session = UserDeviceSession::query()->updateOrCreate(
+            [
                 'user_id' => $user->id,
                 'device_id' => $deviceId,
-                'device_name' => $context['device_name'],
-                'browser' => $context['browser'],
-                'os' => $context['os'],
+            ],
+            array_merge([
+                'personal_access_token_id' => $token->id,
+                'device_name' => $context['device_name'] ?: $canonical?->device_name,
+                'browser' => $context['browser'] ?: $canonical?->browser,
+                'os' => $context['os'] ?: $canonical?->os,
                 'user_agent' => $context['user_agent'],
                 'ip_address' => $context['ip_address'],
                 'device_verified_at' => $verifiedAt,
@@ -327,10 +408,17 @@ class DeviceSessionService
             ], $this->geoSessionAttributes($context))
         );
 
-        $hadVerifiedBefore = $this->deviceWasVerifiedBefore($user, $deviceId);
+        UserDeviceSession::query()
+            ->where('user_id', $user->id)
+            ->where('id', '!=', $session->id)
+            ->where(function ($query) use ($deviceId, $context) {
+                $query->where('device_id', $deviceId);
+                $this->applyPhysicalDeviceFingerprintScope($query, $context);
+            })
+            ->update(['personal_access_token_id' => null]);
 
         return [
-            'session' => $session,
+            'session' => $session->fresh(),
             'is_new_device' => ! $hadVerifiedBefore,
             'context' => $context,
         ];
@@ -342,7 +430,32 @@ class DeviceSessionService
         $session = $this->findSessionForToken($user, $token);
 
         if (! $session) {
+            $session = UserDeviceSession::query()
+                ->where('user_id', $user->id)
+                ->where('device_id', (string) $context['device_id'])
+                ->first();
+
+            if (! $session) {
+                $session = $this->findSessionsForPhysicalDevice($user, $context)->first();
+            }
+
+            if ($session) {
+                $session->update(array_merge([
+                    'personal_access_token_id' => $token->id,
+                    'device_id' => (string) $context['device_id'],
+                    'last_used_at' => now(),
+                    'ip_address' => $context['ip_address'],
+                    'user_agent' => $context['user_agent'],
+                    'device_name' => $context['device_name'] ?: $session->device_name,
+                    'browser' => $context['browser'] ?: $session->browser,
+                    'os' => $context['os'] ?: $session->os,
+                ], $this->geoSessionAttributes($context)));
+
+                return $session->fresh();
+            }
+
             $binding = $this->bindTokenToDevice($user, $token, $request);
+
             return $binding['session'] ?? null;
         }
 
@@ -393,15 +506,24 @@ class DeviceSessionService
     {
         $user = $session->user;
         $deviceId = (string) $session->device_id;
+        $hadActiveToken = (int) $session->personal_access_token_id > 0;
 
-        if ($session->personal_access_token_id) {
+        if ($hadActiveToken) {
             PersonalAccessToken::query()->where('id', $session->personal_access_token_id)->delete();
         }
 
         $session->delete();
 
-        if ($user && $deviceId !== '') {
-            $this->revokeTrustedDevice($user, $deviceId);
+        if ($hadActiveToken && $user && $deviceId !== '') {
+            $stillActive = UserDeviceSession::query()
+                ->where('user_id', $user->id)
+                ->where('device_id', $deviceId)
+                ->whereNotNull('personal_access_token_id')
+                ->exists();
+
+            if (! $stillActive) {
+                $this->revokeTrustedDevice($user, $deviceId);
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Models\UserDeviceSession;
 use App\Models\User;
+use App\Services\AdminPermissionService;
 use App\Services\DeviceSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,7 +56,7 @@ class SuperAdminController extends BaseAdminController
     /**
         * Create new privileged user
      */
-    public function createAdmin(Request $request): JsonResponse
+    public function createAdmin(Request $request, AdminPermissionService $permissions): JsonResponse
     {
         /** @var \App\Models\User|null $user */
         $user = auth()->guard('sanctum')->user();
@@ -71,7 +72,7 @@ class SuperAdminController extends BaseAdminController
             'password' => 'required|string|min:8|confirmed',
             'phone' => 'nullable|string|max:30',
             'address' => 'nullable|string|max:1000',
-            'role' => 'nullable|in:admin,driver',
+            'role' => 'nullable|in:admin,driver,customer,superadmin',
         ]);
 
         $targetRole = $validated['role'] ?? 'admin';
@@ -86,10 +87,97 @@ class SuperAdminController extends BaseAdminController
             'address' => $validated['address'],
         ]);
 
+        if ($targetRole === 'admin') {
+            $permissions->applyDefaultPermissions($user);
+        }
+
         return response()->json([
             'message' => ucfirst($targetRole).' user created successfully',
-            'data' => $user,
+            'data' => $user->fresh(),
         ], 201);
+    }
+
+    /**
+     * Update admin user profile (superadmin only)
+     */
+    public function updateAdmin(Request $request, User $user, AdminPermissionService $permissions): JsonResponse
+    {
+        /** @var \App\Models\User|null $authUser */
+        $authUser = auth()->guard('sanctum')->user();
+        if (! $authUser || ! $authUser->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Only superadmins can update admin users',
+            ], 403);
+        }
+
+        if ($user->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Cannot change superadmin account',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email|unique:users,email,'.$user->id,
+            'phone' => 'nullable|string|max:30',
+            'address' => 'nullable|string|max:1000',
+            'password' => 'nullable|string|min:8|confirmed',
+            'role' => 'nullable|in:customer,admin,driver,superadmin',
+        ]);
+
+        if ((int) $user->id === (int) $authUser->id) {
+            unset($validated['role']);
+        }
+
+        if (array_key_exists('role', $validated) && $validated['role']) {
+            $permissions->applyRoleChange($user, $validated['role']);
+            unset($validated['role']);
+        }
+
+        if (array_key_exists('password', $validated) && $validated['password']) {
+            $validated['password'] = Hash::make($validated['password']);
+        } else {
+            unset($validated['password']);
+        }
+
+        $user->update($validated);
+
+        return response()->json([
+            'message' => 'Admin user updated successfully',
+            'data' => $user->fresh(),
+        ]);
+    }
+
+    /**
+     * Delete admin user (superadmin only)
+     */
+    public function deleteAdmin(User $user): JsonResponse
+    {
+        /** @var \App\Models\User|null $authUser */
+        $authUser = auth()->guard('sanctum')->user();
+        if (! $authUser || ! $authUser->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Only superadmins can delete admin users',
+            ], 403);
+        }
+
+        if ($user->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Cannot delete superadmin account',
+            ], 403);
+        }
+
+        if ($user->role !== 'admin') {
+            return response()->json([
+                'message' => 'Target user is not an admin account',
+            ], 422);
+        }
+
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Admin user deleted successfully',
+        ]);
     }
 
     /**

@@ -9,6 +9,8 @@ import {
   ReportSection,
 } from "./ReportChartUI.jsx";
 import { Cell, PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import { ADMIN_NUMBER_FORMAT, formatUsd } from "../../lib/adminNumberFormat.js";
 
 const MONTH_NAMES = [
   "January",
@@ -30,13 +32,6 @@ const fullUsd = new Intl.NumberFormat("en-US", {
   currency: "USD",
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
-});
-
-const compactUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
 });
 
 function blockWheelChange(e) {
@@ -185,8 +180,9 @@ export default function PlanDashboard({ theme }) {
   };
 
   /* chart resize state */
-  const [progressSpan, setProgressSpan] = useState(1);
-  const [setPlanSpan, setSetPlanSpan] = useState(1);
+  const [progressSpan, setProgressSpan] = useAdminUiPreference("charts.plan.progressSpan", 1);
+  const [setPlanSpan, setSetPlanSpan] = useAdminUiPreference("charts.plan.setPlanSpan", 1);
+  const [numberFormat] = useAdminUiPreference("dashboard.numberFormat", ADMIN_NUMBER_FORMAT.COMPACT);
 
   const target = Number(data?.target) || 0;
   const current = Number(data?.current_revenue) || 0;
@@ -290,7 +286,7 @@ export default function PlanDashboard({ theme }) {
                   {fullUsd.format(current)}
                 </p>
                 <p className="mt-1.5 text-base" style={{ color: theme.subtitle }}>
-                  {displayPercent}% of {compactUsd.format(target)}
+                  {displayPercent}% of {formatUsd(target, numberFormat)}
                 </p>
               </div>
             </div>

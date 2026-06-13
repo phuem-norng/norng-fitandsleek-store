@@ -141,7 +141,7 @@ export default function PaymentProcess() {
 
   if (loading) {
     return (
-      <div className="container-safe py-20 text-center">
+      <div className="container-safe-inset py-20 text-center">
         <div className="inline-block">
           <svg className="w-12 h-12 animate-spin text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -154,7 +154,7 @@ export default function PaymentProcess() {
 
   if (!order) {
     return (
-      <div className="container-safe py-20">
+      <div className="container-safe-inset py-20">
         <div className="max-w-md mx-auto bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <p className="text-red-700">Order not found</p>
         </div>
@@ -165,7 +165,7 @@ export default function PaymentProcess() {
   return (
     <>
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 py-12">
-      <div className="container-safe max-w-2xl">
+      <div className="container-safe-inset max-w-2xl">
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-2">

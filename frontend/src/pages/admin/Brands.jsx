@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { useTheme } from "../../state/theme.jsx";
 import { closeSwal, errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../../lib/swal";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
@@ -31,6 +34,11 @@ function brandLogoSrc(url) {
 }
 
 export default function AdminBrands() {
+  const { user, can, permissionsReady } = useAdminPermissions();
+  const canViewBrands = can("brands", "view");
+  const canCreateBrands = can("brands", "create");
+  const canEditBrands = can("brands", "edit");
+  const canDeleteBrands = can("brands", "delete");
   const { primaryColor, mode } = useTheme();
   const accentColor = mode === "dark" ? "#FFFFFF" : primaryColor;
   const accentIsWhite = (accentColor || "").toUpperCase() === "#FFFFFF";
@@ -81,6 +89,11 @@ export default function AdminBrands() {
   };
 
   const load = async () => {
+    if (!canViewBrands) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setErr("");
     try {
@@ -94,8 +107,9 @@ export default function AdminBrands() {
   };
 
   useEffect(() => {
+    if (!permissionsReady) return;
     load();
-  }, []);
+  }, [permissionsReady, canViewBrands]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => rows.some((b) => b.id === id)));
@@ -120,6 +134,14 @@ export default function AdminBrands() {
 
   const create = async (e) => {
     e.preventDefault();
+    if (!canCreateBrands) {
+      await errorAlert({
+        khTitle: "គ្មានសិទ្ធិ",
+        enTitle: "Not allowed",
+        detail: "You don't have permission to create brands.",
+      });
+      return;
+    }
     if (isCreating) return;
     setErr("");
     setCreateError("");
@@ -178,6 +200,7 @@ export default function AdminBrands() {
   };
 
   const startEdit = (b) => {
+    if (!canEditBrands) return;
     setErr("");
     setEditing({
       id: b.id,
@@ -192,6 +215,10 @@ export default function AdminBrands() {
   };
 
   const saveEdit = async () => {
+    if (!canEditBrands) {
+      setErr("You don't have permission to edit brands.");
+      return;
+    }
     if (!editing) return;
     setErr("");
     try {
@@ -222,6 +249,7 @@ export default function AdminBrands() {
 
 
   const del = async (id) => {
+    if (!canDeleteBrands) return;
     const confirmRes = await warningConfirm({
       khTitle: "លុបម៉ាក",
       enTitle: "Delete brand",
@@ -273,7 +301,11 @@ export default function AdminBrands() {
     setOrderedRows(applyFilter(fullSortedRows));
   }, [fullSortedRows, search]);
 
-  if (loading) return <AdminContentSkeleton lines={3} imageHeight={200} className="mt-4" />;
+  if (!permissionsReady || loading) return <AdminContentSkeleton lines={3} imageHeight={200} className="mt-4" />;
+
+  if (!canViewBrands) {
+    return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+  }
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) =>
@@ -296,7 +328,7 @@ export default function AdminBrands() {
   };
 
   const deleteSelected = async () => {
-    if (selectedIds.length === 0) return;
+    if (!canDeleteBrands || selectedIds.length === 0) return;
     const confirmRes = await warningConfirm({
       khTitle: "លុបម៉ាកជាច្រើន",
       enTitle: "Delete selected brands",
@@ -323,6 +355,7 @@ export default function AdminBrands() {
   };
 
   const persistOrder = async (newFullOrder) => {
+    if (!canEditBrands) return;
     try {
       const updates = [];
       newFullOrder.forEach((b, idx) => {
@@ -340,6 +373,7 @@ export default function AdminBrands() {
   };
 
   const handleDrop = async (targetId) => {
+    if (!canEditBrands) return;
     if (!dragId || dragId === targetId) return;
     const fromIndex = fullSortedRows.findIndex((b) => b.id === dragId);
     const toIndex = fullSortedRows.findIndex((b) => b.id === targetId);
@@ -351,6 +385,7 @@ export default function AdminBrands() {
   };
 
   const swapSortOrder = async (current, target) => {
+    if (!canEditBrands) return;
     if (!current || !target) return;
     setErr("");
     try {
@@ -419,6 +454,7 @@ export default function AdminBrands() {
               Manage brand logos shown on the Home “CATEGORIES” row
             </p>
           </div>
+          {canCreateBrands ? (
           <button
             onClick={() => setShowCreateForm(true)}
             className={`px-6 py-3 font-semibold rounded-xl shadow-sm transition-all duration-200 flex items-center gap-2 ${accentIsWhite ? "border border-slate-300" : "text-white"}`}
@@ -429,6 +465,7 @@ export default function AdminBrands() {
             </svg>
             Add New Brand
           </button>
+          ) : null}
         </div>
 
         {err && (
@@ -595,7 +632,7 @@ export default function AdminBrands() {
                   ) : null}
                   <button
                     type="submit"
-                    disabled={isCreating}
+                    disabled={isCreating || !canCreateBrands}
                     className={`px-8 py-3 font-bold rounded-xl transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed border ${accentIsWhite ? 'border-slate-300' : ''}`}
                     style={{ backgroundColor: accentColor, color: accentIsWhite ? '#0b0b0f' : '#FFFFFF', borderColor: accentIsWhite ? '#cbd5e1' : accentColor }}
                   >
@@ -618,6 +655,7 @@ export default function AdminBrands() {
                 placeholder="Search brands..."
                 className="h-10 w-64 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 text-sm text-slate-700 dark:text-slate-100 outline-none focus:border-slate-500"
               />
+              {canDeleteBrands ? (
               <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <input
                   type="checkbox"
@@ -627,7 +665,8 @@ export default function AdminBrands() {
                 />
                 Select all
               </label>
-              {selectedIds.length > 0 && (
+              ) : null}
+              {canDeleteBrands && selectedIds.length > 0 ? (
                 <button
                   type="button"
                   onClick={deleteSelected}
@@ -636,7 +675,7 @@ export default function AdminBrands() {
                 >
                   Delete Selected ({selectedIds.length})
                 </button>
-              )}
+              ) : null}
               <button
                 type="button"
                 onClick={load}
@@ -660,6 +699,7 @@ export default function AdminBrands() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => handleDrop(b.id)}
                 >
+                  {canEditBrands ? (
                   <div
                     className="cursor-move text-slate-400 hover:text-slate-600"
                     draggable
@@ -671,12 +711,15 @@ export default function AdminBrands() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9h.01M8 15h.01M12 9h.01M12 15h.01M16 9h.01M16 15h.01" />
                     </svg>
                   </div>
+                  ) : null}
+                  {canDeleteBrands ? (
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(b.id)}
                     onChange={() => toggleSelect(b.id)}
                     className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-slate-900 focus:ring-0"
                   />
+                  ) : null}
                   <div className="w-32 h-16 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                     {b.logo_url ? (
                       <img src={brandLogoSrc(b.logo_url)} alt={b.name} className="h-10 w-auto object-contain" />
@@ -701,6 +744,7 @@ export default function AdminBrands() {
                     <p className="text-sm text-slate-500 dark:text-slate-400">Sort: {b.sort_order}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {canEditBrands ? (
                     <button
                       type="button"
                       onClick={() => startEdit(b)}
@@ -711,6 +755,8 @@ export default function AdminBrands() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
                     </button>
+                    ) : null}
+                    {canDeleteBrands ? (
                     <button
                       type="button"
                       onClick={() => del(b.id)}
@@ -723,6 +769,7 @@ export default function AdminBrands() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -849,6 +896,7 @@ export default function AdminBrands() {
               >
                 Cancel
               </button>
+              {canEditBrands ? (
               <button
                 type="button"
                 onClick={saveEdit}
@@ -857,6 +905,7 @@ export default function AdminBrands() {
               >
                 Save
               </button>
+              ) : null}
             </div>
           </div>
         </div>

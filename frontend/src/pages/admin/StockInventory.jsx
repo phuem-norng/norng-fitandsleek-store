@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { useTheme } from "../../state/theme.jsx";
 import { resolveImageUrl } from "../../lib/images";
 import { closeSwal, errorAlert, loadingAlert, toastSuccess, warningConfirm } from "../../lib/swal";
-import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
-import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
-import { formatCountryLabel } from "../../lib/countries";
+import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
+import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import CountryOriginPicker from "../../components/admin/CountryOriginPicker";
 import CategoryPicker from "../../components/admin/CategoryPicker";
 import {
@@ -17,25 +18,39 @@ import {
     TableColumnVisibilityMenu,
 } from "../../components/admin/TableColumnVisibilityMenu.jsx";
 import AdminFilterDrawer, { AdminFilterToolbarButton } from "../../components/admin/AdminFilterDrawer.jsx";
+import AdminListQueryToolbar from "../../components/admin/AdminListQueryToolbar.jsx";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import {
+    sortStockInventoryRows,
+    STOCK_INVENTORY_SORT_OPTIONS,
+    STOCK_INVENTORY_STOCK_FILTER_OPTIONS,
+    stockInventoryQuickStockBucket,
+} from "../../lib/adminListQuery.js";
 import { matchesSection } from "../../lib/adminListFilters.js";
 import { useAdminFilterDrawer } from "../../lib/useAdminFilterDrawer.js";
 import { formatYearMonthLabel, yearMonthToDateRange } from "../../lib/adminYearMonthFilter.js";
 import { useAdminYearMonthFilter } from "../../lib/useAdminYearMonthFilter.js";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
+import VariantBarcodePreview from "../../components/admin/VariantBarcodePreview.jsx";
 import {
-    averageBundleSellingUnitPrice,
     BARCODE_QR_TYPE,
     batchReceiptRefForRow,
     buildStockReceivedLogRows,
-    inventoryOnHandForMaster,
-    masterBarcodeForRow,
     receiveBatchesForMaster,
     stockLabelRows,
 } from "../../lib/stockLabelReceipts";
 import AdminReportExportMenu from "../../components/admin/AdminReportExportMenu.jsx";
+import ProductCatalogPanel from "../../components/admin/ProductCatalogPanel.jsx";
+import ProductVariantDetailModal from "../../components/admin/ProductVariantDetailModal.jsx";
+import { barcodeEntriesForProducts } from "../../lib/productBarcodeHelpers.js";
+import { reactBarcodeFormat } from "../../lib/variantBarcode.js";
 import { exportAdminTable } from "../../lib/adminTableExport.js";
 import { parseBlobErrorMessage } from "../../lib/adminReportDownload.js";
+import {
+    buildAdminProductsUrl,
+    stockInventoryChosenReturnPath,
+} from "../../lib/adminReturnNav.js";
 
 const STOCK_ADMIN_BASES = ["/admin/stock-inventory", "/admin/stock-received"];
 
@@ -52,11 +67,9 @@ const STOCK_TABLE_COLUMNS = [
     { id: "products", label: "Products" },
     { id: "category", label: "Category" },
     { id: "condition", label: "Condition" },
-    { id: "origin", label: "Origin" },
     { id: "stock", label: "Stock" },
     { id: "dateIn", label: "Date in" },
     { id: "status", label: "Status" },
-    { id: "priceUnit", label: "Price unit" },
     { id: "totalPrice", label: "Total price" },
     { id: "actions", label: "Actions" },
 ];
@@ -156,7 +169,7 @@ const getStockAgeStatus = (dateIn) => {
     const days = daysSinceDateIn(dateIn);
     if (days === null) {
         return {
-            label: "—",
+            label: "â€”",
             tone: "bg-slate-100 text-slate-500 ring-slate-200 dark:bg-white/10 dark:text-slate-400 dark:ring-white/10",
         };
     }
@@ -180,7 +193,7 @@ const getStockAgeStatus = (dateIn) => {
 
 const formatDateIn = (dateIn) => {
     const d = parseDateOnly(dateIn);
-    if (!d) return "—";
+    if (!d) return "â€”";
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
@@ -194,14 +207,14 @@ const formatDateInTime = (item) => {
 
 const formatDateInWithTime = (item) => {
     const dateStr = formatDateIn(effectiveDateIn(item));
-    if (dateStr === "—") return dateStr;
+    if (dateStr === "â€”") return dateStr;
     const time = formatDateInTime(item);
     return time ? `${dateStr}, ${time}` : dateStr;
 };
 
 function DateInCell({ item, showTime }) {
     const d = parseDateOnly(effectiveDateIn(item));
-    if (!d) return "—";
+    if (!d) return "â€”";
     const time = showTime ? formatDateInTime(item) : null;
     return (
         <div className="flex flex-col items-center leading-none tabular-nums text-slate-700 dark:text-slate-300">
@@ -228,16 +241,6 @@ const CONDITION_BADGE_NEW =
 const CONDITION_CHIP_SECOND_HAND =
     "inline-flex max-w-full items-center gap-2 rounded-full border border-amber-300/80 bg-amber-50 px-3 py-1.5 text-xs font-bold ring-1 ring-amber-200 dark:border-amber-400/45 dark:bg-amber-500/20 dark:ring-amber-400/35";
 
-/** Quick Restock: filled circle + bold “+”; circle uses admin Theme preset (`--admin-primary`). */
-const BTN_QUICK_RESTOCK =
-    "absolute -bottom-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--admin-primary)] text-white shadow-[0_2px_6px_rgba(15,23,42,0.35)] ring-2 ring-white transition hover:brightness-110 hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--admin-primary-rgb),0.5)] focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:ring-slate-900 dark:focus-visible:ring-offset-slate-900";
-
-const QUICK_RESTOCK_MODAL_KICKER =
-    "text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--admin-primary)]";
-
-const QUICK_RESTOCK_SUBMIT_BTN =
-    "rounded-xl bg-[color:var(--admin-primary)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(var(--admin-primary-rgb),0.35)] transition hover:brightness-110 disabled:opacity-50";
-
 const isAverageBundleLabel = (item) =>
     item?.product_condition === "second_hand" &&
     (item?.second_hand_sale_type || "single") === "average_bundle";
@@ -247,15 +250,11 @@ const getProductConditionDisplay = (item) => {
     if (condition !== "second_hand") {
         return { kind: "new" };
     }
-    const saleType = item?.second_hand_sale_type || "single";
     return {
         kind: "second_hand",
-        saleLabel: saleType === "average_bundle" ? "Average" : "Single",
+        saleLabel: "Single",
     };
 };
-
-const formatOriginLabel = formatCountryLabel;
-const formatOriginCsv = (value) => formatOriginLabel(value).replace(/—/g, "");
 
 const resolveItemCategoryId = (item) => {
     if (!item) return "";
@@ -265,8 +264,8 @@ const resolveItemCategoryId = (item) => {
 };
 
 const formatCategoryLabel = (id, catalogCategories) => {
-    if (!id) return "—";
-    return catalogCategories.find((c) => String(c.id) === String(id))?.name || "—";
+    if (!id) return "â€”";
+    return catalogCategories.find((c) => String(c.id) === String(id))?.name || "â€”";
 };
 
 const matchesDateInRange = (item, fromYmd, toYmd) => {
@@ -293,31 +292,6 @@ const matchesConditionFilterSet = (item, selected) => matchesSection(selected, "
     return false;
 });
 
-const matchesOriginFilterSet = (item, selected) => matchesSection(selected, "origin", (value) => {
-    const raw = String(item?.origin || "").trim();
-    if (!raw) return false;
-    return raw.split(",").map((s) => s.trim()).includes(value);
-});
-
-const unitPriceForLabel = (item) => {
-    if (isAverageBundleLabel(item)) {
-        const price = Number(averageBundleSellingUnitPrice(item));
-        return Number.isFinite(price) ? price : null;
-    }
-    const price = Number(item?.price);
-    return Number.isFinite(price) && price >= 0 ? price : null;
-};
-
-const matchesPriceUnitFilterSet = (item, selected) => matchesSection(selected, "priceUnit", (value) => {
-    const price = unitPriceForLabel(item);
-    if (value === "has") return price != null && price > 0;
-    if (value === "none") return price == null || price <= 0;
-    if (value === "under_25") return price != null && price < 25;
-    if (value === "25_100") return price != null && price >= 25 && price <= 100;
-    if (value === "over_100") return price != null && price > 100;
-    return false;
-});
-
 const matchesStockFilterSet = (item, selected, stockForRow) => matchesSection(selected, "stock", (value) => {
     const st = item.manage_stock ? (stockForRow(item) ?? 0) : null;
     const mn = parseInt(item.min_stock, 10) || 0;
@@ -337,16 +311,7 @@ const STOCK_DRAWER_STOCK_OPTIONS = [
 
 const STOCK_DRAWER_CONDITION_OPTIONS = [
     { value: "new", label: "New" },
-    { value: "second_hand_single", label: "Second-hand · Single" },
-    { value: "second_hand_average", label: "Second-hand · Average" },
-];
-
-const STOCK_DRAWER_PRICE_OPTIONS = [
-    { value: "has", label: "Has unit price" },
-    { value: "none", label: "No unit price" },
-    { value: "under_25", label: "Under $25" },
-    { value: "25_100", label: "$25 – $100" },
-    { value: "over_100", label: "Over $100" },
+    { value: "second_hand_single", label: "Second-hand Â· Single" },
 ];
 
 const LABEL_COLORS = [
@@ -368,10 +333,6 @@ const DEFAULT_APPEARANCE = {
     showQR: true,
     showName: true,
     showPrice: true,
-};
-
-const EMPTY_QUICK_RESTOCK = {
-    quantity: "",
 };
 
 const EMPTY_FORM = {
@@ -427,6 +388,14 @@ const parsePositiveInteger = (value) => {
     return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+const generateStockBarcodeCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+};
+
+const sanitizeStockBarcodeCode = (value) =>
+    String(value || "").toUpperCase().replace(/[^A-Z0-9\-]/g, "").slice(0, 30);
+
 const calculateBundleUnitCost = (totalCost, totalQuantity) => {
     const cost = parsePositiveNumber(totalCost);
     const quantity = parsePositiveInteger(totalQuantity);
@@ -463,28 +432,25 @@ const isAverageBundleForm = (state) =>
 const isSimpleStockForm = (state) => !isAverageBundleForm(state);
 
 const applySecondHandBundleDefaults = (state) => {
-    if (!isAverageBundleForm(state)) {
-        const simpleState = state.product_condition === "second_hand"
-            ? { ...state, second_hand_sale_type: state.second_hand_sale_type || "single" }
-            : { ...state, second_hand_sale_type: "single" };
-
+    if ((state.product_condition || "new") !== "second_hand") {
         return {
-            ...simpleState,
-            price: "",
-            compare_at_price: "",
-            cost: "",
+            ...state,
+            second_hand_sale_type: "single",
             bundle_total_cost: "",
             bundle_total_quantity: "",
-            manage_stock: true,
         };
     }
 
-    const unitCost = calculateBundleUnitCost(state.bundle_total_cost, state.bundle_total_quantity);
     return {
         ...state,
-        cost: unitCost || "",
+        product_condition: "second_hand",
+        second_hand_sale_type: "single",
+        price: "",
+        compare_at_price: "",
+        cost: "",
+        bundle_total_cost: "",
+        bundle_total_quantity: "",
         manage_stock: true,
-        stock: stockFromBundleQuantity(state.bundle_total_quantity),
     };
 };
 
@@ -518,7 +484,12 @@ const normalizeSaleFieldsForPayload = (state) => {
     return {
         ...normalized,
         product_condition: "second_hand",
-        second_hand_sale_type: "average_bundle",
+        second_hand_sale_type: "single",
+        price: null,
+        compare_at_price: null,
+        cost: null,
+        bundle_total_cost: null,
+        bundle_total_quantity: null,
     };
 };
 
@@ -546,7 +517,7 @@ const validateSaleFields = (state) => {
     return "";
 };
 
-/** Strip current hero image: next gallery becomes `image_url` (or cleared). Repeats on each × on first slot. */
+/** Strip current hero image: next gallery becomes `image_url` (or cleared). Repeats on each Ã— on first slot. */
 const removeLeadingProductPhoto = (state) => {
     const storedPrimary = String(state.image_url || "").trim();
     const gAll = parseGallery(state.gallery || "").filter(Boolean);
@@ -567,7 +538,7 @@ function mapItemToEditForm(item, receivedPage = false) {
         : item.stock;
     const mapped = {
         ...item,
-        barcode_code: item.slug || "",
+        barcode_code: "",
         compare_at_price: item.compare_at_price ?? "",
         category_id: resolveItemCategoryId(item),
         brand_id: item.brand_id != null ? String(item.brand_id) : "",
@@ -586,7 +557,9 @@ function mapItemToEditForm(item, receivedPage = false) {
         variation_sizes: Array.isArray(item.variation_sizes) ? item.variation_sizes : [],
         variation_custom_size: "",
     };
-    return isAverageBundleLabel(item) ? applySecondHandBundleDefaults(mapped) : mapped;
+    return isAverageBundleLabel(item) || item.product_condition === "second_hand"
+        ? applySecondHandBundleDefaults({ ...mapped, product_condition: "second_hand" })
+        : mapped;
 }
 
 export default function AdminBarcodeQR() {
@@ -604,6 +577,15 @@ export default function AdminBarcodeQR() {
     );
 
     const { user, refresh: refreshAuth } = useAuth();
+    const { can, permissionsReady } = useAdminPermissions();
+    const canViewStock = can("stock", "view");
+    const canCreateStock = can("stock", "create");
+    const canEditStock = can("stock", "edit");
+    const canDeleteStock = can("stock", "delete");
+    const canCreateProducts = can("products", "create");
+    const canEditProducts = can("products", "edit");
+    const canDeleteProducts = can("products", "delete");
+    const canUploadStockMedia = canCreateStock || canEditStock;
     const { primaryColor, mode } = useTheme();
     const isDark = mode === "dark";
     const accentColor = primaryColor;
@@ -613,8 +595,16 @@ export default function AdminBarcodeQR() {
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [brands, setBrands] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
+    const listPrefKey = isReceivedLogPage ? "stock.receivedLog" : "stock.inventory";
+    const [search, setSearch] = useAdminUiPreference(`${listPrefKey}.search`, "");
+    const [listStockFilter, setListStockFilter] = useAdminUiPreference(`${listPrefKey}.stockFilter`, "all");
+    const [listSortBy, setListSortBy] = useAdminUiPreference(
+        `${listPrefKey}.sortBy`,
+        isReceivedLogPage ? "date_in" : "name",
+    );
+    const [listSortDir, setListSortDir] = useAdminUiPreference(`${listPrefKey}.sortDir`, "desc");
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({ ...EMPTY_FORM });
     const [isCreating, setIsCreating] = useState(false);
@@ -627,15 +617,13 @@ export default function AdminBarcodeQR() {
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [previewItem, setPreviewItem] = useState(null);
     const [linkedProductsItem, setLinkedProductsItem] = useState(null);
-    const [quickRestockItem, setQuickRestockItem] = useState(null);
-    const [quickRestockForm, setQuickRestockForm] = useState({ ...EMPTY_QUICK_RESTOCK });
-    const [quickRestockBusy, setQuickRestockBusy] = useState(false);
+    const [showVariantBarcodesModal, setShowVariantBarcodesModal] = useState(false);
+    const [selectedLinkedProduct, setSelectedLinkedProduct] = useState(null);
+    const [showCreateForm, setShowCreateForm] = useState(false);
     const [pendingDelete, setPendingDelete] = useState(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
     const [exportBusy, setExportBusy] = useState(false);
-    const stockFilterSectionIds = isReceivedLogPage
-        ? ["stock", "category", "condition", "origin"]
-        : ["stock", "category", "condition", "origin", "priceUnit"];
+    const stockFilterSectionIds = ["stock", "category", "condition"];
     const listFilters = useAdminFilterDrawer(stockFilterSectionIds);
 
     const [columnVisibility, setColumnVisibility] = useState(() =>
@@ -690,16 +678,21 @@ export default function AdminBarcodeQR() {
     };
 
     const load = async (dateRange = yearMonthFilter.dateRange) => {
+        if (!canViewStock) {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         try {
             const catParams = { include_stock_labels: true };
             if (dateRange?.from) catParams.from_date = dateRange.from;
             if (dateRange?.to) catParams.to_date = dateRange.to;
 
-            const [catResult, brandResult, productResult] = await Promise.allSettled([
+            const [catResult, brandResult, productResult, supplierResult] = await Promise.allSettled([
                 api.get("/admin/categories", { params: catParams }),
                 api.get("/admin/brands"),
                 api.get("/admin/products", { params: { per_page: 500 } }),
+                api.get("/admin/suppliers"),
             ]);
 
             if (catResult.status !== "fulfilled") {
@@ -719,18 +712,26 @@ export default function AdminBarcodeQR() {
                 setBrands([]);
             }
 
-            if (productResult.status !== "fulfilled") {
-                throw productResult.reason;
+            if (supplierResult.status === "fulfilled") {
+                setSuppliers(supplierResult.value?.data?.data || []);
+            } else {
+                console.warn("[StockInventory] suppliers load failed", supplierResult.reason);
+                setSuppliers([]);
             }
 
-            const productRes = productResult.value;
-            const productPayload = productRes?.data;
-            const productList = Array.isArray(productPayload?.data)
-                ? productPayload.data
-                : Array.isArray(productPayload)
-                    ? productPayload
-                    : [];
-            setProducts(productList);
+            if (productResult.status === "fulfilled") {
+                const productRes = productResult.value;
+                const productPayload = productRes?.data;
+                const productList = Array.isArray(productPayload?.data)
+                    ? productPayload.data
+                    : Array.isArray(productPayload)
+                        ? productPayload
+                        : [];
+                setProducts(productList);
+            } else {
+                console.warn("[StockInventory] products load failed", productResult.reason);
+                setProducts([]);
+            }
         } catch (e) {
             const msg = extractErr(e);
             setErr(
@@ -746,18 +747,50 @@ export default function AdminBarcodeQR() {
     const dateQueryKey = `${yearMonthFilter.dateRange.from}|${yearMonthFilter.dateRange.to}`;
 
     useEffect(() => {
+        if (!permissionsReady || !canViewStock) {
+            setLoading(false);
+            return;
+        }
         load(yearMonthFilter.dateRange);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by dateQueryKey
-    }, [dateQueryKey]);
+    }, [dateQueryKey, permissionsReady, canViewStock]);
+
+    const openCreateStockForm = () => {
+        if (!canCreateStock) return;
+        setForm({
+            ...EMPTY_FORM,
+            stock: "0",
+            manage_stock: true,
+            date_in: todayYmd(),
+            barcode_code: "",
+        });
+        setErr("");
+        setShowCreateForm(true);
+    };
+
+    const closeCreateStockForm = () => {
+        if (isCreating) return;
+        setShowCreateForm(false);
+    };
 
     useEffect(() => {
         if (!isNewPage) return;
-        setForm({ ...EMPTY_FORM });
-        setErr("");
-    }, [isNewPage, location.key]);
+        if (!canCreateStock) {
+            navigate(stockBase, { replace: true });
+            return;
+        }
+        openCreateStockForm();
+        navigate(stockBase, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- open once for legacy /new URL
+    }, [isNewPage, location.key, canCreateStock]);
 
     useEffect(() => {
         if (!isEditPage || !editRouteId) return undefined;
+        if (!permissionsReady) return undefined;
+        if (!canViewStock) {
+            navigate(stockBase, { replace: true });
+            return undefined;
+        }
         setEditing(null);
         let cancelled = false;
         (async () => {
@@ -775,7 +808,7 @@ export default function AdminBarcodeQR() {
             }
         })();
         return () => { cancelled = true; };
-    }, [isEditPage, editRouteId, navigate, stockBase, isReceivedLogPage]);
+    }, [isEditPage, editRouteId, navigate, stockBase, isReceivedLogPage, permissionsReady, canViewStock]);
 
     useEffect(() => {
         if (!isEditPage) setEditing(null);
@@ -799,10 +832,7 @@ export default function AdminBarcodeQR() {
 
     const resetForm = () => setForm({ ...EMPTY_FORM });
 
-    const generateCode = () => {
-        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-    };
+    const generateCode = generateStockBarcodeCode;
 
     const resolveCanonicalLabel = (item) => {
         if (!item) return null;
@@ -812,42 +842,70 @@ export default function AdminBarcodeQR() {
         return item;
     };
 
-    const labelBarcodeForItem = (item) => {
-        const label = resolveCanonicalLabel(item);
-        return String(label?.slug || "").trim();
-    };
-
     const canOpenChosenProducts = (item) => {
         if (isReceivedLogPage) return true;
         return linkedProductsForLabel(item).length > 0;
     };
 
+    const chosenProductsReturnPath = (labelId) => {
+        const id =
+            labelId
+            ?? linkedProductsItem?.id
+            ?? new URLSearchParams(location.search || "").get("linked");
+        return stockInventoryChosenReturnPath(stockBase, id);
+    };
+
+    const navigateToProducts = (opts) => {
+        const labelId = opts.stockLabelId ?? linkedProductsItem?.id;
+        navigate(
+            buildAdminProductsUrl({
+                ...opts,
+                returnTo: chosenProductsReturnPath(labelId),
+            }),
+        );
+    };
+
     const openChosenProducts = (item) => {
         if (!canOpenChosenProducts(item)) return;
         setLinkedProductsItem(item);
+        navigate(`${stockBase}?linked=${encodeURIComponent(String(item.id))}`, { replace: false });
     };
 
     const closeChosenProducts = () => {
         setLinkedProductsItem(null);
+        setShowVariantBarcodesModal(false);
+        setSelectedLinkedProduct(null);
+        const params = new URLSearchParams(location.search || "");
+        if (params.has("linked")) {
+            params.delete("linked");
+            const q = params.toString();
+            navigate(q ? `${stockBase}?${q}` : stockBase, { replace: true });
+        }
     };
 
     const goToAddProductForBatch = () => {
         if (!linkedProductsItem) return;
         const label = resolveCanonicalLabel(linkedProductsItem);
-        const barcodeCode = labelBarcodeForItem(linkedProductsItem);
         const categoryId = resolveItemCategoryId(label);
-        const params = new URLSearchParams();
-        params.set("new", "1");
-        if (barcodeCode) params.set("barcode_code", barcodeCode);
-        if (categoryId) params.set("category_id", categoryId);
-        if (label?.brand_id) params.set("brand_id", String(label.brand_id));
-        params.set("stock_label_id", String(linkedProductsItem.id));
-        closeChosenProducts();
-        navigate(`/admin/products?${params.toString()}`);
+        navigateToProducts({
+            newProduct: true,
+            categoryId: categoryId || undefined,
+            brandId: label?.brand_id || undefined,
+            stockLabelId: linkedProductsItem.id,
+        });
     };
 
-    const sanitizeCode = (v) =>
-        String(v || "").toUpperCase().replace(/[^A-Z0-9\-]/g, "").slice(0, 30);
+    useEffect(() => {
+        const linkedId = new URLSearchParams(location.search || "").get("linked");
+        if (!linkedId || rows.length === 0) return;
+        if (linkedProductsItem && String(linkedProductsItem.id) === String(linkedId)) return;
+        const item = rows.find((r) => String(r.id) === String(linkedId));
+        if (item && canOpenChosenProducts(item)) {
+            setLinkedProductsItem(item);
+        }
+    }, [location.search, rows, linkedProductsItem]);
+
+    const sanitizeCode = sanitizeStockBarcodeCode;
 
     const slugify = (str) =>
         String(str || "")
@@ -856,8 +914,11 @@ export default function AdminBarcodeQR() {
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/(^-|-$)/g, "");
 
-    /* ── Image upload helpers (Cloudinary via API) ── */
+    /* â”€â”€ Image upload helpers (Cloudinary via API) â”€â”€ */
     const uploadCategoryImage = async (file) => {
+        if (!canUploadStockMedia) {
+            throw new Error("You don't have permission to upload stock images.");
+        }
         const fd = new FormData();
         fd.append("image", file);
         const { data } = await api.post("/admin/categories/image-upload", fd);
@@ -946,7 +1007,7 @@ export default function AdminBarcodeQR() {
         }
     };
 
-    /** Photo → similar-product match (vision) to pre-fill name, price, category, brand, description */
+    /** Photo â†’ similar-product match (vision) to pre-fill name, price, category, brand, description */
     const handleAutoRegisterPhoto = async (e, setData) => {
         const file = e.target.files?.[0];
         if (e.target) e.target.value = "";
@@ -978,12 +1039,12 @@ export default function AdminBarcodeQR() {
                         category_id: top.category?.id != null ? String(top.category.id) : s.category_id,
                         brand_id: top.brand?.id != null ? String(top.brand.id) : s.brand_id,
                     }));
-                    await toastSuccess({ khText: "បានបំពេញពីរូបភាព", enText: "Fields filled from your photo match." });
+                    await toastSuccess({ khText: "áž”áž¶áž“áž”áŸ†áž–áŸáž‰áž–áž¸ážšáž¼áž”áž—áž¶áž–", enText: "Fields filled from your photo match." });
                 } else {
-                    await toastSuccess({ khText: "រូបភាពបានផ្ទុក", enText: "Photo added. No close match found — edit details manually." });
+                    await toastSuccess({ khText: "ážšáž¼áž”áž—áž¶áž–áž”áž¶áž“áž•áŸ’áž‘áž»áž€", enText: "Photo added. No close match found â€” edit details manually." });
                 }
             } catch {
-                await toastSuccess({ khText: "រូបភាពបានផ្ទុក", enText: "Photo added. Adjust name and price manually." });
+                await toastSuccess({ khText: "ážšáž¼áž”áž—áž¶áž–áž”áž¶áž“áž•áŸ’áž‘áž»áž€", enText: "Photo added. Adjust name and price manually." });
             }
         } catch {
             setErr("Could not read the photo file.");
@@ -993,20 +1054,26 @@ export default function AdminBarcodeQR() {
         }
     };
 
-    /* ── CRUD ── */
+    /* â”€â”€ CRUD â”€â”€ */
     const create = async (e) => {
         e.preventDefault();
+        if (!canCreateStock) {
+            await errorAlert({
+                khTitle: "គ្មានសិទ្ធិ",
+                enTitle: "Not allowed",
+                detail: "You don't have permission to create stock items.",
+            });
+            return;
+        }
         if (!form.name.trim()) { setErr("Product name is required"); return; }
         const validationError = validateSaleFields(form);
         if (validationError) { setErr(validationError); return; }
         setIsCreating(true);
-        loadingAlert({ khTitle: "កំពុងបង្កើត", enTitle: "Creating…", khText: "សូមរង់ចាំ", enText: "Please wait" });
+        loadingAlert({ khTitle: "áž€áŸ†áž–áž»áž„áž”áž„áŸ’áž€áž¾áž", enTitle: "Creatingâ€¦", khText: "ážŸáž¼áž˜ážšáž„áŸ‹áž…áž¶áŸ†", enText: "Please wait" });
         try {
-            const finalCode = form.barcode_code.trim() ? sanitizeCode(form.barcode_code) : generateCode();
             const saleForm = normalizeSaleFieldsForPayload(form);
             await api.post("/admin/categories", {
                 name: saleForm.name.trim(),
-                slug: finalCode,
                 type: BARCODE_QR_TYPE,
                 description: saleForm.description || null,
                 details: saleForm.details || null,
@@ -1036,31 +1103,31 @@ export default function AdminBarcodeQR() {
             });
             closeSwal();
             resetForm();
-            await toastSuccess({ khText: "បង្កើតដោយជោគជ័យ", enText: "Created successfully!" });
+            closeCreateStockForm();
+            await toastSuccess({ khText: "áž”áž„áŸ’áž€áž¾ážážŠáŸ„áž™áž‡áŸ„áž‚áž‡áŸáž™", enText: "Created successfully!" });
             await load();
-            navigate(stockBase);
         } catch (e2) {
             closeSwal();
             const msg = e2?.response?.data?.message || extractErr(e2);
             setErr(msg);
-            await errorAlert({ khTitle: "បរាជ័យ", enTitle: "Failed", detail: msg });
+            await errorAlert({ khTitle: "áž”ážšáž¶áž‡áŸáž™", enTitle: "Failed", detail: msg });
         } finally {
             setIsCreating(false);
         }
     };
 
     const saveEdit = async () => {
+        if (!canEditStock) {
+            setErr("You don't have permission to edit stock items.");
+            return;
+        }
         if (!editing?.name?.trim()) { setErr("Product name is required"); return; }
         const validationError = validateSaleFields(editing);
         if (validationError) { setErr(validationError); return; }
-        const editCode = editing.barcode_code?.trim()
-            ? sanitizeCode(editing.barcode_code)
-            : (editing.slug || generateCode());
         try {
             const saleEditing = normalizeSaleFieldsForPayload(editing);
-            await api.patch(`/admin/categories/${editing.id}`, {
+            const patchBody = {
                 name: saleEditing.name,
-                slug: editCode,
                 description: saleEditing.description || null,
                 details: saleEditing.details || null,
                 price: saleEditing.price || null,
@@ -1086,7 +1153,8 @@ export default function AdminBarcodeQR() {
                 variation_product_type: saleEditing.has_variation ? (saleEditing.variation_product_type || null) : null,
                 variation_colors: saleEditing.has_variation ? (saleEditing.variation_colors || null) : null,
                 variation_sizes: saleEditing.has_variation && Array.isArray(saleEditing.variation_sizes) && saleEditing.variation_sizes.length ? saleEditing.variation_sizes : null,
-            });
+            };
+            await api.patch(`/admin/categories/${editing.id}`, patchBody);
             showSuccess("Updated successfully!");
             await load();
             navigate(stockBase);
@@ -1096,22 +1164,25 @@ export default function AdminBarcodeQR() {
     };
 
     const del = (id, navigateAfter = false) => {
+        if (!canDeleteStock) return;
         setPendingDelete({ type: "preset", id, navigateAfter });
     };
 
     const deleteLinkedProduct = (product) => {
-        setLinkedProductsItem(null);
+        if (!canDeleteProducts) return;
         setPendingDelete({ type: "product", product });
     };
 
     const confirmDelete = async () => {
         if (!pendingDelete) return;
+        if (pendingDelete.type === "product" && !canDeleteProducts) return;
+        if (pendingDelete.type !== "product" && !canDeleteStock) return;
         setDeleteBusy(true);
         setErr("");
         try {
             if (pendingDelete.type === "product") {
                 await api.delete(`/admin/products/${pendingDelete.product.id}`);
-                await toastSuccess({ khText: "បានលុបទំនិញ", enText: "Product deleted." });
+                await toastSuccess({ khText: "áž”áž¶áž“áž›áž»áž”áž‘áŸ†áž“áž·áž‰", enText: "Product deleted." });
             } else {
                 await api.delete(`/admin/categories/${pendingDelete.id}`);
                 showSuccess("Deleted successfully!");
@@ -1356,83 +1427,10 @@ export default function AdminBarcodeQR() {
         return rows.filter((r) => {
             if (!q) return true;
             if (r.name?.toLowerCase().includes(q)) return true;
-            if (String(r.slug || "").toLowerCase().includes(q)) return true;
             if (String(r.sku || "").toLowerCase().includes(q)) return true;
             return false;
         });
     }, [rows, search]);
-
-    const resolveInventoryLabel = (item) => {
-        if (!item) return null;
-        if (item.parent_id != null) {
-            return rows.find((r) => String(r.id) === String(item.parent_id)) || item;
-        }
-        return item;
-    };
-
-    const openQuickRestockModal = (item) => {
-        const label = resolveInventoryLabel(item);
-        if (!label) return;
-        setQuickRestockForm({ quantity: "" });
-        setQuickRestockItem(label);
-    };
-
-    const closeQuickRestockModal = () => {
-        setQuickRestockItem(null);
-        setQuickRestockForm({ ...EMPTY_QUICK_RESTOCK });
-    };
-
-    useEffect(() => {
-        if (!quickRestockItem) return undefined;
-        const onKey = (ev) => {
-            if (ev.key === "Escape" && !quickRestockBusy) closeQuickRestockModal();
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [quickRestockItem, quickRestockBusy]);
-
-    const submitQuickRestock = async (e) => {
-        e.preventDefault();
-        if (!quickRestockItem) return;
-        const qty = parseInt(String(quickRestockForm.quantity ?? "").trim(), 10);
-        if (!Number.isFinite(qty) || qty < 1) {
-            await errorAlert({ khTitle: "បញ្ចូលចំនួន", enTitle: "Quantity required", detail: "Enter at least 1 unit to receive." });
-            return;
-        }
-        setQuickRestockBusy(true);
-        loadingAlert({ khTitle: "កំពុងទទួលស្តុក", enTitle: "Receiving stock…", khText: "សូមរង់ចាំ", enText: "Please wait" });
-        try {
-            const { data } = await api.post(`/admin/categories/${quickRestockItem.id}/quick-restock`, {
-                quantity: qty,
-            });
-            const inventory = data?.data?.inventory;
-            const received = data?.data?.received;
-            setRows((prev) => {
-                const next = [...prev];
-                if (inventory) {
-                    const idx = next.findIndex((r) => r.id === inventory.id);
-                    if (idx >= 0) next[idx] = inventory;
-                }
-                if (received) next.push(received);
-                return next;
-            });
-            closeSwal();
-            closeQuickRestockModal();
-            await toastSuccess({
-                khText: `បានទទួល ${qty} ឯកតា`,
-                enText: `Received ${qty} unit${qty === 1 ? "" : "s"} successfully.`,
-            });
-        } catch (e2) {
-            closeSwal();
-            await errorAlert({
-                khTitle: "បរាជ័យ",
-                enTitle: "Could not receive stock",
-                detail: extractErr(e2),
-            });
-        } finally {
-            setQuickRestockBusy(false);
-        }
-    };
 
     const linkedProductsForLabel = (item) => {
         if (!item?.id) return [];
@@ -1449,38 +1447,29 @@ export default function AdminBarcodeQR() {
         }
 
         const masterId = itemId;
-        const masterBarcode = String(item.slug || "").trim().toLowerCase();
 
         // Stock Received log: master row only shows products linked to this master id (not batch receipts).
         if (isReceivedLogPage) {
-            return products.filter((product) => {
-                if (product.stock_label_id != null && product.stock_label_id !== "") {
-                    return String(product.stock_label_id) === masterId;
-                }
-                if (masterBarcode) {
-                    return String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
-                }
-                return false;
-            });
+            return products.filter(
+                (product) =>
+                    product.stock_label_id != null
+                    && product.stock_label_id !== ""
+                    && String(product.stock_label_id) === masterId,
+            );
         }
 
-        // Stock & Inventory: union of all receive batches + legacy barcode match.
+        // Stock & Inventory: products linked to this master or any receive batch under it.
         const batchIds = new Set(
             receiveBatchesForMaster(item, rows).map((b) => String(b.id)),
         );
         batchIds.add(masterId);
         return products.filter((product) => {
-            if (product.stock_label_id != null && product.stock_label_id !== "") {
-                return batchIds.has(String(product.stock_label_id));
-            }
-            if (masterBarcode) {
-                return String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
-            }
-            return false;
+            if (product.stock_label_id == null || product.stock_label_id === "") return false;
+            return batchIds.has(String(product.stock_label_id));
         });
     };
 
-    /** Sum of linked POS product stock × price (used for average-bundle total price & catalog units). */
+    /** Sum of linked POS product stock Ã— price (used for average-bundle total price & catalog units). */
     const linkedCatalogValuation = (item) => {
         const linked = linkedProductsForLabel(item);
         let total = 0;
@@ -1498,16 +1487,22 @@ export default function AdminBarcodeQR() {
         return count > 0 ? { amount: total, sourceCount: count, units } : null;
     };
 
+    const linkedProductStockTotal = (item) => {
+        let total = 0;
+        for (const product of linkedProductsForLabel(item)) {
+            const stock = Number(product?.stock);
+            if (Number.isFinite(stock)) total += Math.max(0, stock);
+        }
+        return total;
+    };
+
     const displayRowStock = (item) => {
         if (!item?.manage_stock) return null;
-        // Stock Received: always sum receipt rows (opening + batches), including average bundle.
         if (isReceivedLogPage) {
             return effectiveRowStock(item, true, rows);
         }
-        // Stock & Inventory (master rows): on-hand from `stock`, else sum of Stock Received rows.
         if (item.parent_id == null || item.parent_id === "") {
-            const onHand = inventoryOnHandForMaster(item, rows);
-            if (onHand != null) return onHand;
+            return linkedProductStockTotal(item);
         }
         return effectiveRowStock(item, false, rows);
     };
@@ -1522,16 +1517,33 @@ export default function AdminBarcodeQR() {
         list = list.filter((r) => matchesStockFilterSet(r, listFilters.applied, displayRowStock));
         list = list.filter((r) => matchesCategoryFilterSet(r, listFilters.applied));
         list = list.filter((r) => matchesConditionFilterSet(r, listFilters.applied));
-        list = list.filter((r) => matchesOriginFilterSet(r, listFilters.applied));
-        if (!isReceivedLogPage) {
-            list = list.filter((r) => matchesPriceUnitFilterSet(r, listFilters.applied));
-        }
         const { from, to } = yearMonthFilter.dateRange;
         if (from || to) {
             list = list.filter((r) => matchesDateInRange(r, from, to));
         }
+        if (listStockFilter !== "all") {
+            list = list.filter(
+                (r) => stockInventoryQuickStockBucket(r, displayRowStock) === listStockFilter,
+            );
+        }
+        list = sortStockInventoryRows(list, {
+            sortBy: listSortBy,
+            sortDir: listSortDir,
+            getStockQty: displayRowStock,
+            isReceivedLogPage,
+        });
         return list;
-    }, [searchFiltered, listFilters.applied, yearMonthFilter.dateRange, isReceivedLogPage, rows, products]);
+    }, [
+        searchFiltered,
+        listFilters.applied,
+        yearMonthFilter.dateRange,
+        isReceivedLogPage,
+        rows,
+        products,
+        listStockFilter,
+        listSortBy,
+        listSortDir,
+    ]);
 
     const masterRowsForFilters = useMemo(
         () => rows.filter((r) => r.parent_id == null || r.parent_id === ""),
@@ -1545,16 +1557,14 @@ export default function AdminBarcodeQR() {
             count: countStock((row) => matchesStockFilterSet(row, { stock: [opt.value] }, (item) => {
                 if (!item?.manage_stock) return null;
                 if (isReceivedLogPage) return effectiveRowStock(item, true, rows);
-                const onHand = inventoryOnHandForMaster(item, rows);
-                if (onHand != null) return onHand;
-                return effectiveRowStock(item, false, rows);
+                return linkedProductStockTotal(item);
             })),
         }));
 
         const categoryOpts = categories
             .map((c) => ({
                 value: String(c.id),
-                label: c.name || "—",
+                label: c.name || "â€”",
                 count: masterRowsForFilters.filter(
                     (row) => String(resolveItemCategoryId(row)) === String(c.id),
                 ).length,
@@ -1567,43 +1577,11 @@ export default function AdminBarcodeQR() {
             count: masterRowsForFilters.filter((row) => matchesConditionFilterSet(row, { condition: [opt.value] })).length,
         }));
 
-        const originSeen = new Map();
-        for (const row of masterRowsForFilters) {
-            const raw = String(row.origin || "").trim();
-            if (!raw) continue;
-            for (const part of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
-                if (!originSeen.has(part)) originSeen.set(part, formatOriginLabel(part));
-            }
-        }
-        const originOpts = [...originSeen.entries()]
-            .map(([value, label]) => ({
-                value,
-                label,
-                count: masterRowsForFilters.filter((row) => matchesOriginFilterSet(row, { origin: [value] })).length,
-            }))
-            .sort((a, b) => a.label.localeCompare(b.label));
-
-        const sections = [
+        return [
             { id: "stock", title: "Stock", options: stockOpts },
             { id: "category", title: "Categories", options: categoryOpts },
             { id: "condition", title: "Condition", options: conditionOpts },
-            { id: "origin", title: "Origin", options: originOpts },
         ];
-
-        if (!isReceivedLogPage) {
-            sections.push({
-                id: "priceUnit",
-                title: "Price unit",
-                options: STOCK_DRAWER_PRICE_OPTIONS.map((opt) => ({
-                    ...opt,
-                    count: masterRowsForFilters.filter(
-                        (row) => matchesPriceUnitFilterSet(row, { priceUnit: [opt.value] }),
-                    ).length,
-                })),
-            });
-        }
-
-        return sections;
     }, [categories, masterRowsForFilters, isReceivedLogPage, rows]);
 
     const hasDateInRangeFilter = yearMonthFilter.activeCount > 0;
@@ -1625,10 +1603,6 @@ export default function AdminBarcodeQR() {
         }
 
         const linked = linkedProductsForLabel(item);
-        const labelStock = effectiveRowStock(item, isReceivedLogPage, rows);
-        let remainingUnits = item?.manage_stock && labelStock != null
-            ? Math.max(0, labelStock)
-            : null;
         let total = 0;
         let count = 0;
         let units = 0;
@@ -1636,12 +1610,8 @@ export default function AdminBarcodeQR() {
             const price = Number(product?.price);
             if (!Number.isFinite(price)) continue;
             const stock = Number(product?.stock);
-            let qty = Number.isFinite(stock) ? Math.max(0, stock) : 1;
-            if (remainingUnits !== null) {
-                if (remainingUnits <= 0) break;
-                qty = Math.min(qty, remainingUnits);
-                remainingUnits -= qty;
-            }
+            const qty = Number.isFinite(stock) ? Math.max(0, stock) : 0;
+            if (qty <= 0) continue;
             total += price * qty;
             count += 1;
             units += qty;
@@ -1650,20 +1620,10 @@ export default function AdminBarcodeQR() {
         return count > 0 ? { amount: total, sourceCount: count, units } : null;
     };
 
-    const averageUnitPriceForLabel = (item) => {
-        if (!isAverageBundleLabel(item)) return null;
-        const catalog = linkedCatalogValuation(item);
-        if (catalog && catalog.units > 0) {
-            return catalog.amount / catalog.units;
-        }
-        const price = Number(averageBundleSellingUnitPrice(item));
-        return Number.isFinite(price) ? price : null;
-    };
-
-    const canShowPrintLabel = (item) => isAverageBundleLabel(item);
+    const canShowPrintLabel = () => false;
 
     const buildStockExportTable = () => {
-        const headers = ["Product", "Category", "Origin", "Stock", "Date In", "Status", "Price Unit", "Total Price"];
+        const headers = ["Product", "Category", "Stock", "Date In", "Status", "Total Price"];
         const rows = displayRows.map((r) => {
             const catLabel = formatCategoryLabel(resolveItemCategoryId(r), categories);
             const st = r.manage_stock ? (displayRowStock(r) ?? 0) : "";
@@ -1677,23 +1637,21 @@ export default function AdminBarcodeQR() {
                         : `${st} units`;
             const dateIn = effectiveDateIn(r);
             const status = getStockAgeStatus(dateIn).label;
-            const averageUnitPrice = averageUnitPriceForLabel(r);
             const totalPrice = totalPriceForLabel(r);
             return [
                 r.name || "",
-                catLabel === "—" ? "-" : catLabel,
-                formatOriginCsv(r.origin),
+                catLabel === "â€”" ? "-" : catLabel,
                 stockLabel,
                 isReceivedLogPage ? formatDateInWithTime(r) : formatDateIn(dateIn),
                 status,
-                averageUnitPrice != null ? `$${averageUnitPrice.toFixed(2)}` : "-",
-                totalPrice ? `$${totalPrice.amount.toFixed(2)} (${totalPrice.units} units)` : "-",
+                totalPrice ? `$${totalPrice.amount.toFixed(2)}` : "-",
             ];
         });
         return { headers, rows };
     };
 
     const exportStockReport = async (format) => {
+        if (!canViewStock) return;
         if (!displayRows.length) {
             await errorAlert({
                 enTitle: "Nothing to export",
@@ -1710,7 +1668,7 @@ export default function AdminBarcodeQR() {
                 format,
                 filename: `${baseName}-${stamp}`,
                 title: isReceivedLogPage ? "Stock Received Report" : "Stock & Inventory Report",
-                subtitle: `${rows.length} row${rows.length === 1 ? "" : "s"} · exported ${stamp}`,
+                subtitle: `${rows.length} row${rows.length === 1 ? "" : "s"} Â· exported ${stamp}`,
                 headers,
                 rows,
             });
@@ -1743,7 +1701,7 @@ export default function AdminBarcodeQR() {
         });
     };
 
-    /* ── Shared field styles ── */
+    /* â”€â”€ Shared field styles â”€â”€ */
     const inputCls =
         "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[rgba(var(--admin-primary-rgb),0.5)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.14)] dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-[rgba(var(--admin-primary-rgb),0.55)]";
     const textareaCls =
@@ -1752,7 +1710,7 @@ export default function AdminBarcodeQR() {
     const labelCls =
         "mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:text-slate-300";
 
-    /* ── Reusable product form fields (full-width two-column on create/edit) ── */
+    /* â”€â”€ Reusable product form fields (full-width two-column on create/edit) â”€â”€ */
     const renderFormFields = (data, setData, isEdit = false) => {
         const labelPreviewBg = data.label_color || "#475569";
         const previewPrice =
@@ -1775,10 +1733,7 @@ export default function AdminBarcodeQR() {
                 : "";
         const productCondition = data.product_condition || "new";
         const isSecondHand = productCondition === "second_hand";
-        const saleType = data.second_hand_sale_type || "single";
-        const isAverageBundle = isSecondHand && saleType === "average_bundle";
-        const usesSimpleTotalStock = !isAverageBundle;
-        const bundleUnitCost = calculateBundleUnitCost(data.bundle_total_cost, data.bundle_total_quantity);
+        const usesSimpleTotalStock = true;
 
         const hasAnyPhotos = Boolean(storedPrimaryImg || galleryUrls.length > 0);
         const confirmClearAllPhotos = async () => {
@@ -1857,7 +1812,7 @@ export default function AdminBarcodeQR() {
                                                     disabled={isUploading}
                                                     onClick={() => (isEdit ? editProductImageInputRef : productImageInputRef).current?.click()}
                                                     title="Click to replace photo"
-                                                    aria-label="Replace product photo — upload a new image"
+                                                    aria-label="Replace product photo â€” upload a new image"
                                                     className="relative h-full w-full cursor-pointer overflow-hidden rounded-t-xl border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--admin-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     <img
@@ -1943,10 +1898,10 @@ export default function AdminBarcodeQR() {
                                                         setData((s) => removeLeadingProductPhoto(s));
                                                     }}
                                                     className="absolute right-0 top-0 z-10 flex h-4 min-w-[1rem] items-center justify-center rounded-bl-md bg-slate-900/75 text-[9px] font-bold leading-none text-white opacity-95 hover:bg-red-600"
-                                                    aria-label="Remove primary photo — next thumbnail becomes main"
+                                                    aria-label="Remove primary photo â€” next thumbnail becomes main"
                                                     title="Remove"
                                                 >
-                                                    ×
+                                                    Ã—
                                                 </button>
                                             </div>
                                             {galleryThumbUrls.map((url, idx) => {
@@ -1984,7 +1939,7 @@ export default function AdminBarcodeQR() {
                                                             title="Remove from gallery"
                                                             aria-label="Remove this gallery photo"
                                                         >
-                                                            ×
+                                                            Ã—
                                                         </button>
                                                     </div>
                                                 );
@@ -2060,8 +2015,8 @@ export default function AdminBarcodeQR() {
                                 <label className={labelCls}>Product condition</label>
                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     {[
-                                        { value: "new", label: "New", hint: "ទំនិញថ្មី" },
-                                        { value: "second_hand", label: "Second-hand", hint: "ទំនិញមួយទឹក" },
+                                        { value: "new", label: "New", hint: "áž‘áŸ†áž“áž·áž‰ážáŸ’áž˜áž¸" },
+                                        { value: "second_hand", label: "Second-hand", hint: "áž‘áŸ†áž“áž·áž‰áž˜áž½áž™áž‘áž¹áž€" },
                                     ].map((option) => (
                                         <button
                                             key={option.value}
@@ -2086,69 +2041,9 @@ export default function AdminBarcodeQR() {
                             </div>
 
                             {isSecondHand && (
-                                <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-400/20 dark:bg-amber-500/10">
-                                    <div>
-                                        <label className={labelCls}>Sale type</label>
-                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                            {[
-                                                { value: "single", label: "Single Item", hint: "លក់រាយមួយៗ" },
-                                                { value: "average_bundle", label: "Average Bundle", hint: "លក់តម្លៃរួម" },
-                                            ].map((option) => (
-                                                <button
-                                                    key={option.value}
-                                                    type="button"
-                                                    onClick={() => setData((s) => applySecondHandBundleDefaults({
-                                                        ...s,
-                                                        second_hand_sale_type: option.value,
-                                                    }))}
-                                                    className={`rounded-xl border px-4 py-3 text-left transition ${saleType === option.value
-                                                        ? "border-amber-500 bg-white text-slate-900 ring-2 ring-amber-400/20 dark:bg-slate-900 dark:text-white"
-                                                        : "border-amber-200 bg-white/70 text-slate-700 hover:bg-white dark:border-amber-400/20 dark:bg-slate-900/50 dark:text-slate-200"
-                                                        }`}
-                                                >
-                                                    <span className="flex items-center gap-2 text-sm font-bold">
-                                                        <span className={`h-3 w-3 rounded-full border ${saleType === option.value ? "border-amber-500 bg-amber-500" : "border-slate-300 dark:border-slate-500"}`} />
-                                                        {option.label}
-                                                    </span>
-                                                    <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{option.hint}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {isAverageBundle && (
-                                        <div className="space-y-3">
-                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                                <div>
-                                                    <label className={labelCls}>Total bundle cost ($)</label>
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        step="0.01"
-                                                        value={data.bundle_total_cost || ""}
-                                                        onChange={(e) => setData((s) => applySecondHandBundleDefaults({ ...s, bundle_total_cost: e.target.value }))}
-                                                        className={inputCls}
-                                                        placeholder="150.00"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className={labelCls}>Total quantity</label>
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        value={data.bundle_total_quantity || ""}
-                                                        onChange={(e) => setData((s) => applySecondHandBundleDefaults({ ...s, bundle_total_quantity: e.target.value }))}
-                                                        className={inputCls}
-                                                        placeholder="50"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <p className="rounded-lg bg-white/80 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-slate-900/70 dark:text-amber-200">
-                                                System will set Cost ($) to {bundleUnitCost ? `$${bundleUnitCost}` : "$0.00"} from bundle cost ÷ quantity. On hand matches Total quantity for this bundle label.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
+                                <p className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-100">
+                                    Second-hand items are tracked and sold as single units.
+                                </p>
                             )}
                         </div>
 
@@ -2214,64 +2109,9 @@ export default function AdminBarcodeQR() {
                                 onChange={(e) => setData((s) => ({ ...s, description: e.target.value }))}
                                 rows={3}
                                 className={textareaCls}
-                                placeholder="Product description…"
+                                placeholder="Product descriptionâ€¦"
                             />
                         </div>
-
-                        {!usesSimpleTotalStock && (
-                            <div>
-                                <label className={labelCls}>Barcode Code</label>
-                                <div className="flex gap-2">
-                                    <input
-                                        value={data.barcode_code || ""}
-                                        onChange={(e) => setData((s) => ({ ...s, barcode_code: sanitizeCode(e.target.value) }))}
-                                        maxLength={30}
-                                        className={`${inputCls} flex-1 font-mono tracking-widest`}
-                                        placeholder="Custom code or auto-generate…"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setData((s) => ({ ...s, barcode_code: generateCode() }))}
-                                        className="px-3 py-2 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all whitespace-nowrap flex items-center gap-1.5"
-                                    >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                        </svg>
-                                        Auto
-                                    </button>
-                                </div>
-                                {(data.barcode_code || data.slug) && (
-                                    <div className="mt-2 p-2 bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col items-center overflow-hidden">
-                                        <Barcode
-                                            value={data.barcode_code || data.slug || "CODE"}
-                                            width={1.3}
-                                            height={42}
-                                            fontSize={10}
-                                            margin={4}
-                                            background="transparent"
-                                            lineColor={isDark ? "#e2e8f0" : "#1e293b"}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {isAverageBundle && (
-                            <div>
-                                <label className={labelCls}>Cost ($)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={bundleUnitCost}
-                                    disabled
-                                    className={`${inputCls} cursor-not-allowed opacity-60`}
-                                    placeholder="Auto-calculated from bundle"
-                                />
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    Cost is calculated from Total bundle cost divided by Total quantity.
-                                </p>
-                            </div>
-                        )}
 
                         {/* Unit */}
                         <div>
@@ -2301,7 +2141,7 @@ export default function AdminBarcodeQR() {
                     </div>
 
                     <div className="min-w-0 space-y-6 xl:col-span-5">
-                        {/* ── Stock ── */}
+                        {/* â”€â”€ Stock â”€â”€ */}
                         <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-5 ring-1 ring-slate-950/[0.02] dark:border-slate-700 dark:bg-slate-900 dark:ring-white/[0.03]">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
@@ -2342,13 +2182,10 @@ export default function AdminBarcodeQR() {
                                         min={0}
                                         value={data.stock ?? ""}
                                         onChange={(e) => setData((s) => ({ ...s, stock: e.target.value }))}
-                                        disabled={(!data.manage_stock && !usesSimpleTotalStock) || isAverageBundle}
-                                        className={`${inputCls} ${(!data.manage_stock && !usesSimpleTotalStock) || isAverageBundle ? "opacity-50 cursor-not-allowed" : ""}`}
+                                        disabled={!data.manage_stock && !usesSimpleTotalStock}
+                                        className={`${inputCls} ${!data.manage_stock && !usesSimpleTotalStock ? "opacity-50 cursor-not-allowed" : ""}`}
                                         placeholder="0"
                                     />
-                                    {isAverageBundle && (
-                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Auto-filled from Total quantity.</p>
-                                    )}
                                     {usesSimpleTotalStock && (
                                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">New and second-hand single items deduct from this count one unit at a time.</p>
                                     )}
@@ -2394,7 +2231,7 @@ export default function AdminBarcodeQR() {
                                             />
                                         </div>
                                         <p className={`text-xs font-medium ${parseInt(data.stock || 0, 10) <= parseInt(data.min_stock || 0, 10) ? "text-red-500" : "text-[color:var(--admin-primary)]"}`}>
-                                            {parseInt(data.stock || 0, 10) <= parseInt(data.min_stock || 0, 10) ? "⚠ Low stock" : "✓ Stock OK"}
+                                            {parseInt(data.stock || 0, 10) <= parseInt(data.min_stock || 0, 10) ? "âš  Low stock" : "âœ“ Stock OK"}
                                         </p>
                                     </div>
                                 )}
@@ -2407,6 +2244,182 @@ export default function AdminBarcodeQR() {
             </div>
         );
     };
+
+    const addStockLabelCls =
+        "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-600 dark:text-slate-400";
+    const addStockInputCls =
+        "h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.12)] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500";
+    const addStockTextareaCls =
+        "min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.12)] dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+
+    const renderAddStockItemForm = () => {
+        const productCondition = form.product_condition || "new";
+        const isSecondHand = productCondition === "second_hand";
+        const heroPhotoUrl = String(form.image_url || "").trim() || parseGallery(form.gallery || "").filter(Boolean)[0] || "";
+
+        return (
+            <div className="space-y-6">
+                <input
+                    ref={productImageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => handleImageUpload(e, false)}
+                />
+
+                <div>
+                    <label className={addStockLabelCls} htmlFor="add-stock-name">
+                        Stock name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                        id="add-stock-name"
+                        value={form.name}
+                        onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                        required
+                        className={addStockInputCls}
+                        placeholder="Enter stock name"
+                    />
+                    <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        Stock labels track inventory only. Set barcodes on each product (Variant Barcode for color/size items).
+                    </p>
+                </div>
+
+                <CategoryPicker
+                    categories={categories}
+                    value={form.category_id || ""}
+                    onChange={(id) => setForm((s) => ({ ...s, category_id: id }))}
+                    labelCls={addStockLabelCls}
+                    inputCls={addStockInputCls}
+                    disabled={isUploading}
+                    placeholder="e.g. Electronics, Apparel..."
+                />
+
+                <div>
+                    <label className={addStockLabelCls}>Product condition</label>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {[
+                            { value: "new", label: "New", hint: "áž‘áŸ†áž“áž·áž‰ážáŸ’áž˜áž¸" },
+                            { value: "second_hand", label: "Second-hand", hint: "áž‘áŸ†áž“áž·áž‰áž˜áž½áž™áž‘áž¹áž€" },
+                        ].map((option) => {
+                            const selected = productCondition === option.value;
+                            return (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => setForm((s) => applySecondHandBundleDefaults({
+                                        ...s,
+                                        product_condition: option.value,
+                                    }))}
+                                    className={`rounded-xl border px-4 py-4 text-left transition ${
+                                        selected
+                                            ? "border-[color:var(--admin-primary)] bg-[rgba(var(--admin-primary-rgb),0.06)] ring-1 ring-[rgba(var(--admin-primary-rgb),0.18)]"
+                                            : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600"
+                                    }`}
+                                >
+                                    <span className="flex items-center gap-2.5 text-sm font-bold text-slate-900 dark:text-slate-100">
+                                        <span
+                                            className={`h-4 w-4 rounded-full border-2 ${
+                                                selected
+                                                    ? "border-[color:var(--admin-primary)] bg-[color:var(--admin-primary)]"
+                                                    : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
+                                            }`}
+                                        />
+                                        {option.label}
+                                    </span>
+                                    <span className="mt-1.5 block pl-6 text-xs text-slate-500 dark:text-slate-400">{option.hint}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {isSecondHand ? (
+                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                            Second-hand items are tracked and sold as single units.
+                        </p>
+                    ) : null}
+                </div>
+
+                <div>
+                    <label className={addStockLabelCls}>Product image</label>
+                    <button
+                        type="button"
+                        disabled={isUploading}
+                        onClick={() => productImageInputRef.current?.click()}
+                        className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/70 px-6 py-10 text-center transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-slate-600 dark:hover:bg-slate-900/70"
+                    >
+                        {heroPhotoUrl ? (
+                            <img
+                                src={resolveImageUrl(heroPhotoUrl)}
+                                alt=""
+                                className="max-h-48 w-full rounded-lg object-contain"
+                            />
+                        ) : (
+                            <>
+                                <svg className="mb-3 h-10 w-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Click to upload a photo</p>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">PNG, JPG, WEBP â€” max 5 MB</p>
+                            </>
+                        )}
+                    </button>
+                </div>
+
+                <div>
+                    <label className={addStockLabelCls} htmlFor="add-stock-description">
+                        Description
+                    </label>
+                    <textarea
+                        id="add-stock-description"
+                        value={form.description || ""}
+                        onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
+                        rows={4}
+                        className={addStockTextareaCls}
+                        placeholder="Product description..."
+                    />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label className={addStockLabelCls} htmlFor="add-stock-unit">
+                            Unit
+                        </label>
+                        <select
+                            id="add-stock-unit"
+                            value={form.unit || ""}
+                            onChange={(e) => setForm((s) => ({ ...s, unit: e.target.value }))}
+                            className={addStockInputCls}
+                        >
+                            <option value="">Select unit</option>
+                            <option>Piece</option>
+                            <option>Pair</option>
+                            <option>Box</option>
+                            <option>Kg</option>
+                            <option>Liter</option>
+                            <option>Set</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className={addStockLabelCls} htmlFor="add-stock-date-in">
+                            Date in
+                        </label>
+                        <input
+                            id="add-stock-date-in"
+                            type="date"
+                            value={form.date_in || ""}
+                            onChange={(e) => setForm((s) => ({ ...s, date_in: e.target.value }))}
+                            className={addStockInputCls}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    if (!permissionsReady) return <AdminContentSkeleton lines={3} imageHeight={200} />;
+
+    if (!canViewStock) {
+        return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+    }
 
     if (loading) return <AdminContentSkeleton lines={3} imageHeight={200} />;
 
@@ -2422,87 +2435,6 @@ export default function AdminBarcodeQR() {
             )}
         </div>
     );
-
-    if (isNewPage) {
-        return (
-            <div className="w-full min-w-0 font-sans text-slate-950 dark:text-slate-100">
-                {successToast}
-                <div className="w-full min-w-0 space-y-6 pb-28">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                            <button
-                                type="button"
-                                onClick={() => navigate(stockBase)}
-                                disabled={isCreating}
-                                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                            >
-                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                </svg>
-                                Back
-                            </button>
-                            <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Add a product</h1>
-                                    <span className="inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-transparent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-600 dark:text-slate-400">
-                                        Stock &amp; Inventory
-                                    </span>
-                                </div>
-                                <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                                    Fill in the details below, then create your catalog item.
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            type="button"
-                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center self-start rounded-[5px] border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-                            title="Form tips: use a clear product name and price. Barcode can be auto-generated."
-                        >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </button>
-                    </div>
-                <div className="w-full min-w-0 pt-2">
-                    {err && (
-                        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50/95 p-4 dark:border-red-900/60 dark:bg-red-950/40">
-                            <span className="flex-1 text-sm font-medium text-red-700 dark:text-red-200">{err}</span>
-                            <button type="button" onClick={() => setErr("")} className="text-sm font-semibold text-red-500 hover:text-red-700">
-                                Dismiss
-                            </button>
-                        </div>
-                    )}
-                    <form onSubmit={create} className="space-y-2">
-                        {renderFormFields(form, setForm, false)}
-                        <div className="mt-10 flex max-w-none flex-col-reverse gap-3 border-t border-slate-200 pt-8 sm:flex-row dark:border-slate-800">
-                            <button
-                                type="button"
-                                onClick={() => navigate(stockBase)}
-                                disabled={isCreating}
-                                className={`flex-1 rounded-xl border py-3.5 text-sm font-semibold transition disabled:opacity-50 ${isDark
-                                    ? "border-slate-600 bg-slate-900/70 text-white hover:bg-slate-800"
-                                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                                    }`}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isCreating}
-                                className="flex-1 rounded-xl py-3.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50 "
-                                style={{
-                                    backgroundColor: accentIsWhite ? "#0b0b0f" : accentColor,
-                                }}
-                            >
-                                {isCreating ? "Creating…" : "Create product"}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-                </div>
-            </div>
-        );
-    }
 
     if (isEditPage && !editing) {
         return (
@@ -2571,6 +2503,7 @@ export default function AdminBarcodeQR() {
                             >
                                 Cancel
                             </button>
+                            {canEditStock ? (
                             <button
                                 type="button"
                                 onClick={saveEdit}
@@ -2578,6 +2511,7 @@ export default function AdminBarcodeQR() {
                             >
                                 Save changes
                             </button>
+                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -2585,6 +2519,191 @@ export default function AdminBarcodeQR() {
             </div>
         );
     }
+
+    const renderChosenProductsView = () => {
+        if (!linkedProductsItem) return null;
+
+        const linked = linkedProductsForLabel(linkedProductsItem);
+        const canonicalLabel = resolveCanonicalLabel(linkedProductsItem);
+        const isReceiveBatch = linkedProductsItem.parent_id != null;
+        const isAverageBundle = isAverageBundleLabel(linkedProductsItem);
+        const receiptUnits = isReceiveBatch && !isAverageBundle
+            ? (effectiveRowStock(linkedProductsItem, true, rows) ?? 0)
+            : null;
+        const catalogUnits = linked.reduce((sum, product) => {
+            const stock = Number(product?.stock);
+            return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
+        }, 0);
+        const allCategoriesForProducts = [...rows, ...categories];
+        const variantBarcodeEntries = barcodeEntriesForProducts(linked);
+
+        return (
+            <div className="w-full min-w-0 space-y-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <button
+                            type="button"
+                            onClick={closeChosenProducts}
+                            className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Back to {isReceivedLogPage ? "stock received" : "stock inventory"}
+                        </button>
+                        <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100 sm:text-2xl">
+                            {canonicalLabel?.name || linkedProductsItem.name || "Stock label"}
+                        </h1>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Click a product to see every color, size, qty, and variant barcode. Codes come from Products, not the stock label.
+                        </p>
+                        {isReceiveBatch && !isAverageBundle && linked.length > 0 && catalogUnits !== receiptUnits ? (
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {receiptUnits} units in this receipt ({catalogUnits} in catalog)
+                            </p>
+                        ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {variantBarcodeEntries.length > 0 ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowVariantBarcodesModal(true)}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-[5px] border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                            >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h4m-8 6h16M6 10h.01M6 14h.01M6 18h.01" />
+                                </svg>
+                                All barcodes ({variantBarcodeEntries.length})
+                            </button>
+                        ) : null}
+                        {isReceivedLogPage && canCreateProducts ? (
+                            <button
+                                type="button"
+                                onClick={goToAddProductForBatch}
+                                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[5px] border border-emerald-400 bg-emerald-500 px-3 text-sm font-medium text-white transition hover:bg-emerald-600"
+                            >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Add product
+                            </button>
+                        ) : null}
+                    </div>
+                </div>
+
+                <ProductCatalogPanel
+                    products={linked}
+                    categories={allCategoriesForProducts}
+                    suppliers={suppliers}
+                    accentColor={accentColor}
+                    accentIsWhite={accentIsWhite}
+                    isDark={isDark}
+                    loading={loading}
+                    storageKey="fitandsleek-stock-chosen-products-columns"
+                    sortStorageKey="fitandsleek-stock-chosen-products-sort"
+                    hideStockNameColumn
+                    hideBarcodeColumn
+                    includeUnitsInSummary
+                    variantBarcodesOnly
+                    onRefresh={() => load(yearMonthFilter.dateRange)}
+                    onProductClick={(product) => setSelectedLinkedProduct(product)}
+                    onEdit={canEditProducts ? (product) => {
+                        navigateToProducts({ edit: product.id });
+                    } : undefined}
+                    onDelete={canDeleteProducts ? deleteLinkedProduct : undefined}
+                    emptyState={(
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800/40">
+                            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                                {isReceiveBatch
+                                    ? `No catalog products linked to this receive batch yet.${receiptUnits > 0 ? ` (${receiptUnits} units received â€” use Add product to list items for sale.)` : ""}`
+                                    : "No POS products linked to this label yet."}
+                            </p>
+                            {isReceivedLogPage && canCreateProducts ? (
+                                <button
+                                    type="button"
+                                    onClick={goToAddProductForBatch}
+                                    className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600"
+                                >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add first product
+                                </button>
+                            ) : null}
+                        </div>
+                    )}
+                />
+
+                <AdminModal
+                    open={showVariantBarcodesModal}
+                    onClose={() => setShowVariantBarcodesModal(false)}
+                    title={`Barcodes — ${canonicalLabel?.name || linkedProductsItem.name || "Stock"}`}
+                    titleId="stock-variant-barcodes-title"
+                    maxWidthClass="max-w-5xl"
+                >
+                    {variantBarcodeEntries.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            No variant barcodes on linked products yet. Add them under Admin → Products (Variant Barcode on each color × size row).
+                        </p>
+                    ) : (
+                        <div className="max-h-[min(70vh,32rem)] overflow-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                            <table className="w-full min-w-[36rem] text-left text-sm">
+                                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                    <tr>
+                                        <th className="px-4 py-3">Product</th>
+                                        <th className="px-4 py-3">Color</th>
+                                        <th className="px-4 py-3">Size</th>
+                                        <th className="px-4 py-3">Variant barcode</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {variantBarcodeEntries.map((entry, idx) => (
+                                        <tr key={`${entry.productId}-${entry.barcode}-${idx}`} className="bg-white dark:bg-slate-900">
+                                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{entry.productName}</td>
+                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{entry.color || "—"}</td>
+                                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{entry.size || "—"}</td>
+                                            <td className="px-4 py-3">
+                                                <VariantBarcodePreview
+                                                    value={entry.barcode}
+                                                    format={entry.barcodeFormat}
+                                                    isDark={isDark}
+                                                    compact
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </AdminModal>
+
+                <ProductVariantDetailModal
+                    product={selectedLinkedProduct}
+                    open={Boolean(selectedLinkedProduct)}
+                    onClose={() => setSelectedLinkedProduct(null)}
+                    isDark={isDark}
+                    onEditProduct={(product) => {
+                        navigateToProducts({ edit: product.id });
+                    }}
+                />
+            </div>
+        );
+    };
+
+    const clearStockToolbarFilters = () => {
+        setSearch("");
+        setListStockFilter("all");
+    };
+
+    const clearStockListQueryFilters = () => {
+        clearStockToolbarFilters();
+        yearMonthFilter.clear();
+        listFilters.clearAll();
+        load({ from: "", to: "" });
+    };
+
+    const stockListTitle = isReceivedLogPage ? "All receive batches" : "All stock & inventory";
 
     return (
         <div className="font-sans text-slate-950 dark:text-slate-100">
@@ -2608,11 +2727,12 @@ export default function AdminBarcodeQR() {
                 busy={deleteBusy}
             />
 
+            {linkedProductsItem ? renderChosenProductsView() : (
             <div className="w-full min-w-0 space-y-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
                             <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-                                {isReceivedLogPage ? "Stock Received" : "Stock &amp; Inventory"}
+                                {isReceivedLogPage ? "Stock Received" : "Stock & Inventory"}
                             </h1>
                             <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
                                 {isReceivedLogPage
@@ -2621,6 +2741,7 @@ export default function AdminBarcodeQR() {
                             </p>
                         </div>
                         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+                            {canViewStock ? (
                             <AdminReportExportMenu
                                 label="Export"
                                 onExportPdf={() => exportStockReport("pdf")}
@@ -2630,22 +2751,23 @@ export default function AdminBarcodeQR() {
                                 mode={mode}
                                 className="[&_button]:h-9 [&_button]:rounded-[5px] [&_button]:px-3 [&_button]:text-sm"
                             />
-                            {!isReceivedLogPage ? (
+                            ) : null}
+                            {!isReceivedLogPage && canCreateStock ? (
                                 <button
                                     type="button"
-                                    onClick={() => navigate(`${stockBase}/new`)}
+                                    onClick={openCreateStockForm}
                                     className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[5px] bg-[color:var(--admin-primary)] px-3 text-sm font-medium text-white transition hover:brightness-110"
                                 >
                                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                     </svg>
-                                    Add Product
+                                    Add Stock
                                 </button>
                             ) : null}
                         </div>
                 </div>
 
-                {err && (
+                {err && !showCreateForm && (
                     <div className="flex items-center gap-3 rounded-3xl border border-red-200 bg-red-50/95 p-4 text-sm font-semibold text-red-700 shadow-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
                         <svg className="h-5 w-5 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -2659,134 +2781,157 @@ export default function AdminBarcodeQR() {
                     </div>
                 )}
 
-                <section className="rounded-[22px] border border-white/80 bg-white/85 p-3 shadow-[0_16px_44px_rgba(15,23,42,0.06)] ring-1 ring-slate-950/[0.03] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/85 dark:ring-white/10">
-                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="relative min-w-0 flex-1">
-                            <svg className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search products, SKU, barcode, or category..."
-                                className="h-11 w-full rounded-full border border-slate-200 bg-slate-50/80 pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none transition-all duration-300 placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(16,185,129,0.10)] dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-emerald-400/60 dark:focus:bg-slate-950/40"
-                            />
+                <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="space-y-3 border-b border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{stockListTitle}</h2>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <AdminFilterToolbarButton
+                                    activeCount={listFilters.activeCount + yearMonthFilter.activeCount}
+                                    onClick={() => {
+                                        yearMonthFilter.syncDraftFromApplied();
+                                        listFilters.openDrawer();
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => load()}
+                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                                >
+                                    Refresh
+                                </button>
+                            </div>
                         </div>
+                        <AdminListQueryToolbar
+                            controlsAlign="right"
+                            search={search}
+                            onSearchChange={setSearch}
+                            searchPlaceholder={
+                                isReceivedLogPage
+                                    ? "Search batch, SKU, category…"
+                                    : "Search products, SKU, barcode, category…"
+                            }
+                            stockFilter={listStockFilter}
+                            onStockFilterChange={setListStockFilter}
+                            stockOptions={STOCK_INVENTORY_STOCK_FILTER_OPTIONS}
+                            sortBy={listSortBy}
+                            onSortByChange={setListSortBy}
+                            sortOptions={STOCK_INVENTORY_SORT_OPTIONS}
+                            sortDir={listSortDir}
+                            onSortDirChange={setListSortDir}
+                            showingCount={displayRows.length}
+                            totalCount={rows.length}
+                            onClearFilters={clearStockToolbarFilters}
+                        />
 
-                        <AdminFilterToolbarButton
-                            activeCount={listFilters.activeCount + yearMonthFilter.activeCount}
-                            onClick={() => {
-                                yearMonthFilter.syncDraftFromApplied();
-                                listFilters.openDrawer();
+                        <AdminFilterDrawer
+                            open={listFilters.open}
+                            onClose={listFilters.closeDrawer}
+                            sections={stockFilterSections}
+                            selected={listFilters.draft}
+                            onToggle={listFilters.toggleDraft}
+                            onApply={() => {
+                                yearMonthFilter.apply();
+                                listFilters.apply();
+                                const range = yearMonthToDateRange(
+                                    yearMonthFilter.draft.year,
+                                    yearMonthFilter.draft.month,
+                                );
+                                load(range);
+                            }}
+                            onClearAll={clearStockListQueryFilters}
+                            yearMonth={{
+                                value: yearMonthFilter.draft,
+                                onChange: yearMonthFilter.setDraft,
+                                startYear: 2020,
+                                title: "Date in",
+                                hint: "Filter stock by date-in (received) on the label.",
                             }}
                         />
-                    </div>
 
-                    <AdminFilterDrawer
-                        open={listFilters.open}
-                        onClose={listFilters.closeDrawer}
-                        sections={stockFilterSections}
-                        selected={listFilters.draft}
-                        onToggle={listFilters.toggleDraft}
-                        onApply={() => {
-                            yearMonthFilter.apply();
-                            listFilters.apply();
-                            const range = yearMonthToDateRange(
-                                yearMonthFilter.draft.year,
-                                yearMonthFilter.draft.month,
-                            );
-                            load(range);
-                        }}
-                        onClearAll={() => {
-                            yearMonthFilter.clear();
-                            listFilters.clearAll();
-                            load({ from: "", to: "" });
-                        }}
-                        yearMonth={{
-                            value: yearMonthFilter.draft,
-                            onChange: yearMonthFilter.setDraft,
-                            startYear: 2020,
-                            title: "Date in",
-                            hint: "Filter stock by date-in (received) on the label.",
-                        }}
-                    />
-
-                    {(search || listFilters.activeCount > 0 || hasDateInRangeFilter) && (
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                            {search && (
-                                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/20">
-                                    Search: {search}
-                                </span>
-                            )}
-                            {listFilters.activeCount > 0 && (
-                                <button type="button" onClick={listFilters.clearAll} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
-                                    Filters ({listFilters.activeCount}) ×
-                                </button>
-                            )}
-                            {hasDateInRangeFilter && (
-                                <button type="button" onClick={clearDateInRange} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
-                                    {formatYearMonthLabel(yearMonthFilter.applied)} ×
-                                </button>
-                            )}
-                        </div>
-                    )}
-                </section>
-
-                {rows.length === 0 ? (
-                    <div className="rounded-[30px] border border-white/80 bg-white p-14 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10">
-                        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-[26px] bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">
-                            <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                        </div>
-                        <p className="text-xl font-black tracking-tight text-slate-950 dark:text-white">
-                            {isReceivedLogPage ? "No receive batches yet" : "No inventory items yet"}
-                        </p>
-                        <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-                            {isReceivedLogPage
-                                ? "Quick Restock from Stock & Inventory will appear here as receive batches."
-                                : "Add a stock label here first, then link POS products from Admin → Products (choose the label barcode or Stock label)."}
-                        </p>
-                        {!isReceivedLogPage ? (
-                            <button type="button" onClick={() => navigate(`${stockBase}/new`)} className="mt-6 rounded-2xl border border-emerald-400 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-6 py-3 text-sm font-black text-white shadow-[0_18px_42px_rgba(16,185,129,0.45)] ring-4 ring-emerald-500/15 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:via-emerald-500 hover:to-teal-500 hover:shadow-[0_22px_50px_rgba(16,185,129,0.55)] dark:border-emerald-300 dark:ring-emerald-400/20">
-                                Add product
-                            </button>
+                        {(search || listStockFilter !== "all" || listFilters.activeCount > 0 || hasDateInRangeFilter) ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                {search ? (
+                                    <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">
+                                        Search: {search}
+                                    </span>
+                                ) : null}
+                                {listStockFilter !== "all" ? (
+                                    <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">
+                                        Stock: {STOCK_INVENTORY_STOCK_FILTER_OPTIONS.find((o) => o.id === listStockFilter)?.label || listStockFilter}
+                                    </span>
+                                ) : null}
+                                {listFilters.activeCount > 0 ? (
+                                    <button type="button" onClick={listFilters.clearAll} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
+                                        Filters ({listFilters.activeCount}) ×
+                                    </button>
+                                ) : null}
+                                {hasDateInRangeFilter ? (
+                                    <button type="button" onClick={clearDateInRange} className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15">
+                                        {formatYearMonthLabel(yearMonthFilter.applied)} ×
+                                    </button>
+                                ) : null}
+                            </div>
                         ) : null}
                     </div>
-                ) : displayRows.length === 0 ? (
-                    <div className="rounded-[30px] border border-white/80 bg-white p-12 text-center shadow-[0_24px_70px_rgba(15,23,42,0.07)] ring-1 ring-slate-950/[0.03] dark:border-white/10 dark:bg-slate-900 dark:ring-white/10">
-                        <p className="text-lg font-black text-slate-950 dark:text-white">No items match this filter</p>
-                        <button type="button" onClick={listFilters.clearAll} className="mt-4 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white dark:text-slate-950">Clear filters</button>
-                    </div>
-                ) : (
-                    <section className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900">
-                        <div className="relative z-10 flex flex-col gap-2 px-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9a948a]">Products</p>
-                                <p className="mt-1 text-sm font-medium text-[#6b6b64] dark:text-slate-400">
-                                    {isReceivedLogPage
-                                        ? "Each row is one stock receipt. Tap to view linked products."
-                                        : "Tap a row to open label preview"}
-                                </p>
-                            </div>
-                            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">
-                                <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#6b6b64] ring-1 ring-[#ECE8DD] dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
-                                    {isReceivedLogPage ? `${displayRows.length} batches` : `${displayRows.length} products`}
+
+                    {rows.length === 0 ? (
+                        <div className="p-10 text-center text-slate-500 dark:text-slate-400">
+                            <p className="text-base font-semibold text-slate-800 dark:text-slate-200">
+                                {isReceivedLogPage ? "No receive batches yet" : "No inventory items yet"}
+                            </p>
+                            <p className="mt-2 text-sm">
+                                {isReceivedLogPage
+                                    ? "Quick Restock from Stock & Inventory will appear here as receive batches."
+                                    : "Add main stock here, then link products from Admin → Products."}
+                            </p>
+                            {!isReceivedLogPage && canCreateStock ? (
+                                <button
+                                    type="button"
+                                    onClick={openCreateStockForm}
+                                    className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[color:var(--admin-primary)] px-4 text-sm font-semibold text-white transition hover:brightness-110"
+                                >
+                                    Add stock
+                                </button>
+                            ) : null}
+                        </div>
+                    ) : displayRows.length === 0 ? (
+                        <div className="p-10 text-center text-slate-500 dark:text-slate-400">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200">No items match your filters</p>
+                            <button
+                                type="button"
+                                onClick={clearStockListQueryFilters}
+                                className="mt-3 font-semibold text-[color:var(--admin-primary)] hover:underline"
+                            >
+                                Clear filters
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                                {isReceivedLogPage
+                                    ? "Each row is one stock receipt. Tap to view linked products."
+                                    : "Tap a row to open label preview"}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                                    {isReceivedLogPage ? `${displayRows.length} batches` : `${displayRows.length} items`}
                                 </span>
-                                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">{trackedUnits} units</span>
-                                <div className="ml-auto sm:ml-0">
-                                    <TableColumnVisibilityMenu
-                                        columns={STOCK_TABLE_COLUMNS}
-                                        visibility={columnVisibility}
-                                        onToggle={toggleTableColumn}
-                                        onShowAll={() => setAllTableColumnsVisible(true)}
-                                        onHideAll={() => setAllTableColumnsVisible(false)}
-                                    />
-                                </div>
+                                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">
+                                    {trackedUnits} units
+                                </span>
+                                <TableColumnVisibilityMenu
+                                    columns={STOCK_TABLE_COLUMNS}
+                                    visibility={columnVisibility}
+                                    onToggle={toggleTableColumn}
+                                    onShowAll={() => setAllTableColumnsVisible(true)}
+                                    onHideAll={() => setAllTableColumnsVisible(false)}
+                                />
                             </div>
                         </div>
-                        <div className="overflow-x-auto rounded-b-2xl">
-                            <table className="w-full min-w-[1400px] border-collapse text-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[1100px] border-collapse text-sm">
                                 <thead>
                                     <tr className="border-y border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                                         {isColVisible("select") ? (
@@ -2797,19 +2942,16 @@ export default function AdminBarcodeQR() {
                                         {isColVisible("products") ? <th className="min-w-[340px] px-4 py-2">Products</th> : null}
                                         {isColVisible("category") ? <th id="bqr-category-anchor" className="w-40 px-4 py-2">Category</th> : null}
                                         {isColVisible("condition") ? <th className="min-w-[11.5rem] w-52 px-4 py-2 text-center">Condition</th> : null}
-                                        {isColVisible("origin") ? <th className="w-36 px-4 py-2">Origin</th> : null}
                                         {isColVisible("stock") ? <th className="w-36 px-4 py-2 text-center">Stock</th> : null}
                                         {isColVisible("dateIn") ? <th className={`px-4 py-2 ${isReceivedLogPage ? "w-36" : "w-44"}`}>Date in</th> : null}
                                         {isColVisible("status") ? <th className="w-32 px-4 py-2 text-center">Status</th> : null}
-                                        {isColVisible("priceUnit") ? <th className="w-28 px-4 py-2 text-right">Price unit</th> : null}
                                         {isColVisible("totalPrice") ? <th className="w-32 px-4 py-2 text-right">Total price</th> : null}
                                         {isColVisible("actions") ? <th className="w-28 px-4 py-2 text-right">Actions</th> : null}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {displayRows.map((item) => {
-                                        const barcodeVal = masterBarcodeForRow(item, rows) || slugify(item.name) || "ITEM";
-                                        const batchRef = isReceivedLogPage ? batchReceiptRefForRow(item, rows) : null;
+                                        const batchRef = isReceivedLogPage ? batchReceiptRefForRow(item) : null;
                                         const catLabel = formatCategoryLabel(resolveItemCategoryId(item), categories);
                                         const st = item.manage_stock ? displayRowStock(item) : null;
                                         const mn = item.manage_stock ? (parseInt(item.min_stock, 10) || 0) : 0;
@@ -2823,7 +2965,6 @@ export default function AdminBarcodeQR() {
                                         const dateIn = effectiveDateIn(item);
                                         const ageStatus = getStockAgeStatus(dateIn);
                                         const conditionDisplay = getProductConditionDisplay(item);
-                                        const averageUnitPrice = averageUnitPriceForLabel(item);
                                         const totalPrice = totalPriceForLabel(item);
                                         const showPrintLabel = canShowPrintLabel(item);
                                         const linkedProductRows = linkedProductsForLabel(item);
@@ -2839,39 +2980,21 @@ export default function AdminBarcodeQR() {
                                                 {isColVisible("products") ? (
                                                 <td className={cellClass}>
                                                     <div className="flex w-full max-w-xl min-w-0 items-start gap-3 p-1">
-                                                        <div className="group relative h-12 w-14 shrink-0">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => openChosenProducts(item)}
-                                                                className={`relative h-12 w-14 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950 ${canOpenChosenProducts(item) ? "cursor-pointer hover:ring-2 hover:ring-emerald-400/25" : "cursor-default"}`}
-                                                                title={canOpenChosenProducts(item) ? "Open chosen products" : undefined}
-                                                                aria-label={canOpenChosenProducts(item) ? `Open chosen products for ${item.name || "item"}` : `${item.name || "item"} product image`}
-                                                            >
-                                                                {listPhotoUrl ? (
-                                                                    <img src={resolveImageUrl(listPhotoUrl)} alt="" className="h-full w-full object-cover" />
-                                                                ) : (
-                                                                    <div className="flex h-full w-full origin-center scale-[0.85] items-center justify-center">
-                                                                        <Barcode value={barcodeVal} width={0.9} height={22} fontSize={8} margin={0} displayValue={false} format="CODE128" background="#ffffff" lineColor={isDark ? "#e2e8f0" : "#1e293b"} />
-                                                                    </div>
-                                                                )}
-                                                            </button>
-                                                            {!isReceivedLogPage ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(ev) => {
-                                                                        ev.stopPropagation();
-                                                                        openQuickRestockModal(item);
-                                                                    }}
-                                                                    className={BTN_QUICK_RESTOCK}
-                                                                    title="Quick Restock"
-                                                                    aria-label={`Quick restock ${item.name || "item"}`}
-                                                                >
-                                                                    <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" aria-hidden>
-                                                                        <path d="M12 5v14M5 12h14" />
-                                                                    </svg>
-                                                                </button>
-                                                            ) : null}
-                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openChosenProducts(item)}
+                                                            className={`h-12 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950 ${canOpenChosenProducts(item) ? "cursor-pointer hover:ring-2 hover:ring-emerald-400/25" : "cursor-default"}`}
+                                                            title={canOpenChosenProducts(item) ? "Open chosen products" : undefined}
+                                                            aria-label={canOpenChosenProducts(item) ? `Open chosen products for ${item.name || "item"}` : `${item.name || "item"} product image`}
+                                                        >
+                                                            {listPhotoUrl ? (
+                                                                <img src={resolveImageUrl(listPhotoUrl)} alt="" className="h-full w-full object-cover" />
+                                                            ) : (
+                                                                <div className="flex h-full w-full items-center justify-center text-sm font-bold text-slate-400 dark:text-slate-500">
+                                                                    {item.name?.charAt(0)?.toUpperCase() || "S"}
+                                                                </div>
+                                                            )}
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => openChosenProducts(item)}
@@ -2880,7 +3003,6 @@ export default function AdminBarcodeQR() {
                                                             <div className="truncate text-[15px] font-bold text-slate-900 dark:text-slate-100">
                                                                 {item.name}
                                                             </div>
-                                                            <div className="truncate font-mono text-xs text-[#8b857b] dark:text-slate-400">{barcodeVal}</div>
                                                             {batchRef ? (
                                                                 <div className="truncate font-mono text-[10px] text-emerald-700 dark:text-emerald-400" title="Receive batch ref">
                                                                     {batchRef}
@@ -2891,9 +3013,9 @@ export default function AdminBarcodeQR() {
                                                 </td>
                                                 ) : null}
                                                 {isColVisible("category") ? (
-                                                <td className={cellClass} title={catLabel === "—" ? "" : catLabel}>
+                                                <td className={cellClass} title={catLabel === "â€”" ? "" : catLabel}>
                                                     <span className="inline-flex max-w-[10rem] items-center rounded-full bg-[#F4EFE8] px-3 py-1.5 text-xs font-semibold text-[#6b4d24] ring-1 ring-[#ECE8DD] dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
-                                                        <span className="truncate">{catLabel === "—" ? "-" : catLabel}</span>
+                                                        <span className="truncate">{catLabel === "â€”" ? "-" : catLabel}</span>
                                                     </span>
                                                 </td>
                                                 ) : null}
@@ -2902,7 +3024,7 @@ export default function AdminBarcodeQR() {
                                                     {conditionDisplay.kind === "new" ? (
                                                         <span className={CONDITION_BADGE_NEW}>New</span>
                                                     ) : (
-                                                        <span className={CONDITION_CHIP_SECOND_HAND} title={`Second-hand · ${conditionDisplay.saleLabel}`}>
+                                                        <span className={CONDITION_CHIP_SECOND_HAND} title={`Second-hand Â· ${conditionDisplay.saleLabel}`}>
                                                             <span className="whitespace-nowrap text-amber-900 dark:text-amber-100">Second-hand</span>
                                                             <span className="h-3.5 w-px shrink-0 bg-amber-400/70 dark:bg-amber-300/50" aria-hidden />
                                                             <span className="whitespace-nowrap rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-sky-800 ring-1 ring-sky-200/80 dark:bg-sky-950/80 dark:text-sky-100 dark:ring-sky-400/40">
@@ -2910,11 +3032,6 @@ export default function AdminBarcodeQR() {
                                                             </span>
                                                         </span>
                                                     )}
-                                                </td>
-                                                ) : null}
-                                                {isColVisible("origin") ? (
-                                                <td className={`${cellClass} text-[13px] font-semibold text-slate-700 dark:text-slate-300`}>
-                                                    {formatOriginLabel(item.origin)}
                                                 </td>
                                                 ) : null}
                                                 {isColVisible("stock") ? (
@@ -2946,23 +3063,13 @@ export default function AdminBarcodeQR() {
                                                     </span>
                                                 </td>
                                                 ) : null}
-                                                {isColVisible("priceUnit") ? (
-                                                <td className={`${cellClass} text-right text-[15px] font-extrabold text-slate-900 tabular-nums dark:text-slate-100`}>
-                                                    {averageUnitPrice != null ? `$${averageUnitPrice.toFixed(2)}` : "-"}
-                                                </td>
-                                                ) : null}
                                                 {isColVisible("totalPrice") ? (
                                                 <td
                                                     className={`${cellClass} text-right tabular-nums`}
-                                                    title={totalPrice?.sourceCount ? `From ${totalPrice.sourceCount} linked product${totalPrice.sourceCount === 1 ? "" : "s"} · ${totalPrice.units} units` : totalPrice ? `${totalPrice.units} units` : ""}
+                                                    title={totalPrice?.sourceCount ? `From ${totalPrice.sourceCount} linked product${totalPrice.sourceCount === 1 ? "" : "s"}` : ""}
                                                 >
                                                     {totalPrice ? (
-                                                        <div className="flex flex-col items-end leading-tight">
-                                                            <span className="text-[15px] font-extrabold text-slate-900 dark:text-slate-100">${totalPrice.amount.toFixed(2)}</span>
-                                                            <span className="mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10">
-                                                                {totalPrice.units} units
-                                                            </span>
-                                                        </div>
+                                                        <span className="text-[15px] font-extrabold text-slate-900 dark:text-slate-100">${totalPrice.amount.toFixed(2)}</span>
                                                     ) : "-"}
                                                 </td>
                                                 ) : null}
@@ -2976,16 +3083,20 @@ export default function AdminBarcodeQR() {
                                                                 </svg>
                                                             </button>
                                                         ) : null}
+                                                        {canEditStock ? (
                                                         <button type="button" onClick={() => navigate(`${stockBase}/${item.id}/edit`)} className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10" title="Edit">
                                                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                             </svg>
                                                         </button>
+                                                        ) : null}
+                                                        {canDeleteStock ? (
                                                         <button type="button" onClick={() => del(item.id)} className="rounded-full border border-red-100 bg-red-50 p-2 text-red-600 hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300" title="Delete">
                                                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                             </svg>
                                                         </button>
+                                                        ) : null}
                                                     </div>
                                                 </td>
                                                 ) : null}
@@ -2995,283 +3106,66 @@ export default function AdminBarcodeQR() {
                                 </tbody>
                             </table>
                         </div>
-                    </section>
-                )}
+                        </>
+                    )}
+                </div>
             </div>
+            )}
 
-            {quickRestockItem && createPortal(
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4 sm:p-6">
-                    <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={closeQuickRestockModal} aria-hidden />
-                    <form
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="quick-restock-title"
-                        onSubmit={submitQuickRestock}
-                        className="relative my-auto w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl ring-1 ring-slate-950/[0.04] dark:border-slate-700/90 dark:bg-slate-900 dark:ring-white/[0.06]"
-                        onClick={(ev) => ev.stopPropagation()}
-                    >
-                        <div className="border-b border-slate-200/90 px-5 py-4 dark:border-slate-700/90 sm:px-7">
-                            <p className={QUICK_RESTOCK_MODAL_KICKER}>Quick Restock</p>
-                            <h3 id="quick-restock-title" className="mt-1 text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                                Receive stock
-                            </h3>
-                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Add units to inventory and log a Stock Received batch.</p>
-                        </div>
-                        <div className="space-y-4 p-5 sm:p-7">
-                            <div>
-                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Product</label>
-                                <input
-                                    type="text"
-                                    readOnly
-                                    value={quickRestockItem.name || ""}
-                                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3.5 text-sm font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200"
-                                />
+            <AdminModal
+                open={showCreateForm}
+                onClose={closeCreateStockForm}
+                title="Add stock item"
+                titleId="create-stock-item-form-title"
+                maxWidthClass="max-w-5xl"
+                closeOnBackdrop={!isCreating}
+            >
+                <p className="-mt-2 mb-6 text-sm font-medium text-[#183c6b]/90 dark:text-slate-400">
+                    Required fields are marked with an asterisk (*).
+                </p>
+                <form onSubmit={create} className="space-y-8">
+                    {renderAddStockItemForm()}
+                    <footer className="mt-2 border-t border-slate-200 pt-6 dark:border-slate-800">
+                        {err ? (
+                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
+                                {err}
                             </div>
-                            <div>
-                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Barcode</label>
-                                <input
-                                    type="text"
-                                    readOnly
-                                    value={quickRestockItem.slug || slugify(quickRestockItem.name) || ""}
-                                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3.5 font-mono text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-300"
-                                />
-                            </div>
-                            <div>
-                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Quantity to receive *</label>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    required
-                                    autoFocus
-                                    value={quickRestockForm.quantity}
-                                    onChange={(e) => setQuickRestockForm((s) => ({ ...s, quantity: e.target.value }))}
-                                    className={`${inputCls} px-3.5 font-semibold tabular-nums`}
-                                    placeholder="e.g. 500"
-                                />
-                            </div>
-                        </div>
-                        <div className="flex flex-col-reverse gap-2 border-t border-slate-200/90 bg-slate-50/80 px-5 py-4 dark:border-slate-700/90 dark:bg-slate-950/50 sm:flex-row sm:justify-end sm:px-7">
+                        ) : null}
+                        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                             <button
                                 type="button"
-                                onClick={closeQuickRestockModal}
-                                disabled={quickRestockBusy}
-                                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                onClick={closeCreateStockForm}
+                                disabled={isCreating}
+                                className="inline-flex h-11 min-w-[7rem] items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                disabled={quickRestockBusy}
-                                className={QUICK_RESTOCK_SUBMIT_BTN}
+                                disabled={isCreating || !canCreateStock}
+                                className="inline-flex h-11 min-w-[10rem] items-center justify-center gap-2 rounded-lg px-6 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                                style={{ backgroundColor: accentColor, color: accentIsWhite ? "#0b0b0f" : "#FFFFFF" }}
                             >
-                                {quickRestockBusy ? "Saving…" : "Save & receive"}
+                                {isCreating ? (
+                                    <AdminDashboardLoader size={22} />
+                                ) : (
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                )}
+                                {isCreating ? "Saving…" : "Save item"}
                             </button>
                         </div>
-                    </form>
-                </div>,
-                document.body,
-            )}
+                    </footer>
+                </form>
+            </AdminModal>
 
-            {linkedProductsItem && (() => {
-                const linked = linkedProductsForLabel(linkedProductsItem);
-                const canonicalLabel = resolveCanonicalLabel(linkedProductsItem);
-                const titleCode = labelBarcodeForItem(linkedProductsItem) || slugify(canonicalLabel?.name) || "";
-                const isReceiveBatch = linkedProductsItem.parent_id != null;
-                const isAverageBundle = isAverageBundleLabel(linkedProductsItem);
-                const receiptUnits = isReceiveBatch && !isAverageBundle
-                    ? (effectiveRowStock(linkedProductsItem, true, rows) ?? 0)
-                    : null;
-                const catalogUnits = linked.reduce((sum, product) => {
-                    const stock = Number(product?.stock);
-                    return sum + (Number.isFinite(stock) ? Math.max(0, stock) : 0);
-                }, 0);
-                const unitsLabel = isAverageBundle
-                    ? `${catalogUnits} unit${catalogUnits === 1 ? "" : "s"}`
-                    : isReceiveBatch
-                        ? `${receiptUnits} units in this receipt`
-                        : `${catalogUnits} units`;
-                return createPortal(
-                    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4 sm:p-6">
-                        <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={closeChosenProducts} aria-hidden />
-                        <div className="relative my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-2xl ring-1 ring-slate-950/[0.04] dark:border-slate-700/90 dark:bg-slate-900 dark:ring-white/[0.06]" role="dialog" aria-modal="true">
-                            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200/90 bg-white/90 px-5 py-4 backdrop-blur-sm dark:border-slate-700/90 dark:bg-slate-900/90 sm:px-7">
-                                <div className="min-w-0">
-                                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Chosen Products</p>
-                                    <h3 className="mt-1 truncate text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                                        {canonicalLabel?.name || linkedProductsItem.name || "Stock label"}
-                                    </h3>
-                                    <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
-                                        {linkedProductsItem.parent_id != null ? (
-                                            <>
-                                                Receive batch: <span className="font-semibold text-slate-700 dark:text-slate-200">{linkedProductsItem.slug || "—"}</span>
-                                                {" · "}Scan label: <span className="font-semibold text-slate-700 dark:text-slate-200">{titleCode || "—"}</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                Label barcode: <span className="font-semibold text-slate-700 dark:text-slate-200">{titleCode || "—"}</span>
-                                            </>
-                                        )}
-                                        {" · "}{linked.length} product{linked.length === 1 ? "" : "s"} · {unitsLabel}
-                                        {isReceiveBatch && !isAverageBundle && linked.length > 0 && catalogUnits !== receiptUnits ? (
-                                            <span className="text-slate-400 dark:text-slate-500"> ({catalogUnits} in catalog)</span>
-                                        ) : null}
-                                    </p>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                    {isReceivedLogPage ? (
-                                        <button
-                                            type="button"
-                                            onClick={goToAddProductForBatch}
-                                            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 px-3.5 text-sm font-bold text-white transition hover:bg-emerald-600"
-                                        >
-                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                            </svg>
-                                            Add product
-                                        </button>
-                                    ) : null}
-                                    <button
-                                        type="button"
-                                        onClick={closeChosenProducts}
-                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-slate-400 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                        aria-label="Close"
-                                    >
-                                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
-                                {linked.length === 0 ? (
-                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center dark:border-slate-700 dark:bg-slate-800/40">
-                                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                                            {isReceiveBatch
-                                                ? `No catalog products linked to this receive batch yet.${receiptUnits > 0 ? ` (${receiptUnits} units received — use Add first product below to list items for sale.)` : ""}`
-                                                : "No POS products linked to this label yet."}
-                                        </p>
-                                        {isReceivedLogPage ? (
-                                            <button
-                                                type="button"
-                                                onClick={goToAddProductForBatch}
-                                                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-emerald-400 bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-600"
-                                            >
-                                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                                </svg>
-                                                Add first product
-                                            </button>
-                                        ) : null}
-                                    </div>
-                                ) : (
-                                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full min-w-[980px] border-collapse text-sm">
-                                                <thead>
-                                                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:bg-white/5 dark:text-slate-400">
-                                                        <th className="px-4 py-3">Product</th>
-                                                        <th className="px-4 py-3">Barcode</th>
-                                                        <th className="px-4 py-3">Category</th>
-                                                        <th className="px-4 py-3 text-right">Price</th>
-                                                        <th className="px-4 py-3 text-right">Stock</th>
-                                                        <th className="w-28 px-4 py-3 text-center">Date in</th>
-                                                        <th className="px-4 py-3 text-center">Status</th>
-                                                        <th className="px-4 py-3 text-right">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {linked.map((product) => {
-                                                        const productStock = Number(product?.stock);
-                                                        const productPrice = Number(product?.price);
-                                                        const productCategory = product?.category?.name || formatCategoryLabel(product?.category_id, categories);
-                                                        return (
-                                                            <tr key={product.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                                                                <td className="px-4 py-3">
-                                                                    <div className="flex min-w-0 items-center gap-3">
-                                                                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                                                                            {product.image_url ? (
-                                                                                <img src={resolveImageUrl(product.image_url)} alt="" className="h-full w-full object-cover" />
-                                                                            ) : (
-                                                                                <div className="flex h-full w-full items-center justify-center text-xs font-bold text-slate-400">IMG</div>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="min-w-0">
-                                                                            <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{product.name || "Product"}</p>
-                                                                            <p className="truncate text-xs font-semibold text-slate-400 dark:text-slate-500">{product.brand?.name || "No brand"}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-4 py-3 font-mono text-xs text-slate-500 dark:text-slate-400">{product.sku || "-"}</td>
-                                                                <td className="px-4 py-3 text-sm font-medium text-slate-600 dark:text-slate-300">{productCategory === "—" ? "-" : productCategory}</td>
-                                                                <td className="px-4 py-3 text-right text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100">
-                                                                    {Number.isFinite(productPrice) ? `$${productPrice.toFixed(2)}` : "-"}
-                                                                </td>
-                                                                <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-300">
-                                                                    {Number.isFinite(productStock) ? productStock : 0}
-                                                                </td>
-                                                                <td className="px-4 py-3 text-center tabular-nums">
-                                                                    <DateInCell
-                                                                        item={{
-                                                                            date_in: product?.date_in ?? linkedProductsItem?.date_in,
-                                                                            created_at: product?.created_at ?? linkedProductsItem?.created_at,
-                                                                        }}
-                                                                        showTime
-                                                                    />
-                                                                </td>
-                                                                <td className="px-4 py-3 text-center">
-                                                                    <span className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${product.is_active ? "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20" : "bg-slate-100 text-slate-600 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10"}`}>
-                                                                        {product.is_active ? "Active" : "Inactive"}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-4 py-3 text-right">
-                                                                    <div className="inline-flex items-center justify-end gap-2">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setLinkedProductsItem(null);
-                                                                                navigate(`/admin/products?edit=${product.id}`);
-                                                                            }}
-                                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/10"
-                                                                            title="Edit product"
-                                                                            aria-label={`Edit ${product.name || "product"}`}
-                                                                        >
-                                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                                            </svg>
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => deleteLinkedProduct(product)}
-                                                                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
-                                                                            title="Delete product"
-                                                                            aria-label={`Delete ${product.name || "product"}`}
-                                                                        >
-                                                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                            </svg>
-                                                                        </button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>,
-                    document.body
-                );
-            })()}
-
-            {/* ── Print Preview Modal ── */}
+            {/* Print Preview Modal */}
             {previewItem && canShowPrintLabel(previewItem) && (() => {
-                const barcodeVal = previewItem.slug || slugify(previewItem.name) || "ITEM";
+                const barcodeVal = stockNumberForLabel(previewItem, rows) || "ITEM";
+                const hasScannableNumber = Boolean(stockNumberForLabel(previewItem, rows));
                 const qrVal = `${window.location.origin}/category/${previewItem.slug || previewItem.id}`;
-                const showBarcode = appearance.showBarcode !== false;
+                const showBarcode = hasScannableNumber && appearance.showBarcode !== false;
                 const showQR = !!appearance.showQR;
                 const codesDual = showBarcode && showQR;
                 const rotateStyle = appearance.rotation ? { transform: `rotate(${appearance.rotation}deg)`, display: "inline-block" } : {};
@@ -3335,7 +3229,7 @@ export default function AdminBarcodeQR() {
                                 </button>
                             </div>
 
-                            {/* Body — min-h-0 so the settings column can shrink and scroll */}
+                            {/* Body â€” min-h-0 so the settings column can shrink and scroll */}
                             <div className="grid min-h-0 flex-1 divide-y divide-slate-200/90 dark:divide-slate-700/90 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:grid-rows-1 lg:divide-x lg:divide-y-0 lg:overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
 
                                 {/* Left: live preview + print button */}
@@ -3491,7 +3385,7 @@ export default function AdminBarcodeQR() {
                                     </button>
                                 </div>
 
-                                {/* Right: settings — single visual system (tabs + one list-style card per view) */}
+                                {/* Right: settings â€” single visual system (tabs + one list-style card per view) */}
                                 <div className={printForm.settingsCol}>
                                     <div className={`${printForm.tabWrap} shrink-0 border-b border-slate-200/90 dark:border-slate-700/90`}>
                                         <div className={printForm.tabRail} role="tablist" aria-label="Label settings">
@@ -3577,7 +3471,7 @@ export default function AdminBarcodeQR() {
                                                     />
                                                 </div>
 
-                                                <div className={printForm.strip}>Colors &amp; rotation</div>
+                                                <div className={printForm.strip}>Colors & rotation</div>
                                                 <div className={`${printForm.block} ${printForm.switchRow}`}>
                                                     <span className={printForm.label}>Line color</span>
                                                     <label className="relative h-11 w-11 cursor-pointer overflow-hidden rounded-full border-2 border-slate-200 transition hover:ring-2 hover:ring-slate-300/80 dark:border-slate-600 dark:hover:ring-slate-500/50">
@@ -3612,10 +3506,10 @@ export default function AdminBarcodeQR() {
                                                         onChange={(e) => setAppearance((s) => ({ ...s, rotation: parseInt(e.target.value, 10) }))}
                                                         className={printForm.select}
                                                     >
-                                                        <option value={0}>Normal (0°)</option>
-                                                        <option value={90}>90°</option>
-                                                        <option value={180}>180°</option>
-                                                        <option value={270}>270°</option>
+                                                        <option value={0}>Normal (0Â°)</option>
+                                                        <option value={90}>90Â°</option>
+                                                        <option value={180}>180Â°</option>
+                                                        <option value={270}>270Â°</option>
                                                     </select>
                                                 </div>
 
@@ -3701,7 +3595,7 @@ export default function AdminBarcodeQR() {
                                                 </div>
                                                 <div className={`${printForm.block} ${printForm.switchRow}`}>
                                                     <div className="min-w-0 pr-2">
-                                                        <p className={printForm.label}>Show name &amp; price</p>
+                                                        <p className={printForm.label}>Show name & price</p>
                                                         <p className={printForm.hint}>Title block above the barcode.</p>
                                                     </div>
                                                     <button
@@ -3733,13 +3627,13 @@ export default function AdminBarcodeQR() {
                                                         onChange={(e) => setAppearance((s) => ({ ...s, format: e.target.value }))}
                                                         className={`${printForm.select} !mt-0`}
                                                     >
-                                                        <option value="CODE128">CODE 128 — any text</option>
-                                                        <option value="CODE39">CODE 39 — alphanumeric</option>
-                                                        <option value="EAN13">EAN-13 — 12 digits</option>
-                                                        <option value="EAN8">EAN-8 — 7 digits</option>
-                                                        <option value="UPC">UPC-A — 11 digits</option>
-                                                        <option value="ITF14">ITF-14 — 14 digits</option>
-                                                        <option value="pharmacode">Pharmacode — numeric</option>
+                                                        <option value="CODE128">CODE 128 â€” any text</option>
+                                                        <option value="CODE39">CODE 39 â€” alphanumeric</option>
+                                                        <option value="EAN13">EAN-13 â€” 12 digits</option>
+                                                        <option value="EAN8">EAN-8 â€” 7 digits</option>
+                                                        <option value="UPC">UPC-A â€” 11 digits</option>
+                                                        <option value="ITF14">ITF-14 â€” 14 digits</option>
+                                                        <option value="pharmacode">Pharmacode â€” numeric</option>
                                                         <option value="codabar">Codabar</option>
                                                     </select>
                                                     <p className={`${printForm.hint} mt-2`}>

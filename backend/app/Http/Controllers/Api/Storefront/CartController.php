@@ -6,29 +6,43 @@ use App\Http\Controllers\Controller;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Product;
+use App\Services\InventoryLotService;
 use App\Services\ProductVariantInventory;
+use App\Services\StorefrontEventService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
-    private function resolveUnitPrice(Product $product): float
+    public function __construct(
+        private StorefrontEventService $eventService,
+        private InventoryLotService $inventoryLots,
+    ) {
+    }
+
+    private function resolveUnitPrice(Product $product, ?string $size = null, ?string $color = null): float
     {
-        return (float) ($product->final_price ?? $product->price ?? 0);
+        $product->loadMissing('activeDiscount');
+
+        return $this->inventoryLots->resolveStorefrontCustomerPrice($product, $size, $color);
     }
 
     private function existingVariantQuantity(int $cartId, int $productId, ?string $size, ?string $color): int
     {
         $q = CartItem::where('cart_id', $cartId)->where('product_id', $productId);
         if ($size !== null && $size !== '') {
-            $q->where('size', $size);
+            $q->whereRaw('LOWER(TRIM(size)) = ?', [mb_strtolower(trim($size))]);
         } else {
-            $q->whereNull('size');
+            $q->where(function ($w) {
+                $w->whereNull('size')->orWhere('size', '');
+            });
         }
         if ($color !== null && $color !== '') {
-            $q->where('color', $color);
+            $q->whereRaw('LOWER(TRIM(color)) = ?', [mb_strtolower(trim($color))]);
         } else {
-            $q->whereNull('color');
+            $q->where(function ($w) {
+                $w->whereNull('color')->orWhere('color', '');
+            });
         }
 
         return (int) $q->sum('quantity');
@@ -54,7 +68,7 @@ class CartController extends Controller
         $total = 0;
         foreach ($cart->items as $i) {
             if ($i->product) {
-                $i->unit_price = $this->resolveUnitPrice($i->product);
+                $i->unit_price = $this->resolveUnitPrice($i->product, $i->size, $i->color);
             }
             $total += (float) $i->unit_price * (int) $i->quantity;
         }
@@ -93,7 +107,7 @@ class CartController extends Controller
         }
 
         DB::transaction(function () use ($cartId, $product, $qty, $size, $color) {
-            $unitPrice = $this->resolveUnitPrice($product);
+            $unitPrice = $this->resolveUnitPrice($product, $size, $color);
 
             /** @var \App\Models\CartItem|null $item */
             $item = CartItem::where('cart_id', $cartId)
@@ -121,6 +135,15 @@ class CartController extends Controller
             ]);
         });
 
+        $this->eventService->track(
+            'add_to_cart',
+            $userId,
+            $request->header('X-Session-Id') ?: null,
+            (int) $product->id,
+            null,
+            ['quantity' => $qty, 'size' => $size, 'color' => $color]
+        );
+
         return $this->show($request);
     }
 
@@ -141,15 +164,19 @@ class CartController extends Controller
             $otherQty = CartItem::where('cart_id', $cartId)
                 ->where('product_id', $item->product_id)
                 ->where('id', '!=', $item->id);
-            if ($item->size !== null && $item->size !== '') {
-                $otherQty->where('size', $item->size);
+            if ($item->size !== null && trim((string) $item->size) !== '') {
+                $otherQty->whereRaw('LOWER(TRIM(size)) = ?', [mb_strtolower(trim((string) $item->size))]);
             } else {
-                $otherQty->whereNull('size');
+                $otherQty->where(function ($w) {
+                    $w->whereNull('size')->orWhere('size', '');
+                });
             }
-            if ($item->color !== null && $item->color !== '') {
-                $otherQty->where('color', $item->color);
+            if ($item->color !== null && trim((string) $item->color) !== '') {
+                $otherQty->whereRaw('LOWER(TRIM(color)) = ?', [mb_strtolower(trim((string) $item->color))]);
             } else {
-                $otherQty->whereNull('color');
+                $otherQty->where(function ($w) {
+                    $w->whereNull('color')->orWhere('color', '');
+                });
             }
             $otherQty = (int) $otherQty->sum('quantity');
             if ($otherQty + $newQty > $stock) {
@@ -161,7 +188,7 @@ class CartController extends Controller
 
         $item->quantity = $newQty;
         if ($product) {
-            $item->unit_price = $this->resolveUnitPrice($product);
+            $item->unit_price = $this->resolveUnitPrice($product, $item->size, $item->color);
         }
         $item->save();
 

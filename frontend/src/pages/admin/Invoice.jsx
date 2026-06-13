@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import api from "../../lib/api";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { useHomepageSettings } from "../../state/homepageSettings";
 import { resolveImageUrl } from "../../lib/images";
 import { AdminPageLoader } from "@/components/admin/AdminLoading";
@@ -15,6 +17,8 @@ function money(value) {
 
 export default function AdminInvoicePage() {
  const { orderId } = useParams();
+ const { user, can, permissionsReady, canPath } = useAdminPermissions();
+ const canViewOrders = can("orders", "view");
  const { settings } = useHomepageSettings();
  const [invoice, setInvoice] = useState(null);
  const [loading, setLoading] = useState(true);
@@ -71,6 +75,11 @@ export default function AdminInvoicePage() {
  };
 
  useEffect(() => {
+ if (!permissionsReady || !canViewOrders) {
+  setLoading(false);
+  setInvoice(null);
+  return;
+ }
  (async () => {
  setLoading(true);
  setError("");
@@ -83,13 +92,17 @@ export default function AdminInvoicePage() {
  setLoading(false);
  }
  })();
- }, [orderId]);
+ }, [orderId, permissionsReady, canViewOrders]);
 
  const isPaid = useMemo(() => invoice?.payment_status === "PAID", [invoice]);
  const logoUrl = settings?.app_logo_url || settings?.header?.logo_url || "/logo.png";
  const fallbackLogoUrl = resolveImageUrl("/logo.png");
 
- if (loading) return <AdminPageLoader />;
+ if (!permissionsReady || loading) return <AdminPageLoader />;
+
+ if (!canViewOrders) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  if (error || !invoice) {
  return (
@@ -102,7 +115,11 @@ export default function AdminInvoicePage() {
  return (
  <div className="min-h-screen bg-slate-100 dark:bg-slate-950 print:bg-white print:p-0">
  <div className="mb-4 flex w-full min-w-0 flex-wrap items-center justify-between gap-3 print:hidden">
+ {canPath("/admin/orders") ? (
  <Link to="/admin/orders" className="text-sm font-semibold text-slate-700 dark:text-slate-200 underline">Back to Orders</Link>
+ ) : (
+ <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Invoice</span>
+ )}
  <div className="flex items-center gap-2">
  <label className="text-sm text-slate-600 dark:text-slate-300">Paper</label>
  <select

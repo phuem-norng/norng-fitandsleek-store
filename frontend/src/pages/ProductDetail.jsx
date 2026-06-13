@@ -23,7 +23,13 @@ import { useCart } from "../state/cart";
 import { useWishlist } from "../state/wishlist";
 import ProductCard from "../components/shop/ProductCard.jsx";
 import { useLanguage } from "../lib/i18n.jsx";
-import { clientVariantMaxQty, matrixQtyForCombo, parseVariantMatrix } from "../lib/variantMatrix.js";
+import {
+  matrixQtyForCombo,
+  parseVariantMatrix,
+  remainingSellableQty,
+  sellableQtyForVariantLine,
+} from "../lib/variantMatrix.js";
+import { hasStorefrontAdminDiscount, resolveStorefrontPriceDisplay } from "../lib/storefrontLotPrice.js";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -270,31 +276,8 @@ export default function ProductDetail() {
     if (!p) {
       return { sale: 0, compare: null, pctLabel: null };
     }
-    const activeDisc = p.active_discount ?? p.activeDiscount;
-    const sale = Number(p.discount?.sale_price ?? activeDisc?.sale_price ?? p.price ?? 0);
-    const onSale = Boolean(p.discount || activeDisc);
-    const compareRaw = onSale
-      ? Number(p.discount?.original_price ?? p.price ?? 0)
-      : p.compare_at_price != null
-        ? Number(p.compare_at_price)
-        : null;
-    const compare = compareRaw != null && compareRaw > sale ? compareRaw : null;
-
-    let pctLabel = null;
-    if (onSale) {
-      const isPct = p.discount?.type === "percentage" || activeDisc?.discount_type === "percentage";
-      if (isPct) {
-        const v = Math.round(Number(p.discount?.value ?? activeDisc?.discount_value ?? 0));
-        if (v > 0) pctLabel = `-${v}%`;
-      } else if (typeof p.discount?.discount_percentage === "number" && p.discount.discount_percentage > 0) {
-        pctLabel = `-${Math.round(p.discount.discount_percentage)}%`;
-      } else if (compare != null && compare > sale) {
-        pctLabel = `-${Math.round(((compare - sale) / compare) * 100)}%`;
-      }
-    }
-
-    return { sale, compare, pctLabel };
-  }, [p]);
+    return resolveStorefrontPriceDisplay(p, selectedSize || null, selectedColor || null);
+  }, [p, selectedSize, selectedColor]);
 
   useEffect(() => {
     if (!p || !usesVariantMatrix || !selectedColor) return;
@@ -308,10 +291,19 @@ export default function ProductDetail() {
 
   const deliveryInfo = p?.delivery_info || t('deliveryFromToDays');
   const supportPhone = p?.support_phone || "+855 12 345 678";
-  const maxQty = useMemo(
-    () => clientVariantMaxQty(p, selectedColor, selectedSize),
+  const stockCap = useMemo(
+    () => sellableQtyForVariantLine(p, selectedColor, selectedSize),
     [p, selectedColor, selectedSize]
   );
+  const maxQty = useMemo(
+    () => remainingSellableQty(p, selectedColor, selectedSize, cart.cart?.items),
+    [p, selectedColor, selectedSize, cart.cart?.items]
+  );
+
+  useEffect(() => {
+    if (maxQty <= 0) return;
+    setQty((current) => Math.min(Math.max(1, current), maxQty));
+  }, [maxQty, selectedColor, selectedSize]);
   const backToImageSearch = Boolean(location.state?.fromImageSearch);
   const backTarget = location.state?.backTo || "/image-search";
   const fromOrder = Boolean(location.state?.fromOrder);
@@ -369,7 +361,7 @@ export default function ProductDetail() {
   const add = async () => {
     setStockError("");
     if (maxQty <= 0) {
-      await showStockLimitAlert({ stock: 0, requestedQuantity: qty });
+      await showStockLimitAlert({ stock: stockCap, requestedQuantity: qty });
       return;
     }
     if (qty > maxQty) {
@@ -398,7 +390,10 @@ export default function ProductDetail() {
       const msg = String(e?.message || "");
       if (msg.includes("STOCK_LIMIT")) {
         setStockError("Stock limit reached for this product.");
-        await showStockLimitAlert({ stock: extractStockCount(msg, Number(p?.stock || 0)), requestedQuantity: qty });
+        await showStockLimitAlert({
+          stock: extractStockCount(msg, maxQty || stockCap),
+          requestedQuantity: qty,
+        });
         return;
       }
       if (msg.includes("LOGIN_REQUIRED")) {
@@ -567,7 +562,7 @@ export default function ProductDetail() {
 
   if (loading) {
     return (
-      <div className="container-safe py-8 md:py-10">
+      <div className="container-safe-inset py-8 md:py-10">
         <div className="animate-pulse border border-zinc-200 bg-white p-6 md:p-8">
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-14">
             <div className="flex flex-col gap-4 md:flex-row md:gap-4">
@@ -592,14 +587,14 @@ export default function ProductDetail() {
 
   if (!p) {
     return (
-      <div className="container-safe py-10">
+      <div className="container-safe-inset py-10">
         <div className="fs-card p-10 text-center text-sm text-zinc-600">{t('productNotFound')}</div>
       </div>
     );
   }
 
   return (
-    <div className="container-safe py-8">
+    <div className="container-safe-inset py-8">
       {backToImageSearch && (
         <div className="flex justify-end mb-6">
           <button
@@ -691,7 +686,7 @@ export default function ProductDetail() {
                       e.stopPropagation();
                       setActiveImage((prev) => (prev - 1 + images.length) % images.length);
                     }}
-                    className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center border border-zinc-200 bg-white/95 shadow-sm transition hover:bg-white md:left-4 md:h-10 md:w-10"
+                    className="fs-carousel-nav-btn absolute left-3 top-1/2 -translate-y-1/2 md:left-4"
                     aria-label="Previous image"
                   >
                     <ChevronLeft className="h-5 w-5" strokeWidth={2} />
@@ -702,7 +697,7 @@ export default function ProductDetail() {
                       e.stopPropagation();
                       setActiveImage((prev) => (prev + 1) % images.length);
                     }}
-                    className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center border border-zinc-200 bg-white/95 shadow-sm transition hover:bg-white md:right-4 md:h-10 md:w-10"
+                    className="fs-carousel-nav-btn absolute right-3 top-1/2 -translate-y-1/2 md:right-4"
                     aria-label="Next image"
                   >
                     <ChevronRight className="h-5 w-5" strokeWidth={2} />
@@ -739,8 +734,8 @@ export default function ProductDetail() {
                 ) : null}
               </div>
 
-              {(p.discount?.end_date || p.active_discount?.end_date || p.activeDiscount?.end_date) &&
-              (p.discount || p.active_discount || p.activeDiscount) ? (
+              {hasStorefrontAdminDiscount(p) &&
+              (p.discount?.end_date || p.active_discount?.end_date || p.activeDiscount?.end_date) ? (
                 <p className="mt-2 text-xs font-medium text-amber-800">{t("limitedTime")}</p>
               ) : null}
             </div>

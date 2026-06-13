@@ -32,6 +32,7 @@ export function useAdminYearMonthFilter(startYear = 2020, initialApplied = EMPTY
     draft,
     setDraft,
     applied,
+    setApplied,
     apply,
     clear,
     syncDraftFromApplied,

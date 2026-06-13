@@ -7,20 +7,34 @@ use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\ShipmentTrackingEvent;
 use App\Models\User;
+use App\Services\LoyaltyService;
+use App\Services\StorefrontEventService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class OrderObserver
 {
+    public function __construct(
+        private LoyaltyService $loyaltyService,
+        private StorefrontEventService $eventService
+    ) {
+    }
+
     public function updated(Order $order): void
     {
-        $statusPaid = $order->isDirty('status') && $order->status === 'paid';
-        $paymentPaid = $order->isDirty('payment_status') && $order->payment_status === 'paid';
+        $statusPaid = $order->wasChanged('status') && $order->status === 'paid';
+        $paymentPaid = $order->wasChanged('payment_status') && $order->payment_status === 'paid';
 
         if (! $statusPaid && ! $paymentPaid) {
             return;
         }
+
+        $this->loyaltyService->applyPurchase($order);
+        $this->eventService->track('purchase', $order->user_id ? (int) $order->user_id : null, null, null, (int) $order->id, [
+            'total' => (float) $order->total,
+            'payment_status' => (string) $order->payment_status,
+        ]);
 
         if ($order->shipment) {
             return;

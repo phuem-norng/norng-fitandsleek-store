@@ -7,6 +7,7 @@ import { useCart } from "../state/cart.jsx";
 import { ShoppingCart } from "lucide-react";
 import Swal, { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../lib/swal";
 import ReplacementRequestModal from "../components/ReplacementRequestModal.jsx";
+import ExternalCourierTrackButton from "../components/ExternalCourierTrackButton.jsx";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -112,7 +113,7 @@ export default function Orders() {
   };
 
   return (
-    <div className="container-safe py-8">
+    <div className="container-safe-inset py-8">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">{t('myOrders')}</h1>
@@ -171,6 +172,21 @@ export default function Orders() {
                   </Link>
                 ))}
               </div>
+
+              {o.shipment?.external_tracking_url ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <ExternalCourierTrackButton
+                    url={o.shipment.external_tracking_url}
+                    provider={o.shipment.provider}
+                    label={t("trackPackage") || "Track package"}
+                  />
+                  {o.shipment.tracking_code ? (
+                    <span className="text-xs text-zinc-500 font-mono">
+                      {t("trackingNumber")}: {o.shipment.tracking_code}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="mt-4 flex flex-wrap gap-2 justify-end">
                 <button

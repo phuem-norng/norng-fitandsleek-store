@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
+import AdminSaveToast, { AdminFormErrorBanner, flashAdminMessage } from '../components/admin/AdminFormToast.jsx';
 
 export default function PublicHomepageManager() {
   const [activeTab, setActiveTab] = useState('sections');
@@ -43,7 +44,7 @@ export default function PublicHomepageManager() {
       { label: 'Contact Us', link: '/contact' },
     ],
     tracking: [
-      { label: 'Track Order', link: '/track-order' },
+      { label: 'Track Order', link: '/profile?tab=track' },
       { label: 'Returns', link: '/returns' },
       { label: 'Shipping Info', link: '/shipping' },
     ],
@@ -66,14 +67,11 @@ export default function PublicHomepageManager() {
           setHeaderSettings(response.data.header || headerSettings);
           setFooterSettings(response.data.footer || footerSettings);
           setFooterSections(response.data.footer_sections || footerSections);
-          setSuccess('✅ Settings loaded successfully!');
         }
       } catch (err) {
         console.warn('Using default settings:', err.message);
-        setSuccess('📝 Using default settings');
       } finally {
         setLoading(false);
-        setTimeout(() => setSuccess(''), 3000);
       }
     };
 
@@ -141,8 +139,7 @@ export default function PublicHomepageManager() {
       setLoading(true);
       setError('');
       await api.put('/admin/homepage-settings/sections', { sections });
-      setSuccess('✅ Homepage sections saved successfully!');
-      setTimeout(() => setSuccess(''), 3000);
+      flashAdminMessage(setSuccess, 'Section settings saved successfully.');
     } catch (err) {
       console.error('Save error:', err);
       if (err.response?.status === 401) {
@@ -160,8 +157,7 @@ export default function PublicHomepageManager() {
       setLoading(true);
       setError('');
       await api.put('/admin/homepage-settings/header', headerSettings);
-      setSuccess('✅ Header settings saved successfully!');
-      setTimeout(() => setSuccess(''), 3000);
+      flashAdminMessage(setSuccess, 'Header settings saved successfully.');
     } catch (err) {
       console.error('Save error:', err);
       if (err.response?.status === 401) {
@@ -182,8 +178,7 @@ export default function PublicHomepageManager() {
         api.put('/admin/homepage-settings/footer', footerSettings),
         api.put('/admin/homepage-settings/footer-sections', { footer_sections: footerSections })
       ]);
-      setSuccess('✅ Footer settings saved successfully!');
-      setTimeout(() => setSuccess(''), 3000);
+      flashAdminMessage(setSuccess, 'Footer settings saved successfully.');
     } catch (err) {
       console.error('Save error:', err);
       if (err.response?.status === 401) {
@@ -205,18 +200,8 @@ export default function PublicHomepageManager() {
           <p className="text-gray-600">Manage all homepage content: sections, header, and footer</p>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-            <button onClick={() => setError('')} className="ml-4 text-sm font-semibold hover:underline">Dismiss</button>
-          </div>
-        )}
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
-            {success}
-          </div>
-        )}
+        <AdminSaveToast message={success} />
+        <AdminFormErrorBanner error={error} onDismiss={() => setError('')} />
 
         {/* Tabs */}
         <div className="mb-6 flex gap-2 border-b border-gray-200 flex-wrap">

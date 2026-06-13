@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Navigate } from "react-router-dom";
 import ChartResizeMenu from "../../components/admin/ChartResizeMenu.jsx";
 import api from "../../lib/api";
 import { errorAlert, toastSuccess } from "../../lib/swal";
@@ -32,29 +33,19 @@ import {
   reportAxisTickProps,
 } from "../../components/admin/ReportChartUI.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import RevenueDashboard from "../../components/admin/RevenueDashboard.jsx";
 import StockDashboard from "../../components/admin/StockDashboard.jsx";
 import PlanDashboard from "../../components/admin/PlanDashboard.jsx";
 import AdminReportExportMenu from "../../components/admin/AdminReportExportMenu.jsx";
 import { downloadBlobResponse, parseBlobErrorMessage } from "../../lib/adminReportDownload.js";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import { ADMIN_NUMBER_FORMAT, formatNumber, formatUsd, formatUsdFull } from "../../lib/adminNumberFormat.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, "0");
 const fmtDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-const compactUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-const fullUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function truncateChartLabel(value, max = 26) {
   const s = String(value || "").trim();
@@ -300,6 +291,8 @@ function StatCard({ title, value, subtext, icon, iconBoxStyle, index = 0, isDark
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Reports() {
+  const { user, can, permissionsReady } = useAdminPermissions();
+  const canViewReports = can("reports", "view");
   const { primaryColor, mode } = useTheme();
   const { iconBoxStyle } = useAdminAccents();
   const accentColor = primaryColor;
@@ -323,13 +316,14 @@ export default function Reports() {
   const [period, setPeriod] = useState("28d");
   const [loading, setLoading] = useState(true);
 
-  const [prodByCatSpan, setProdByCatSpan] = useState(1);
-  const [prodByCountrySpan, setProdByCountrySpan] = useState(1);
-  const [top10Span, setTop10Span] = useState(1);
-  const [catRevenueSpan, setCatRevenueSpan] = useState(1);
-  const [topCatSpan, setTopCatSpan] = useState(1);
-  const [orderStatusSpan, setOrderStatusSpan] = useState(1);
-  const [orderCatSpan, setOrderCatSpan] = useState(1);
+  const [prodByCatSpan, setProdByCatSpan] = useAdminUiPreference("charts.reports.prodByCatSpan", 1);
+  const [prodByCountrySpan, setProdByCountrySpan] = useAdminUiPreference("charts.reports.prodByCountrySpan", 1);
+  const [top10Span, setTop10Span] = useAdminUiPreference("charts.reports.top10Span", 1);
+  const [catRevenueSpan, setCatRevenueSpan] = useAdminUiPreference("charts.reports.catRevenueSpan", 1);
+  const [topCatSpan, setTopCatSpan] = useAdminUiPreference("charts.reports.topCatSpan", 1);
+  const [orderStatusSpan, setOrderStatusSpan] = useAdminUiPreference("charts.reports.orderStatusSpan", 1);
+  const [orderCatSpan, setOrderCatSpan] = useAdminUiPreference("charts.reports.orderCatSpan", 1);
+  const [numberFormat] = useAdminUiPreference("dashboard.numberFormat", ADMIN_NUMBER_FORMAT.COMPACT);
 
   const [chartFrom, setChartFrom] = useState("");
   const [chartTo, setChartTo] = useState("");
@@ -350,6 +344,10 @@ export default function Reports() {
   }, []);
 
   const load = async () => {
+    if (!canViewReports) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const periodParams = buildSalesParams(period, chartFrom, chartTo);
@@ -417,12 +415,17 @@ export default function Reports() {
   }, []);
 
   useEffect(() => {
+    if (!permissionsReady || !canViewReports) {
+      setLoading(false);
+      return;
+    }
     if (period === "custom" && (!chartFrom || !chartTo)) return;
     load();
-  }, [period, chartFrom, chartTo]);
+  }, [period, chartFrom, chartTo, permissionsReady, canViewReports]);
 
   const handleGenerate = async (e) => {
     e.preventDefault();
+    if (!canViewReports) return;
     if (!dateFrom || !dateTo) {
       await errorAlert({
         khTitle: "កាលបរិច្ឆេទមិនគ្រប់",
@@ -463,6 +466,7 @@ export default function Reports() {
   };
 
   const downloadGeneratedReport = async (format) => {
+    if (!canViewReports) return;
     if (!(await ensureReportDateRange())) return;
     setExportBusy(true);
     try {
@@ -607,6 +611,14 @@ export default function Reports() {
       }),
     [sales]
   );
+
+  if (!permissionsReady || (loading && !dashboard)) {
+    return <AdminContentSkeleton rows={8} />;
+  }
+
+  if (!canViewReports) {
+    return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+  }
 
   const isDark = mode === "dark";
 
@@ -856,8 +868,8 @@ export default function Reports() {
               <StatCard
                 index={0}
                 title={`Revenue · ${periodLabel(period)}`}
-                value={`$${(dashboard?.revenue?.total || 0).toLocaleString()}`}
-                subtext={`Today: $${(dashboard?.revenue?.today || 0).toLocaleString()}`}
+                value={formatUsd(dashboard?.revenue?.total || 0, numberFormat)}
+                subtext={`Today: ${formatUsd(dashboard?.revenue?.today || 0, numberFormat)}`}
                 icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 iconBoxStyle={iconBoxStyle(0)}
                 isDark={isDark}
@@ -865,8 +877,8 @@ export default function Reports() {
               <StatCard
                 index={1}
                 title={`Orders · ${periodLabel(period)}`}
-                value={dashboard?.orders?.total || 0}
-                subtext={`${dashboard?.orders?.pending || 0} pending · ${dashboard?.orders?.completed || 0} completed`}
+                value={formatNumber(dashboard?.orders?.total || 0, numberFormat)}
+                subtext={`${formatNumber(dashboard?.orders?.pending || 0, numberFormat)} pending · ${formatNumber(dashboard?.orders?.completed || 0, numberFormat)} completed`}
                 icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 iconBoxStyle={iconBoxStyle(1)}
                 isDark={isDark}
@@ -883,8 +895,8 @@ export default function Reports() {
               <StatCard
                 index={3}
                 title={`Customers · ${periodLabel(period)}`}
-                value={dashboard?.customers?.total || 0}
-                subtext={`${dashboard?.customers?.new_this_month || 0} new in period`}
+                value={formatNumber(dashboard?.customers?.total || 0, numberFormat)}
+                subtext={`${formatNumber(dashboard?.customers?.new_this_month || 0, numberFormat)} new in period`}
                 icon="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
                 iconBoxStyle={iconBoxStyle(3)}
                 isDark={isDark}
@@ -928,7 +940,7 @@ export default function Reports() {
                         tick={reportAxisTickProps(reportTheme)}
                         axisLine={reportAxisLineProps(reportTheme)}
                         tickLine={reportAxisLineProps(reportTheme)}
-                        tickFormatter={(v) => compactUsd.format(Number(v))}
+                        tickFormatter={(v) => formatUsd(Number(v), numberFormat)}
                         domain={[0, (max) => (max <= 0 ? 1 : max * 1.08)]}
                       />
                       <Tooltip
@@ -938,7 +950,7 @@ export default function Reports() {
                             {...props}
                             theme={reportTheme}
                             label={props.payload?.[0]?.payload?.dateLong}
-                            formatLine={(e) => fullUsd.format(Number(e.value) || 0)}
+                            formatLine={(e) => formatUsdFull(Number(e.value) || 0)}
                           />
                         )}
                       />
@@ -1067,7 +1079,7 @@ export default function Reports() {
                                   theme={reportTheme}
                                   label={props.payload?.[0]?.payload?.fullName}
                                   formatLine={(e) =>
-                                    e.dataKey === "revenue" ? fullUsd.format(Number(e.value) || 0) : `${e.value} units`
+                                    e.dataKey === "revenue" ? formatUsdFull(Number(e.value) || 0) : `${e.value} units`
                                   }
                                 />
                               )}
@@ -1083,7 +1095,7 @@ export default function Reports() {
                       <ReportLegendPills
                         rows={topSellingChartData.map((row) => ({ name: row.fullName, fill: row.fill, key: row.productId, unitsSold: row.unitsSold, revenue: row.revenue }))}
                         theme={reportTheme}
-                        formatValue={(row) => `${row.unitsSold} · ${fullUsd.format(row.revenue)}`}
+                        formatValue={(row) => `${row.unitsSold} · ${formatUsdFull(row.revenue)}`}
                       />
                     </>
                   )}
@@ -1094,7 +1106,7 @@ export default function Reports() {
             {/* ── Category Analysis ────────────────────────────────────────── */}
             <ReportSection
               title="Category Analysis"
-              subtitle={`${fullUsd.format(categorySales.total_revenue || 0)} revenue · ${categorySales.total_units || 0} units · ${periodLabel(period)}`}
+              subtitle={`${formatUsdFull(categorySales.total_revenue || 0)} revenue · ${categorySales.total_units || 0} units · ${periodLabel(period)}`}
               theme={reportTheme}
             >
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -1113,15 +1125,15 @@ export default function Reports() {
                       data={categoryRevenueDonutData}
                       dataKey="revenue"
                       centerTitle="Revenue"
-                      centerValue={fullUsd.format(categorySales.total_revenue || 0)}
+                      centerValue={formatUsdFull(categorySales.total_revenue || 0)}
                       theme={reportTheme}
                       legendRows={categoryRevenueDonutData}
-                      formatLegendValue={(row) => `${fullUsd.format(row.revenue)} (${row.percentage}%)`}
+                      formatLegendValue={(row) => `${formatUsdFull(row.revenue)} (${row.percentage}%)`}
                       tooltipContent={(props) => (
                         <ReportChartTooltip
                           {...props}
                           theme={reportTheme}
-                          formatLine={(e) => `${fullUsd.format(Number(e.payload?.revenue ?? e.value) || 0)} (${e.payload?.percentage ?? 0}%)`}
+                          formatLine={(e) => `${formatUsdFull(Number(e.payload?.revenue ?? e.value) || 0)} (${e.payload?.percentage ?? 0}%)`}
                         />
                       )}
                     />
@@ -1154,7 +1166,7 @@ export default function Reports() {
                             interval={0}
                           />
                           <YAxis yAxisId="units" tick={reportAxisTickProps(reportTheme)} axisLine={reportAxisLineProps(reportTheme)} tickLine={reportAxisLineProps(reportTheme)} allowDecimals={false} width={44} />
-                          <YAxis yAxisId="revenue" orientation="right" tick={reportAxisTickProps(reportTheme)} axisLine={reportAxisLineProps(reportTheme)} tickLine={reportAxisLineProps(reportTheme)} tickFormatter={(v) => compactUsd.format(Number(v))} width={64} />
+                          <YAxis yAxisId="revenue" orientation="right" tick={reportAxisTickProps(reportTheme)} axisLine={reportAxisLineProps(reportTheme)} tickLine={reportAxisLineProps(reportTheme)} tickFormatter={(v) => formatUsd(Number(v), numberFormat)} width={64} />
                           <Tooltip
                             cursor={{ fill: reportTheme.cursor }}
                             content={(props) => (
@@ -1163,7 +1175,7 @@ export default function Reports() {
                                 theme={reportTheme}
                                 label={props.payload?.[0]?.payload?.name}
                                 formatLine={(e) =>
-                                  e.dataKey === "revenue" ? fullUsd.format(Number(e.value) || 0) : `${e.value} units`
+                                  e.dataKey === "revenue" ? formatUsdFull(Number(e.value) || 0) : `${e.value} units`
                                 }
                               />
                             )}

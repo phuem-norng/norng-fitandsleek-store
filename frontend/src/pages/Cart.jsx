@@ -4,8 +4,6 @@ import { useCart } from "../state/cart";
 import { useAuth } from "../state/auth";
 import { resolveImageUrl } from "../lib/images";
 import { useLanguage } from "../lib/i18n.jsx";
-import { setupTelegramBackButton, setupTelegramMainButton, triggerTelegramHaptic } from "../lib/telegramWebApp";
-
 function Money({ value }) {
   const n = Number(value || 0);
   return <span>${n.toFixed(2)}</span>;
@@ -17,36 +15,32 @@ export default function CartPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const nav = useNavigate();
+  const [loyalty, setLoyalty] = React.useState(null);
 
   React.useEffect(() => {
-    const safeTotal = Number(total || 0);
-    const checkoutLabel = `${t("checkout") || "Checkout"} • $${safeTotal.toFixed(2)}`;
-
-    const goCheckout = () => {
-      triggerTelegramHaptic("impact", "light");
-      if (!user) {
-        window.dispatchEvent(new Event("fs:open-login"));
-        return;
+    let mounted = true;
+    if (!user) {
+      setLoyalty(null);
+      return undefined;
+    }
+    (async () => {
+      try {
+        const { data } = await api.get("/user/loyalty");
+        if (!mounted) return;
+        setLoyalty(data?.data || null);
+      } catch {
+        if (!mounted) return;
+        setLoyalty(null);
       }
-      nav("/checkout");
-    };
-    const goBack = () => nav(-1);
-
-    const cleanupMain = setupTelegramMainButton({
-      text: checkoutLabel,
-      onClick: goCheckout,
-      color: "#111111",
-      textColor: "#FFFFFF",
-      isVisible: items.length > 0,
-      isEnabled: !loading,
-    });
-    const cleanupBack = setupTelegramBackButton({ onClick: goBack, isVisible: true });
-
+    })();
     return () => {
-      cleanupMain();
-      cleanupBack();
+      mounted = false;
     };
-  }, [items.length, loading, nav, t, total, user]);
+  }, [user]);
+
+  const loyaltyPercent = Number(loyalty?.discount_percent || 0);
+  const loyaltyDiscountAmount = loyaltyPercent > 0 ? (Number(total || 0) * loyaltyPercent) / 100 : 0;
+  const loyaltyTotal = Math.max(Number(total || 0) - loyaltyDiscountAmount, 0);
 
   const getPriceMeta = (item) => {
     const unitPaid = Number(item?.unit_price || item?.product?.final_price || item?.product?.price || 0);
@@ -65,7 +59,7 @@ export default function CartPage() {
   };
 
   return (
-    <div className="container-safe py-8">
+    <div className="container-safe-inset py-8">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Cart</h1>
@@ -162,12 +156,17 @@ export default function CartPage() {
           </div>
           <div className="mt-2 flex items-center justify-between text-sm">
             <span className="text-zinc-600">{t('shipping')}</span>
-            <span className="font-semibold">$0.00</span>
+            <span className="font-semibold text-zinc-500">{t('calculatedAtCheckout') || "At checkout"}</span>
           </div>
           <div className="mt-4 border-t border-zinc-200 pt-4 flex items-center justify-between">
             <span className="text-sm font-semibold text-zinc-700">{t('total')}</span>
-            <span className="text-lg font-black"><Money value={total} /></span>
+            <span className="text-lg font-black"><Money value={loyaltyPercent > 0 ? loyaltyTotal : total} /></span>
           </div>
+          {loyaltyPercent > 0 ? (
+            <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {String(loyalty?.tier || "member").toUpperCase()} loyalty discount ({loyaltyPercent}%): -${loyaltyDiscountAmount.toFixed(2)}
+            </div>
+          ) : null}
 
           <Link
             to="/checkout"

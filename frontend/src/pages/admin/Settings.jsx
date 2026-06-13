@@ -1,9 +1,16 @@
 import React, { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { ADMIN_BRAND_PRIMARY, useTheme } from "../../state/theme.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import AdminSaveToast, { AdminFormErrorBanner, flashAdminMessage } from "../../components/admin/AdminFormToast.jsx";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 export default function Settings() {
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewGeneralSettings = can("general_settings", "view");
+ const canEditGeneralSettings = can("general_settings", "edit");
  const [settings, setSettings] = useState({});
  const [loading, setLoading] = useState(true);
  const [saving, setSaving] = useState(false);
@@ -37,6 +44,10 @@ export default function Settings() {
  const accentIsWhite = (accentColor || "").toUpperCase() === "#FFFFFF";
 
  const loadSettings = async () => {
+ if (!canViewGeneralSettings) {
+ setLoading(false);
+ return;
+ }
  setLoading(true);
  try {
  const res = await api.get("/admin/settings");
@@ -64,9 +75,17 @@ export default function Settings() {
  }
  };
 
- useEffect(() => { loadSettings(); }, []);
+ useEffect(() => {
+ if (!permissionsReady) return;
+ if (!canViewGeneralSettings) {
+ setLoading(false);
+ return;
+ }
+ loadSettings();
+ }, [permissionsReady, canViewGeneralSettings]);
 
  const save = async () => {
+ if (!canEditGeneralSettings) return;
  setSaving(true);
  setError("");
  try {
@@ -83,8 +102,7 @@ export default function Settings() {
  await api.put("/admin/settings/bulk", { settings: settingsArray });
  saveTheme(normalizedThemeMode, normalizedThemeColor);
  setForm(payloadForm);
- setSuccess("Settings saved successfully!");
- setTimeout(() => setSuccess(""), 3000);
+ flashAdminMessage(setSuccess, "General settings saved successfully.");
  loadSettings();
  } catch (e) {
  setError(e.response?.data?.message || "Failed to save settings");
@@ -94,10 +112,12 @@ export default function Settings() {
  };
 
  const handleChange = (key, value) => {
+ if (!canEditGeneralSettings) return;
  setForm(s => ({ ...s, [key]: value }));
  };
 
  const handleThemeModeChange = (nextMode) => {
+ if (!canEditGeneralSettings) return;
  const modeValue = nextMode === "dark" ? "dark" : "light";
  setMode(modeValue);
  handleChange("admin_theme_mode", modeValue);
@@ -109,7 +129,11 @@ export default function Settings() {
  handleChange("admin_primary_color", colorValue);
  };
 
- if (loading) return <AdminContentSkeleton lines={3} imageHeight={180} />;
+ if (!permissionsReady || loading) return <AdminContentSkeleton lines={3} imageHeight={180} />;
+
+ if (!canViewGeneralSettings) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  const inputClass =
  "w-full h-11 rounded-2xl border border-slate-200/70 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/60 px-4 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-[rgba(var(--admin-primary-rgb),0.18)] focus:border-[var(--admin-primary)] transition";
@@ -126,23 +150,8 @@ export default function Settings() {
  <p className="text-slate-500 dark:text-slate-400 mt-1">Configure your store behavior, branding, and legal content.</p>
  </div>
 
- {success && (
- <div className="rounded-2xl border border-[rgba(var(--admin-primary-rgb),0.3)] dark:border-[rgba(var(--admin-primary-rgb),0.4)] bg-[rgba(var(--admin-primary-rgb),0.09)] dark:bg-[rgba(var(--admin-primary-rgb),0.14)] p-4 flex items-center gap-3">
- <svg className="w-5 h-5 text-[color:var(--admin-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
- </svg>
- <span className="text-[color:var(--admin-primary)] dark:text-white font-medium">{success}</span>
- </div>
- )}
- {error && (
- <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 flex items-center gap-3">
- <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
- </svg>
- <span className="text-red-700 dark:text-red-300 font-medium">{error}</span>
- <button onClick={() => setError("")} className="ml-auto text-red-400 hover:text-red-600 dark:hover:text-red-300">✕</button>
- </div>
- )}
+ <AdminSaveToast message={success} />
+ <AdminFormErrorBanner error={error} onDismiss={() => setError("")} />
 
  <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
  <aside className={`${cardClass} p-5 h-fit xl:sticky xl:top-28`}>
@@ -161,6 +170,7 @@ export default function Settings() {
  <span className="font-semibold text-slate-800 dark:text-slate-200">{form.currency}</span>
  </div>
  </div>
+ {canEditGeneralSettings ? (
  <button
  onClick={save}
  disabled={saving}
@@ -169,6 +179,7 @@ export default function Settings() {
  >
  {saving ? "Saving..." : "Save Settings"}
  </button>
+ ) : null}
  </aside>
 
  <div className="xl:col-span-2 space-y-6">

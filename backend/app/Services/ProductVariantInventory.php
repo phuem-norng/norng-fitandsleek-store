@@ -38,6 +38,36 @@ class ProductVariantInventory
         return $out;
     }
 
+    /**
+     * Human-readable SKU shown on Stock Inventory (matches variant barcode when set).
+     */
+    public static function displaySkuForVariant(Product $product, string $size, string $color, ?string $skuBarcode = null): string
+    {
+        $barcode = trim((string) ($skuBarcode ?? ''));
+        if ($barcode !== '') {
+            return $barcode;
+        }
+
+        $base = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) ($product->sku ?: 'P'.$product->id)) ?: 'P'.$product->id);
+        $sizeCode = strtoupper(preg_replace('/[^A-Z0-9]/', '', $size) ?: 'OS');
+        if (strlen($sizeCode) > 4) {
+            $sizeCode = substr($sizeCode, 0, 4);
+        }
+
+        $color = trim($color);
+        $colorCode = 'XX';
+        if ($color !== '') {
+            $parts = preg_split('/\s+/', $color) ?: [];
+            if (count($parts) >= 2) {
+                $colorCode = strtoupper(substr($parts[0], 0, 1).substr($parts[1], 0, 1));
+            } else {
+                $colorCode = strtoupper(substr($color, 0, 2));
+            }
+        }
+
+        return $base.'-'.$sizeCode.'-'.$colorCode;
+    }
+
     public static function usesMatrix(Product $product): bool
     {
         return count(self::matrixRows($product)) > 0;
@@ -67,18 +97,57 @@ class ProductVariantInventory
      */
     public static function effectiveCapForCartLine(Product $product, ?string $color, ?string $size): int
     {
-        $listing = PaidOrderInventory::effectiveProductStockCap($product);
-
         if (! self::usesMatrix($product)) {
-            return $listing;
+            return self::capWithInventoryLots(
+                $product,
+                PaidOrderInventory::effectiveProductStockCap($product),
+                $color,
+                $size,
+            );
         }
 
-        $v = self::qtyForVariant($product, $color, $size);
-        if ($v === null) {
+        $variantQty = self::qtyForVariant($product, $color, $size);
+        if ($variantQty === null) {
             return 0;
         }
 
-        return min($listing, max(0, $v));
+        $cap = max(0, $variantQty);
+
+        // Variant row qty is authoritative; product.stock is an optional total listing cap when > 0.
+        if (is_numeric($product->stock)) {
+            $productStock = (int) $product->stock;
+            if ($productStock > 0) {
+                $cap = min($cap, $productStock);
+            }
+        }
+
+        return self::capWithInventoryLots($product, $cap, $color, $size);
+    }
+
+    private static function capWithInventoryLots(Product $product, int $cap, ?string $color, ?string $size): int
+    {
+        $lotService = app(InventoryLotService::class);
+        $productId = (int) $product->id;
+
+        if ($lotService->hasLotStockOnHand($productId) && ! $lotService->hasSellableLots($productId)) {
+            return 0;
+        }
+
+        if (! $lotService->hasSellableLots($productId)) {
+            return $cap;
+        }
+
+        return min($cap, $lotService->totalSellableQty($productId, $size, $color));
+    }
+
+    public static function totalMatrixQty(Product $product): int
+    {
+        $sum = 0;
+        foreach (self::matrixRows($product) as $row) {
+            $sum += (int) ($row['qty'] ?? 0);
+        }
+
+        return $sum;
     }
 
     /**
@@ -126,14 +195,45 @@ class ProductVariantInventory
             }
             foreach (self::matrixRows($product) as $row) {
                 $barcode = trim((string) ($row['sku_barcode'] ?? ''));
-                if ($barcode === '') {
-                    continue;
+                if ($barcode !== '') {
+                    $key = strtolower($barcode);
+                    if (isset($codes[$key])) {
+                        return [
+                            'product' => $product,
+                            'variant' => $row,
+                            'code' => $codes[$key],
+                        ];
+                    }
                 }
-                $key = strtolower($barcode);
-                if (isset($codes[$key])) {
+
+                $displaySku = self::displaySkuForVariant(
+                    $product,
+                    (string) ($row['size'] ?? ''),
+                    (string) ($row['color'] ?? ''),
+                    null,
+                );
+                $displayKey = strtolower($displaySku);
+                if (isset($codes[$displayKey])) {
                     return [
                         'product' => $product,
                         'variant' => $row,
+                        'code' => $codes[$displayKey],
+                    ];
+                }
+            }
+
+            $productSku = trim((string) ($product->sku ?? ''));
+            if ($productSku !== '') {
+                $key = strtolower($productSku);
+                if (isset($codes[$key]) && ! self::usesMatrix($product)) {
+                    return [
+                        'product' => $product,
+                        'variant' => self::firstAvailableVariant($product) ?? [
+                            'color' => '',
+                            'size' => '',
+                            'qty' => max(0, (int) ($product->stock ?? 0)),
+                            'sku_barcode' => null,
+                        ],
                         'code' => $codes[$key],
                     ];
                 }
@@ -175,6 +275,53 @@ class ProductVariantInventory
                 return;
             }
         }
+    }
+
+    /**
+     * Increase variant_matrix qty when stock is received (purchase order, manual receive).
+     */
+    public static function incrementVariantMatrix(Product $product, ?string $color, ?string $size, int $qty): void
+    {
+        if ($qty <= 0) {
+            return;
+        }
+
+        $color = trim((string) ($color ?? ''));
+        $size = trim((string) ($size ?? ''));
+
+        if ($color === '' || $size === '') {
+            return;
+        }
+
+        $matrix = $product->variant_matrix;
+        if (! is_array($matrix)) {
+            $matrix = [];
+        }
+
+        foreach ($matrix as $i => $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $rc = trim((string) ($row['color'] ?? ''));
+            $rs = trim((string) ($row['size'] ?? ''));
+            if (strcasecmp($rc, $color) === 0 && strcasecmp($rs, $size) === 0) {
+                $current = (int) ($row['qty'] ?? 0);
+                $matrix[$i]['qty'] = max(0, $current + $qty);
+                $product->variant_matrix = $matrix;
+                $product->save();
+
+                return;
+            }
+        }
+
+        $matrix[] = [
+            'color' => $color,
+            'size' => $size,
+            'qty' => $qty,
+            'sku_barcode' => null,
+        ];
+        $product->variant_matrix = $matrix;
+        $product->save();
     }
 }
 

@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Facebook, Instagram, Twitter, Youtube, Linkedin, MessageCircle, Send, Globe } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useHomepageSettings } from "../../state/homepageSettings.jsx";
 import Logo from "../Logo.jsx";
 import { useLanguage } from "../../lib/i18n.jsx";
+import { resolveFooterChromeStyle } from "../../lib/storefrontChrome.js";
+import { orderFooterSectionEntries } from "../../lib/footerSections.js";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -25,7 +27,16 @@ export default function Footer() {
     tracking_enabled: true,
     privacy_enabled: true,
     contact_enabled: true,
+    background_color: "#6e8b7e",
+    background_image: "",
+    text_color: "#ffffff",
   };
+
+  const headerSettings = settings?.header || {};
+  const chromeStyle = useMemo(
+    () => resolveFooterChromeStyle(footerSettings, headerSettings),
+    [footerSettings, headerSettings],
+  );
 
   const footerSocials = settings?.footer_socials || [
     { platform: 'facebook', url: '#' },
@@ -45,6 +56,13 @@ export default function Footer() {
     return <Globe className="w-4 h-4" strokeWidth={2} />;
   };
 
+  const footerLinkSectionEnabled = (key) => {
+    if (key === 'support') return footerSettings.support_enabled !== false;
+    if (key === 'tracking') return footerSettings.tracking_enabled !== false;
+    if (key === 'legal') return footerSettings.privacy_enabled !== false;
+    return true;
+  };
+
   const footerSections = settings?.footer_sections || {
     support: {
       title: t('footerHelp'),
@@ -57,7 +75,7 @@ export default function Footer() {
     tracking: {
       title: t('footerTracking'),
       items: [
-        { label: t('trackOrder'), link: "/track-order" },
+        { label: t('trackOrder'), link: "/profile?tab=track" },
         { label: t('footerReturns'), link: "/returns" },
         { label: t('footerShippingInfo'), link: "/shipping" },
       ],
@@ -72,21 +90,32 @@ export default function Footer() {
     },
   };
 
+  const footerSectionOrder = settings?.footer_section_order;
+
+  const visibleLinkSections = useMemo(
+    () => orderFooterSectionEntries(footerSections, footerSectionOrder).filter(([key, section]) => {
+      if (!footerLinkSectionEnabled(key)) return false;
+      const items = section?.items || [];
+      return items.some((item) => item?.label && item?.link);
+    }),
+    [footerSections, footerSectionOrder, footerSettings.support_enabled, footerSettings.tracking_enabled, footerSettings.privacy_enabled],
+  );
+
   return (
-    <footer className="hidden md:block border-t border-zinc-200" style={{ backgroundColor: footerSettings.background_color || '#6e8b7e' }}>
-      <div className="container-safe py-12 grid gap-8 md:grid-cols-4">
+    <footer className="fs-site-chrome hidden md:block border-t fs-chrome-border" style={chromeStyle}>
+      <div className="container-safe-inset py-12 grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]">
         {/* Brand Section */}
         <div className="space-y-4">
           <Link to="/" className="inline-block transition-transform duration-300 hover:scale-105">
             <Logo className="h-10 w-auto" />
           </Link>
-          <p className="text-sm text-white/80 leading-relaxed">
+          <p className="text-sm fs-chrome-muted leading-relaxed">
             {footerSettings.company_description}
           </p>
           {/* Social Links */}
           {footerSettings.social_enabled && (
             <div className="pt-2">
-              <div className="text-xs font-black tracking-wide uppercase text-white/90 mb-2">
+              <div className="text-xs font-black tracking-wide uppercase fs-chrome-heading mb-2 opacity-90">
                 {footerSettings.social_title || t('followUs')}
               </div>
               <div className="flex items-center gap-3">
@@ -94,7 +123,7 @@ export default function Footer() {
                   <a
                     key={`${social.platform}-${idx}`}
                     href={social.url || '#'}
-                    className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 hover:text-white transition-all duration-300 hover:scale-110"
+                    className="w-8 h-8 rounded-full fs-chrome-social flex items-center justify-center transition-all duration-300 hover:scale-110"
                     aria-label={social.platform || 'social'}
                     target="_blank"
                     rel="noreferrer"
@@ -107,82 +136,50 @@ export default function Footer() {
           )}
         </div>
 
-        {/* Support Section - Conditional */}
-        {footerSettings.support_enabled && footerSections.support && (
-          <div>
-            <div className="text-xs font-black tracking-wide uppercase text-white mb-4">
-              {footerSections.support.title || t('footerHelp')}
+        {visibleLinkSections.map(([sectionKey, section]) => (
+          <div key={sectionKey}>
+            <div className="text-xs font-black tracking-wide uppercase fs-chrome-heading mb-4">
+              {section.title || sectionKey.toUpperCase()}
             </div>
             <div className="grid gap-2 text-sm">
-              {footerSections.support.items && footerSections.support.items.map((item, idx) => (
-                <Link
-                  key={idx}
-                  className="text-white/80 hover:text-white group flex items-center gap-1 w-fit transition-colors"
-                  to={item.link}
-                >
-                  {item.label}
-                  <svg
-                    className="w-3 h-3 transition-transform duration-300 group-hover:translate-x-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              {(section.items || []).map((item, idx) => (
+                item?.label && item?.link ? (
+                  <Link
+                    key={`${sectionKey}-${idx}`}
+                    className="fs-chrome-link group flex items-center gap-1 w-fit"
+                    to={item.link}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </Link>
+                    {item.label}
+                    <svg
+                      className="w-3 h-3 transition-transform duration-300 group-hover:translate-x-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </Link>
+                ) : null
               ))}
             </div>
           </div>
-        )}
-
-        {/* Tracking Section - Conditional */}
-        {footerSettings.tracking_enabled && footerSections.tracking && (
-          <div>
-            <div className="text-xs font-black tracking-wide uppercase text-white mb-4">
-              {footerSections.tracking.title || t('footerTracking')}
-            </div>
-            <div className="grid gap-2 text-sm">
-              {footerSections.tracking.items && footerSections.tracking.items.map((item, idx) => (
-                <Link
-                  key={idx}
-                  className="text-white/80 hover:text-white group flex items-center gap-1 w-fit transition-colors"
-                  to={item.link}
-                >
-                  {item.label}
-                  <svg
-                    className="w-3 h-3 transition-transform duration-300 group-hover:translate-x-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+        ))}
 
         {/* Contact Section - Conditional */}
         {footerSettings.contact_enabled && (
           <div>
-            <div className="text-xs font-black tracking-wide uppercase text-white mb-4">
+            <div className="text-xs font-black tracking-wide uppercase fs-chrome-heading mb-4">
               {footerSettings.contact_title || t('contact')}
             </div>
-            <div className="grid gap-2 text-sm text-white/80">
+            <div className="grid gap-2 text-sm fs-chrome-muted">
               <a
                 href={`mailto:${footerSettings.contact_email}`}
-                className="group flex items-center gap-2 hover:text-white transition-colors duration-200"
+                className="fs-chrome-link group flex items-center gap-2"
               >
                 <svg
                   className="w-4 h-4 transition-transform duration-300 group-hover:scale-110"
@@ -201,7 +198,7 @@ export default function Footer() {
               </a>
               <a
                 href={`tel:${String(footerSettings.contact_phone || '').replace(/\s+/g, '')}`}
-                className="group flex items-center gap-2 hover:text-white transition-colors duration-200"
+                className="fs-chrome-link group flex items-center gap-2"
               >
                 <svg
                   className="w-4 h-4 transition-transform duration-300 group-hover:scale-110"
@@ -245,8 +242,8 @@ export default function Footer() {
         )}
       </div>
 
-      <div className="border-t border-white/10">
-        <div className="container-safe py-4 flex flex-col md:flex-row items-center justify-between text-xs text-white/80 gap-4">
+      <div className="border-t fs-chrome-border">
+        <div className="container-safe-inset py-4 flex flex-col md:flex-row items-center justify-between text-xs fs-chrome-muted gap-4">
           <span>
             {footerSettings.copyright_text}
           </span>
@@ -255,13 +252,13 @@ export default function Footer() {
               <>
                 <Link
                   to="/terms"
-                  className="hover:text-white transition-colors duration-200"
+                  className="fs-chrome-link"
                 >
                   {t('terms')}
                 </Link>
                 <Link
                   to="/privacy"
-                  className="hover:text-white transition-colors duration-200"
+                  className="fs-chrome-link"
                 >
                   {t('privacy')}
                 </Link>

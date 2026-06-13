@@ -10,6 +10,8 @@ import {
   reportAxisLineProps,
   reportAxisTickProps,
 } from "./ReportChartUI.jsx";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
+import { ADMIN_NUMBER_FORMAT, formatUsd, formatUsdFull } from "../../lib/adminNumberFormat.js";
 import {
   Bar,
   BarChart,
@@ -22,20 +24,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-const compactUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-const fullUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const PANEL_VARIANTS = {
   line:    { from: "#EEF2FF", to: "#E0E7FF", text: "#3730A3", border: "#C7D2FE", darkBg: "rgba(99,102,241,0.12)", darkText: "#818CF8" },
@@ -124,10 +112,11 @@ export default function RevenueDashboard({ theme }) {
   const [data, setData] = useState(null);
 
   /* chart resize state */
-  const [lineSpan, setLineSpan] = useState(1);
-  const [columnSpan, setColumnSpan] = useState(1);
-  const [productSpan, setProductSpan] = useState(1);
-  const [countrySpan, setCountrySpan] = useState(1);
+  const [lineSpan, setLineSpan] = useAdminUiPreference("charts.revenue.lineSpan", 1);
+  const [columnSpan, setColumnSpan] = useAdminUiPreference("charts.revenue.columnSpan", 1);
+  const [productSpan, setProductSpan] = useAdminUiPreference("charts.revenue.productSpan", 1);
+  const [countrySpan, setCountrySpan] = useAdminUiPreference("charts.revenue.countrySpan", 1);
+  const [numberFormat] = useAdminUiPreference("dashboard.numberFormat", ADMIN_NUMBER_FORMAT.COMPACT);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,7 +197,7 @@ export default function RevenueDashboard({ theme }) {
       subtitle={
         loading
           ? "Loading…"
-          : `${fullUsd.format(data?.total_revenue || 0)} total · ${yearNum}`
+          : `${formatUsdFull(data?.total_revenue || 0)} total · ${yearNum}`
       }
       theme={theme}
       showAccent={false}
@@ -261,7 +250,7 @@ export default function RevenueDashboard({ theme }) {
                       tick={reportAxisTickProps(theme)}
                       axisLine={reportAxisLineProps(theme)}
                       tickLine={reportAxisLineProps(theme)}
-                      tickFormatter={(v) => compactUsd.format(Number(v))}
+                      tickFormatter={(v) => formatUsd(Number(v), numberFormat)}
                       domain={[0, (max) => (max <= 0 ? 1 : max * 1.1)]}
                     />
                     <Tooltip
@@ -274,7 +263,7 @@ export default function RevenueDashboard({ theme }) {
                               ? `${props.payload[0].payload.month_label} ${yearNum}`
                               : undefined
                           }
-                          formatLine={(e) => fullUsd.format(Number(e.value) || 0)}
+                          formatLine={(e) => formatUsdFull(Number(e.value) || 0)}
                         />
                       )}
                     />
@@ -324,7 +313,7 @@ export default function RevenueDashboard({ theme }) {
                       tick={reportAxisTickProps(theme)}
                       axisLine={reportAxisLineProps(theme)}
                       tickLine={reportAxisLineProps(theme)}
-                      tickFormatter={(v) => compactUsd.format(Number(v))}
+                      tickFormatter={(v) => formatUsd(Number(v), numberFormat)}
                       domain={[0, (max) => (max <= 0 ? 1 : max * 1.1)]}
                     />
                     <Tooltip
@@ -334,7 +323,7 @@ export default function RevenueDashboard({ theme }) {
                           {...props}
                           theme={theme}
                           label={props.payload?.[0]?.payload?.month_label}
-                          formatLine={(e) => fullUsd.format(Number(e.value) || 0)}
+                          formatLine={(e) => formatUsdFull(Number(e.value) || 0)}
                         />
                       )}
                     />
@@ -380,7 +369,7 @@ export default function RevenueDashboard({ theme }) {
                       tick={reportAxisTickProps(theme)}
                       axisLine={reportAxisLineProps(theme)}
                       tickLine={reportAxisLineProps(theme)}
-                      tickFormatter={(v) => compactUsd.format(Number(v))}
+                      tickFormatter={(v) => formatUsd(Number(v), numberFormat)}
                     />
                     <YAxis
                       type="category"
@@ -397,7 +386,7 @@ export default function RevenueDashboard({ theme }) {
                           {...props}
                           theme={theme}
                           label={props.payload?.[0]?.payload?.fullName}
-                          formatLine={(e) => fullUsd.format(Number(e.value) || 0)}
+                          formatLine={(e) => formatUsdFull(Number(e.value) || 0)}
                         />
                       )}
                     />
@@ -435,7 +424,7 @@ export default function RevenueDashboard({ theme }) {
                       tick={reportAxisTickProps(theme)}
                       axisLine={reportAxisLineProps(theme)}
                       tickLine={reportAxisLineProps(theme)}
-                      tickFormatter={(v) => compactUsd.format(Number(v))}
+                      tickFormatter={(v) => formatUsd(Number(v), numberFormat)}
                       domain={[0, (max) => (max <= 0 ? 1 : max * 1.1)]}
                     />
                     <Tooltip
@@ -445,7 +434,7 @@ export default function RevenueDashboard({ theme }) {
                           {...props}
                           theme={theme}
                           label={props.payload?.[0]?.payload?.label}
-                          formatLine={(e) => fullUsd.format(Number(e.value) || 0)}
+                          formatLine={(e) => formatUsdFull(Number(e.value) || 0)}
                         />
                       )}
                     />

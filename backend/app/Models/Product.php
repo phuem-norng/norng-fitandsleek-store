@@ -9,6 +9,7 @@ class Product extends Model
     protected $fillable = [
         'category_id',
         'brand_id',
+        'supplier_id',
         'sku',
         'barcode_code',
         'stock_label_id',
@@ -16,6 +17,7 @@ class Product extends Model
         'slug',
         'description',
         'price',
+        'cost_price',
         'compare_at_price',
         'image_url',
         'stock',
@@ -38,6 +40,7 @@ class Product extends Model
 
     protected $casts = [
         'price' => 'decimal:2',
+        'cost_price' => 'decimal:2',
         'compare_at_price' => 'decimal:2',
         'is_active' => 'boolean',
         'is_vector_indexed' => 'boolean',
@@ -66,6 +69,11 @@ class Product extends Model
     public function brand()
     {
         return $this->belongsTo(Brand::class);
+    }
+
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class);
     }
 
     public function discount()

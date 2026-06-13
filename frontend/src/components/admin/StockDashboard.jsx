@@ -21,6 +21,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences.js";
 
 function yearRangeLabel(fromYear, toYear) {
   if (fromYear === toYear) return String(fromYear);
@@ -64,8 +65,8 @@ export default function StockDashboard({ theme }) {
   const [data, setData] = useState(null);
 
   /* chart resize state */
-  const [labelSpan, setLabelSpan] = useState(1);
-  const [monthSpan, setMonthSpan] = useState(1);
+  const [labelSpan, setLabelSpan] = useAdminUiPreference("charts.stock.labelSpan", 1);
+  const [monthSpan, setMonthSpan] = useAdminUiPreference("charts.stock.monthSpan", 1);
 
   const yearOptions = useMemo(() => {
     const years = [];

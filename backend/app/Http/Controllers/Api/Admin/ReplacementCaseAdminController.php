@@ -5,13 +5,16 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Models\ReplacementCase;
 use App\Models\Order;
 use App\Services\ReplacementCaseService;
+use App\Services\ReplacementFulfillmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ReplacementCaseAdminController extends BaseAdminController
 {
     public function __construct(
         private readonly ReplacementCaseService $replacementCaseService,
+        private readonly ReplacementFulfillmentService $replacementFulfillmentService,
     ) {}
 
     /**
@@ -199,22 +202,55 @@ class ReplacementCaseAdminController extends BaseAdminController
     }
 
     /**
-     * Mark as completed
+     * Fulfill approved case: consume stock, create $0 replacement order, optional quarantine return.
      */
     public function complete(Request $request, ReplacementCase $case): JsonResponse
     {
+        /** @var \App\Models\User|null $authUser */
+        $authUser = auth()->guard('sanctum')->user();
+        if ($authUser && $authUser->isAdmin() && ! $authUser->isSuperAdmin()) {
+            if ($case->order && ! $case->order->user->isCustomer()) {
+                return response()->json([
+                    'message' => 'Unauthorized to complete this replacement case',
+                ], 403);
+            }
+        }
+
         $validated = $request->validate([
             'notes' => 'nullable|string|max:1000',
+            'return_item_ids' => 'nullable|array',
+            'return_item_ids.*' => 'integer',
+            'fulfillment_items' => 'nullable|array|min:1',
+            'fulfillment_items.*.order_item_id' => 'required|integer',
+            'fulfillment_items.*.quantity' => 'nullable|integer|min:1',
+            'fulfillment_items.*.requested_size' => 'nullable|string|max:50',
+            'fulfillment_items.*.requested_color' => 'nullable|string|max:50',
+            'fulfillment_items.*.customer_returning' => 'nullable|boolean',
         ]);
 
-        $case->update([
-            'status' => 'completed',
-            'notes' => $validated['notes'] ?? $case->notes,
-        ]);
+        $returnItemIds = array_map('intval', $validated['return_item_ids'] ?? []);
+        if ($returnItemIds !== []) {
+            $caseItemIds = $case->items()->pluck('id')->map(fn ($id) => (int) $id)->all();
+            foreach ($returnItemIds as $itemId) {
+                if (! in_array($itemId, $caseItemIds, true)) {
+                    throw ValidationException::withMessages([
+                        'return_item_ids' => ['One or more return items do not belong to this case.'],
+                    ]);
+                }
+            }
+        }
+
+        $case = $this->replacementFulfillmentService->completeCase(
+            $case,
+            $authUser,
+            $validated['notes'] ?? null,
+            $returnItemIds,
+            $validated['fulfillment_items'] ?? [],
+        );
 
         return response()->json([
-            'message' => 'Replacement case marked as completed',
-            'data' => $case->load(ReplacementCaseService::defaultEagerLoad()),
+            'message' => 'Replacement fulfilled successfully',
+            'data' => $case,
         ]);
     }
 

@@ -25,8 +25,6 @@ export default function PromoBannerSlider() {
     load();
   }, []);
 
-  if (infrastructureDegraded) return null;
-
   const slides = useMemo(() => {
     return (banners || []).map((b) => {
       const imageUrl = b.image_url || b.image || b.media_url;
@@ -50,14 +48,15 @@ export default function PromoBannerSlider() {
     return () => clearInterval(t);
   }, [slides.length]);
 
+  if (infrastructureDegraded) return null;
   if (!slides.length) return null;
 
   const active = slides[index];
 
   return (
-    <section className="container-safe mt-6 max-w-[1600px] mx-auto">
-      <div className="relative overflow-hidden rounded-2xl border border-zinc-100 bg-white shadow-sm ring-1 ring-black/5">
-        <div className="relative min-h-[200px] md:min-h-[280px]">
+    <section className="container-safe mt-6">
+      <div className="fs-promo-banner relative overflow-hidden border border-zinc-100 bg-white shadow-sm ring-1 ring-black/5">
+        <div className="relative min-h-[inherit]">
           {active.video_url ? (
             <video
               className="absolute inset-0 w-full h-full object-cover"
@@ -95,7 +94,7 @@ export default function PromoBannerSlider() {
             <>
               <button
                 onClick={() => setIndex((i) => (i - 1 + slides.length) % slides.length)}
-                className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center shadow-sm"
+                className="fs-carousel-nav-btn absolute left-3 top-1/2 -translate-y-1/2"
                 aria-label="Previous"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -104,7 +103,7 @@ export default function PromoBannerSlider() {
               </button>
               <button
                 onClick={() => setIndex((i) => (i + 1) % slides.length)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/90 hover:bg-white flex items-center justify-center shadow-sm"
+                className="fs-carousel-nav-btn absolute right-3 top-1/2 -translate-y-1/2"
                 aria-label="Next"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">

@@ -2,6 +2,7 @@ import axios from "axios";
 import { notifyApiInfrastructureDegraded } from "./apiHealth";
 import { getDeviceHeaders } from "./device";
 import { resolveApiBaseUrl, shouldRewriteLoopbackAssetsToPageOrigin } from "./backendOrigin";
+import { getSessionId } from "./sessionId";
 
 const baseURL = resolveApiBaseUrl();
 const TOKEN_KEY = import.meta.env.VITE_TOKEN_KEY || "fs_token";
@@ -90,6 +91,7 @@ api.interceptors.request.use((config) => {
   Object.entries(deviceHeaders).forEach(([key, value]) => {
     config.headers[key] = value;
   });
+  config.headers["X-Session-Id"] = getSessionId();
 
   return config;
 });
@@ -105,6 +107,16 @@ const isBinaryApiResponse = (response) => {
   if (type === "blob" || type === "arraybuffer") return true;
   const data = response.data;
   return typeof Blob !== "undefined" && data instanceof Blob;
+};
+
+/** Aborted / superseded requests (e.g. fast typeahead) must not trigger the catalogue banner. */
+const isCanceledRequest = (error) => {
+  if (!error) return false;
+  if (error.code === "ERR_CANCELED") return true;
+  if (error.name === "CanceledError" || error.name === "AbortError") return true;
+  if (error.message === "canceled") return true;
+  const signal = error.config?.signal;
+  return Boolean(signal?.aborted);
 };
 
 // Response interceptor to handle 401 errors
@@ -136,9 +148,10 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const noResponse = !error.response;
     const infrastructureDown =
-      noResponse ||
-      error.code === "ECONNABORTED" ||
-      (typeof status === "number" && status >= 500 && status < 600);
+      !isCanceledRequest(error) &&
+      (noResponse ||
+        error.code === "ECONNABORTED" ||
+        (typeof status === "number" && status >= 500 && status < 600));
     if (infrastructureDown) {
       notifyApiInfrastructureDegraded();
     }

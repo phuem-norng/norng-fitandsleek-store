@@ -1,16 +1,24 @@
 import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../state/auth";
+import AdminPermissionOutlet from "../../routes/AdminPermissionOutlet.jsx";
 import { useHomepageSettings } from "../../state/homepageSettings.jsx";
 import AdminTopbar from "../../components/admin/AdminTopbar";
 import Logo from "../../components/Logo.jsx";
 import api from "../../lib/api";
+import { fetchAdminNavBadges } from "../../lib/adminNavBadges.js";
 import { resolveImageUrl } from "../../lib/images";
 import { errorAlert, toastSuccess } from "../../lib/swal";
 import { useTheme } from "../../state/theme.jsx";
 import { useLanguage } from "../../lib/i18n.jsx";
 import { AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import {
+  canAccessAdminPath,
+  filterNavGroupsByPermission,
+  filterNavItemsByPermission,
+  isSuperAdminUser,
+} from "../../lib/adminPermissions.js";
 /** Pinned = full width; unpinned = narrow rail — label tooltip on hover (rail); light bubble in dark mode. */
 const SB_W_PINNED = "md:!w-[260px]";
 const SB_W_RAIL = "md:w-20";
@@ -184,11 +192,6 @@ function RailTooltipWrap({ labelsVisible, tip, children, className = "" }) {
   );
 }
 
-function brandBlockClass(pinnedOpen) {
-  if (pinnedOpen) return "min-w-0 flex-1 text-left";
-  return "hidden";
-}
-
 function groupChevronClass(pinnedOpen, isOpen) {
   const rot = isOpen ? "-rotate-90" : "rotate-90";
   if (pinnedOpen) return `h-4 w-4 shrink-0 transition-transform ${SIDEBAR_ACCORDION_EASE} ${rot}`;
@@ -253,8 +256,19 @@ function sidebarSubLinkClass(isActive) {
 
 const NAV_ICON_CLASS = "h-6 w-6 shrink-0";
 
+const COMMERCE_ACCORDION_KEYS = ["sales", "catalog", "inventory", "procurement", "finance"];
+const PEOPLE_CONFIG_ACCORDION_KEYS = ["users", "settings"];
+const ALL_ACCORDION_KEYS = [...COMMERCE_ACCORDION_KEYS, ...PEOPLE_CONFIG_ACCORDION_KEYS];
+
+function closedAccordionState() {
+  return ALL_ACCORDION_KEYS.reduce((acc, key) => {
+    acc[key] = false;
+    return acc;
+  }, {});
+}
+
 export default function AdminLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const { settings, loading: settingsLoading, reloadSettings } = useHomepageSettings();
   const { primaryColor, contentLayout, sidebarMode } = useTheme();
   const { t } = useLanguage();
@@ -262,15 +276,19 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState({
-    users: false,
-    settings: false,
-  });
+  const [openGroups, setOpenGroups] = useState(closedAccordionState);
   const [railGroupFlyout, setRailGroupFlyout] = useState(null);
   const [navBadges, setNavBadges] = useState({ orders: 0, messages: 0 });
   const [logoUploading, setLogoUploading] = useState(false);
   const logoFileInputRef = useRef(null);
   const logoSrc = settings?.header?.logo_url || "/logo.png";
+
+  useEffect(() => {
+    if (!user || isSuperAdminUser(user)) return;
+    if (user.role === "admin" && !user.effective_admin_permissions) {
+      refresh?.();
+    }
+  }, [user, refresh]);
 
   const onLogoFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -298,8 +316,12 @@ export default function AdminLayout() {
   };
 
   useEffect(() => {
-    if (!sidebarOpen) setOpenGroups({ users: false, settings: false });
+    if (!sidebarOpen) setOpenGroups(closedAccordionState());
     if (sidebarOpen) setRailGroupFlyout(null);
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    document.documentElement.dataset.adminSidebarPinned = sidebarOpen ? "true" : "false";
   }, [sidebarOpen]);
 
   useEffect(() => {
@@ -347,36 +369,137 @@ export default function AdminLayout() {
     [t]
   );
 
-  const commerceNavItems = useMemo(
+  const commerceNavGroups = useMemo(
     () => [
-      { path: "/admin/products", icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", label: t('navProducts') || "Products" },
       {
-        path: "/admin/orders",
-        icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01",
-        label: t('navOrders') || "Orders",
+        key: "sales",
+        label: t("navGroupSales") || "Sales",
+        icon: "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z",
         badgeKey: "orders",
         badgeTone: "alert",
+        children: [
+          {
+            path: "/admin/orders",
+            icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01",
+            label: t("navOrders") || "Orders",
+            badgeKey: "orders",
+            badgeTone: "alert",
+          },
+          {
+            path: "/admin/checkout",
+            icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z",
+            label: t("navCheckout") || "Checkout",
+          },
+          {
+            path: "/admin/discounts",
+            icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+            label: t("navDiscount") || "Discount",
+          },
+        ],
       },
-      { path: "/admin/discounts", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", label: t('navDiscount') || "Discount" },
-      { path: "/admin/checkout", icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z", label: t('navCheckout') || "Checkout" },
-      { path: "/admin/categories", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z", label: t('navCategories') || "Categories" },
-      { path: "/admin/brands", icon: "M7 4h10M7 8h10M7 12h10M7 16h10M7 20h10", label: t('navBrands') || "Brands" },
-      { path: "/admin/stock-inventory", icon: "M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4", label: t('navStockInventory') || "Stock & Inventory" },
-      { path: "/admin/stock-received", icon: "M20 13V7a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586l-.828-.828A2 2 0 0011.172 3H6a2 2 0 00-2 2v8m16 0l-4 4m4-4l-4-4m4 4H8m-4 4h6m-6 4h12", label: t('navStockReceived') || "Stock Received" },
-      { path: "/admin/inventory-integrity", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z", label: t('navInventoryIntegrity') || "Inventory Integrity" },
-      { path: "/admin/payments", icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z", label: t('navPayments') || "Payments" },
       {
-        path: "/admin/payments/sale-history",
-        icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
-        label: t('navSaleHistory') || "Sale History",
+        key: "catalog",
+        label: t("navGroupCatalog") || "Catalog",
+        icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+        children: [
+          {
+            path: "/admin/products",
+            icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+            label: t("navProducts") || "Products",
+          },
+          {
+            path: "/admin/categories",
+            icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z",
+            label: t("navCategories") || "Categories",
+          },
+          {
+            path: "/admin/brands",
+            icon: "M7 4h10M7 8h10M7 12h10M7 16h10M7 20h10",
+            label: t("navBrands") || "Brands",
+          },
+        ],
+      },
+      {
+        key: "inventory",
+        label: t("navGroupInventory") || "Inventory",
+        icon: "M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4",
+        children: [
+          {
+            path: "/admin/stock-inventory",
+            icon: "M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4",
+            label: t("navStockInventory") || "Stock & Inventory",
+          },
+          {
+            path: "/admin/inventory-lots",
+            icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z",
+            label: t("navInventoryLots") || "Inventory Lots",
+          },
+          {
+            path: "/admin/stock-received",
+            icon: "M20 13V7a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586l-.828-.828A2 2 0 0011.172 3H6a2 2 0 00-2 2v8m16 0l-4 4m4-4l-4-4m4 4H8m-4 4h6m-6 4h12",
+            label: t("navStockReceived") || "Stock Received",
+          },
+        ],
+      },
+      {
+        key: "procurement",
+        label: t("navGroupProcurement") || "Procurement",
+        icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+        children: [
+          {
+            path: "/admin/suppliers",
+            icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+            label: t("navSuppliers") || "Suppliers",
+          },
+          {
+            path: "/admin/purchase-orders",
+            icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+            label: t("navPurchaseOrders") || "Purchase Orders",
+          },
+        ],
+      },
+      {
+        key: "finance",
+        label: t("navGroupFinance") || "Finance",
+        icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
+        children: [
+          {
+            path: "/admin/payments",
+            icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
+            label: t("navPayments") || "Payments",
+          },
+          {
+            path: "/admin/payments/sale-history",
+            icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
+            label: t("navSaleHistory") || "Sale History",
+          },
+        ],
+      },
+      {
+        key: "delivery",
+        label: t("navGroupDelivery") || "Delivery",
+        icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4",
+        children: [
+          {
+            path: "/admin/shipments",
+            icon: "M20 13V7a2 2 0 00-2-2h-3.172a2 2 0 01-1.414-.586l-.828-.828A2 2 0 0011.172 3H6a2 2 0 00-2 2v8m16 0l-4 4m4-4l-4-4m4 4H8m-4 4h6m-6 4h12",
+            label: t("navShipments") || "Shipments",
+          },
+        ],
       },
     ],
-    [t]
+    [t],
   );
 
   const operationsNavItems = useMemo(
     () => [
       { path: "/admin/reports", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", label: t('navReports') || "Reports" },
+      {
+        path: "/admin/replacement-cases",
+        icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15",
+        label: t("navReplacements") || "Replacements",
+      },
+      { path: "/admin/loyalty-top-fans", icon: "M13 10V3L4 14h7v7l9-11h-7z", label: "Loyalty" },
       { path: "/admin/contacts", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z", label: t('navContacts') || "Contacts" },
       {
         path: "/admin/messages",
@@ -385,9 +508,8 @@ export default function AdminLayout() {
         badgeKey: "messages",
       },
       { path: "/admin/notifications", icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9", label: t('navNotifications') || "Notifications" },
-      { path: "/admin/replacement-cases", icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15", label: t('navReplacements') || "Replacements" },
     ],
-    [t]
+    [t],
   );
 
   const peopleNavGroup = useMemo(
@@ -419,17 +541,52 @@ export default function AdminLayout() {
     [t]
   );
 
+  const visibleDashboardItems = useMemo(
+    () => filterNavItemsByPermission(user, dashboardItems),
+    [dashboardItems, user],
+  );
+
+  const visibleCommerceNavGroups = useMemo(
+    () => filterNavGroupsByPermission(user, commerceNavGroups).filter((group) => (group.children || []).length > 0),
+    [commerceNavGroups, user],
+  );
+
+  const visiblePeopleNavGroup = useMemo(() => {
+    const filtered = filterNavGroupsByPermission(user, [peopleNavGroup])[0];
+    return filtered && (filtered.children || []).length > 0 ? filtered : null;
+  }, [peopleNavGroup, user]);
+
+  const visibleConfigNavGroup = useMemo(() => {
+    const filtered = filterNavGroupsByPermission(user, [configNavGroup])[0];
+    return filtered && (filtered.children || []).length > 0 ? filtered : null;
+  }, [configNavGroup, user]);
+
   const accordionNavGroups = useMemo(
-    () => [peopleNavGroup, configNavGroup],
-    [peopleNavGroup, configNavGroup]
+    () => [
+      ...visibleCommerceNavGroups,
+      ...(visiblePeopleNavGroup ? [visiblePeopleNavGroup] : []),
+      ...(visibleConfigNavGroup ? [visibleConfigNavGroup] : []),
+    ],
+    [visibleCommerceNavGroups, visiblePeopleNavGroup, visibleConfigNavGroup],
+  );
+
+  const visibleOperationsNavItems = useMemo(
+    () => filterNavItemsByPermission(user, operationsNavItems),
+    [operationsNavItems, user],
   );
 
   const allNavItems = useMemo(() => {
     const groupsFlat = accordionNavGroups.flatMap((g) => g.children);
-    return [...dashboardItems, ...commerceNavItems, ...operationsNavItems, ...groupsFlat];
-  }, [dashboardItems, commerceNavItems, operationsNavItems, accordionNavGroups]);
+    return [...visibleDashboardItems, ...groupsFlat, ...visibleOperationsNavItems];
+  }, [visibleDashboardItems, visibleOperationsNavItems, accordionNavGroups]);
 
-  const bottomNavPaths = ["/admin", "/admin/reports", "/admin/orders", "/admin/payments"];
+  const bottomNavPaths = useMemo(
+    () =>
+      ["/admin", "/admin/reports", "/admin/orders", "/admin/payments"].filter((path) =>
+        canAccessAdminPath(user, path),
+      ),
+    [user],
+  );
 
   const activeBottomIndex = useMemo(() => {
     const idx = bottomNavPaths.findIndex((p) => location.pathname.startsWith(p));
@@ -471,16 +628,9 @@ export default function AdminLayout() {
     let intervalId = 0;
 
     const loadBadges = async () => {
-      try {
-        const { data } = await api.get("/admin/nav-badges");
-        if (cancelled) return;
-        setNavBadges({
-          orders: Number(data?.orders) || 0,
-          messages: Number(data?.messages) || 0,
-        });
-      } catch {
-        /* badges are optional */
-      }
+      const badges = await fetchAdminNavBadges();
+      if (cancelled || !badges) return;
+      setNavBadges(badges);
     };
 
     const start = () => {
@@ -568,8 +718,10 @@ export default function AdminLayout() {
   };
 
   const renderAccordionGroup = (group) => {
+    if (!group?.children?.length) return null;
     const groupHasActive = group.children.some((child) => location.pathname.startsWith(child.path));
     const isOpen = (!!openGroups[group.key] || groupHasActive) && sidebarOpen;
+    const groupBadgeCount = group.badgeKey ? navBadges[group.badgeKey] : 0;
 
     return (
       <li key={group.key} className="relative">
@@ -589,7 +741,10 @@ export default function AdminLayout() {
             <svg className={NAV_ICON_CLASS} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={group.icon} />
             </svg>
-            <span className={`${navLabelClass(sidebarOpen)} text-left`}>{group.label}</span>
+            <span className={`${navLabelClass(sidebarOpen)} min-w-0 flex-1 text-left`}>{group.label}</span>
+            {sidebarOpen && group.badgeKey ? (
+              <NavBadge count={groupBadgeCount} tone={group.badgeTone || "primary"} />
+            ) : null}
             <svg className={groupChevronClass(sidebarOpen, isOpen)} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -607,17 +762,27 @@ export default function AdminLayout() {
             }}
           >
             <ul className="ml-4 mt-1 space-y-1 border-l border-slate-200 pb-1 pl-3 dark:border-slate-800">
-              {group.children.map((child) => (
-                <li key={child.path}>
-                  <NavLink to={child.path} className={({ isActive }) => sidebarSubLinkClass(isActive)}>
-                    <span
-                      className="mr-2.5 inline-block h-1 w-1 shrink-0 rounded-[1px] bg-current opacity-45"
-                      aria-hidden
-                    />
-                    <span className="truncate">{child.label}</span>
-                  </NavLink>
-                </li>
-              ))}
+              {group.children.map((child) => {
+                const childBadgeCount = child.badgeKey ? navBadges[child.badgeKey] : 0;
+                return (
+                  <li key={child.path}>
+                    <NavLink
+                      to={child.path}
+                      end={child.path === "/admin/payments"}
+                      className={({ isActive }) => sidebarSubLinkClass(isActive)}
+                    >
+                      <span
+                        className="mr-2.5 inline-block h-1 w-1 shrink-0 rounded-[1px] bg-current opacity-45"
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                      {child.badgeKey ? (
+                        <NavBadge count={childBadgeCount} tone={child.badgeTone || "primary"} />
+                      ) : null}
+                    </NavLink>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -642,76 +807,97 @@ export default function AdminLayout() {
         className={`admin-sidebar relative z-30 hidden min-w-0 shrink-0 flex-col overflow-x-hidden overflow-y-hidden border-r border-slate-200 bg-white admin-bg-canvas dark:border-slate-700 md:sticky md:top-0 md:flex md:h-screen ${SIDEBAR_WIDTH_EASE} ${sidebarOpen ? SB_W_PINNED : SB_W_RAIL}`}
       >
         <aside className="relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-          <div className="flex h-[3.75rem] min-w-0 shrink-0 items-center border-b border-slate-200 px-3 dark:border-slate-800">
+          {sidebarOpen ? (
             <div
-              className={`flex min-w-0 w-full cursor-default items-center gap-3 rounded-xl py-2 ${sidebarOpen ? "" : "justify-center"}`}
+              className="min-w-0 shrink-0 border-b border-slate-200 px-4 py-4 text-center dark:border-slate-800"
+              style={{ backgroundColor: primaryColor }}
             >
-              <RailTooltipWrap
-                className="shrink-0"
-                labelsVisible={sidebarOpen}
-                tip={
-                  <>
-                    <span className="block leading-tight text-white">Fit &amp; Sleek</span>
-                    <span className="mt-0.5 block text-[11px] font-normal text-white/75">Admin</span>
-                    <span className="mt-1 block text-[11px] font-normal text-white/70">Click logo to upload a new image</span>
-                  </>
-                }
+              <button
+                type="button"
+                disabled={logoUploading || settingsLoading}
+                onClick={() => navigate("/admin")}
+                title="Go to admin dashboard"
+                aria-label="Go to admin dashboard"
+                className="mx-auto flex cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:pointer-events-none disabled:opacity-50"
               >
-                <button
-                  type="button"
-                  disabled={logoUploading || settingsLoading}
-                  onClick={() => logoFileInputRef.current?.click()}
-                  title="Upload store logo"
-                  aria-label="Upload store logo"
-                  className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-0 bg-transparent p-0 text-xs font-bold text-white ring-offset-2 transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:pointer-events-none disabled:opacity-50"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  {logoSrc ? (
-                    <img src={logoSrc} alt="" className="h-full w-full object-cover pointer-events-none" />
-                  ) : (
-                    "FS"
-                  )}
-                </button>
-              </RailTooltipWrap>
-              <div className={brandBlockClass(sidebarOpen)}>
-                <p className="truncate text-sm font-semibold leading-none text-slate-900 dark:text-slate-100">Fit & Sleek</p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">Admin Console</p>
-              </div>
+                <Logo className="h-16 w-auto max-h-16 object-contain" src={logoSrc} alt="Fit & Sleek" />
+              </button>
+              <p className="mt-2 truncate text-sm font-semibold uppercase tracking-[0.2em] text-white/85">
+                Admin Console
+              </p>
             </div>
-          </div>
+          ) : (
+            <div
+              className="flex h-[3.75rem] min-w-0 shrink-0 items-center justify-center border-b border-slate-200 px-3 dark:border-slate-800"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <button
+                type="button"
+                disabled={logoUploading || settingsLoading}
+                onClick={() => navigate("/admin")}
+                title="Go to admin dashboard"
+                aria-label="Go to admin dashboard"
+                className="mx-auto flex w-full cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-0 bg-transparent p-0 text-base font-bold text-white ring-offset-2 transition-opacity hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {logoSrc ? (
+                  <Logo className="h-8 w-auto max-h-8 object-contain" src={logoSrc} alt="Fit & Sleek" />
+                ) : (
+                  "FS"
+                )}
+              </button>
+            </div>
+          )}
 
-          <nav className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-2 pb-2 pt-2">
-            <ul className="scrollbar-hover min-h-0 min-w-0 flex-1 space-y-1.5 overflow-x-hidden overflow-y-auto overscroll-y-contain">
-              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <NavSectionHeader pinnedOpen={sidebarOpen}>Platform</NavSectionHeader>
-              </li>
-              {dashboardItems.map(renderFlatNavItem)}
+          <nav aria-label="Admin navigation" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-2 pb-2 pt-2">
+            <ul className="scrollbar-hide min-h-0 min-w-0 flex-1 space-y-1.5 overflow-x-hidden overflow-y-auto overscroll-y-contain">
+              {visibleDashboardItems.length > 0 ? (
+                <>
+                  <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                    <NavSectionHeader pinnedOpen={sidebarOpen}>Platform</NavSectionHeader>
+                  </li>
+                  {visibleDashboardItems.map(renderFlatNavItem)}
+                </>
+              ) : null}
 
-              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <NavSectionDivider pinnedOpen={sidebarOpen} />
-                <NavSectionHeader pinnedOpen={sidebarOpen}>Commerce</NavSectionHeader>
-              </li>
+              {visibleCommerceNavGroups.length > 0 ? (
+                <>
+                  <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                    <NavSectionDivider pinnedOpen={sidebarOpen} />
+                    <NavSectionHeader pinnedOpen={sidebarOpen}>Commerce</NavSectionHeader>
+                  </li>
+                  {visibleCommerceNavGroups.map(renderAccordionGroup)}
+                </>
+              ) : null}
 
-              {commerceNavItems.map(renderFlatNavItem)}
+              {visibleOperationsNavItems.length > 0 ? (
+                <>
+                  <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                    <NavSectionDivider pinnedOpen={sidebarOpen} />
+                    <NavSectionHeader pinnedOpen={sidebarOpen}>Operations</NavSectionHeader>
+                  </li>
+                  {visibleOperationsNavItems.map(renderFlatNavItem)}
+                </>
+              ) : null}
 
-              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <NavSectionDivider pinnedOpen={sidebarOpen} />
-                <NavSectionHeader pinnedOpen={sidebarOpen}>Operations</NavSectionHeader>
-              </li>
+              {visiblePeopleNavGroup ? (
+                <>
+                  <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                    <NavSectionDivider pinnedOpen={sidebarOpen} />
+                    <NavSectionHeader pinnedOpen={sidebarOpen}>People</NavSectionHeader>
+                  </li>
+                  {renderAccordionGroup(visiblePeopleNavGroup)}
+                </>
+              ) : null}
 
-              {operationsNavItems.map(renderFlatNavItem)}
-
-              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <NavSectionDivider pinnedOpen={sidebarOpen} />
-                <NavSectionHeader pinnedOpen={sidebarOpen}>People</NavSectionHeader>
-              </li>
-              {renderAccordionGroup(peopleNavGroup)}
-
-              <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
-                <NavSectionDivider pinnedOpen={sidebarOpen} />
-                <NavSectionHeader pinnedOpen={sidebarOpen}>Configuration</NavSectionHeader>
-              </li>
-              {renderAccordionGroup(configNavGroup)}
+              {visibleConfigNavGroup ? (
+                <>
+                  <li className={sidebarOpen ? "pointer-events-none select-none" : "hidden"} aria-hidden>
+                    <NavSectionDivider pinnedOpen={sidebarOpen} />
+                    <NavSectionHeader pinnedOpen={sidebarOpen}>Configuration</NavSectionHeader>
+                  </li>
+                  {renderAccordionGroup(visibleConfigNavGroup)}
+                </>
+              ) : null}
             </ul>
 
             <div className="mt-1 shrink-0 border-t border-slate-200 p-2 pt-3 dark:border-slate-800">
@@ -795,9 +981,9 @@ export default function AdminLayout() {
           <button
             type="button"
             disabled={logoUploading || settingsLoading}
-            onClick={() => logoFileInputRef.current?.click()}
-            title="Upload store logo"
-            aria-label="Upload store logo"
+            onClick={() => navigate("/admin")}
+            title="Go to admin dashboard"
+            aria-label="Go to admin dashboard"
             className="shrink-0 rounded-lg p-0.5 ring-offset-2 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--admin-primary-rgb),0.45)] disabled:pointer-events-none disabled:opacity-50"
           >
             <Logo className="h-10 w-auto max-h-10" src={logoSrc} alt="Fit&Sleek" />
@@ -833,7 +1019,7 @@ export default function AdminLayout() {
             }`}
         >
           <Suspense fallback={<AdminContentSkeleton lines={2} imageHeight={120} className="min-h-[40vh]" />}>
-            <Outlet />
+            <AdminPermissionOutlet />
           </Suspense>
         </div>
       </main>
@@ -878,6 +1064,7 @@ export default function AdminLayout() {
             </NavLink>
           ))}
 
+          {canAccessAdminPath(user, "/admin/checkout") ? (
           <div className="flex flex-col items-center justify-end gap-0.5 pb-0.5">
             <button
               type="button"
@@ -897,6 +1084,11 @@ export default function AdminLayout() {
             </button>
             <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 truncate">Scan</span>
           </div>
+          ) : (
+          <div aria-hidden className="flex flex-col items-center justify-end gap-0.5 pb-0.5 opacity-0 pointer-events-none">
+            <div className="h-12 w-12 -mt-5" />
+          </div>
+          )}
 
           {bottomNavItems.slice(2).map((item) => (
             <NavLink

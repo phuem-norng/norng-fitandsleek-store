@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
 import { getDeviceMeta } from "../lib/device";
-import { isTelegramWebApp, linkTelegramWebAppAccount } from "../lib/telegramWebApp";
-
 const AUTH_CONTEXT_KEY = "__fitandsleek_auth_context__";
 const AuthCtx = globalThis[AUTH_CONTEXT_KEY] || createContext(null);
 if (!globalThis[AUTH_CONTEXT_KEY]) {
@@ -14,7 +12,13 @@ const USER_CACHE_KEY = "fs_user_snapshot";
 function readCachedUser() {
   try {
     const raw = sessionStorage.getItem(USER_CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    const role = String(user?.role || "").toLowerCase();
+    if (role === "admin" && !user?.effective_admin_permissions) {
+      return null;
+    }
+    return user;
   } catch {
     return null;
   }
@@ -43,18 +47,12 @@ export function AuthProvider({ children }) {
   });
   const [booted, setBooted] = useState(() => {
     if (typeof window === "undefined") return false;
-    const token = localStorage.getItem(TOKEN_KEY);
-    return !token || !!readCachedUser();
+    return !localStorage.getItem(TOKEN_KEY);
   });
   const [token, setToken] = useState(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(TOKEN_KEY);
   });
-
-  const syncTelegramLink = async () => {
-    if (!isTelegramWebApp() || !localStorage.getItem(TOKEN_KEY)) return;
-    await linkTelegramWebAppAccount(api);
-  };
 
   const loadMe = async () => {
     const currentToken = localStorage.getItem(TOKEN_KEY);
@@ -72,7 +70,6 @@ export function AuthProvider({ children }) {
       const { data } = await api.get("/me");
       setUser(data);
       writeCachedUser(data);
-      await syncTelegramLink();
     } catch (err) {
       if (err.response?.status === 404 || err.response?.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
@@ -103,7 +100,6 @@ export function AuthProvider({ children }) {
         setToken(newToken);
         setUser(data.user);
         writeCachedUser(data.user);
-        await syncTelegramLink();
       }
 
       if (data?.otp_required || data?.verification_required) {
@@ -146,7 +142,6 @@ export function AuthProvider({ children }) {
       setToken(newToken);
       setUser(data.user);
       writeCachedUser(data.user);
-      await syncTelegramLink();
     }
     return data;
   };
@@ -176,7 +171,6 @@ export function AuthProvider({ children }) {
       setToken(newToken);
       setUser(data.user);
       writeCachedUser(data.user);
-      await syncTelegramLink();
     }
     return data;
   };
@@ -193,7 +187,6 @@ export function AuthProvider({ children }) {
       setToken(newToken);
       setUser(data.user);
       writeCachedUser(data.user);
-      await syncTelegramLink();
     }
     return data;
   };

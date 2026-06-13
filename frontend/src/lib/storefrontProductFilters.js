@@ -119,6 +119,7 @@ export function buildProductApiParams({
   q = "",
   tab = "",
   parentCategory = "",
+  categorySlug = "",
   applied = {},
   browse = {},
   imageColors = null,
@@ -133,6 +134,10 @@ export function buildProductApiParams({
 
   if (browse?.minPrice !== "" && browse?.minPrice != null) params.min_price = browse.minPrice;
   if (browse?.maxPrice !== "" && browse?.maxPrice != null) params.max_price = browse.maxPrice;
+
+  if (categorySlug) {
+    params.category = categorySlug;
+  }
 
   if (parentCategory) {
     params.parent_category = parentCategory;
@@ -151,6 +156,57 @@ export function buildProductApiParams({
   }
 
   return params;
+}
+
+/** Query params for /products/facets (no pagination or sort). */
+export function buildProductFacetsApiParams({
+  q = "",
+  tab = "",
+  parentCategory = "",
+  categorySlug = "",
+  applied = {},
+  browse = {},
+} = {}) {
+  const params = {};
+  if (q) params.q = q;
+  if (tab && tab !== "wishlist") params.tab = tab;
+
+  if (browse?.minPrice !== "" && browse?.minPrice != null) params.min_price = browse.minPrice;
+  if (browse?.maxPrice !== "" && browse?.maxPrice != null) params.max_price = browse.maxPrice;
+
+  if (categorySlug) params.category = categorySlug;
+  if (parentCategory) {
+    params.parent_category = parentCategory;
+  } else if (applied.gender?.length) {
+    params.gender = serializeListParam(applied.gender);
+  }
+
+  if (applied.section?.length) params.section = serializeListParam(applied.section);
+  if (applied.category?.length) params.category_id = serializeListParam(applied.category);
+  if (applied.color?.length) params.color = serializeListParam(applied.color);
+  if (applied.size?.length) params.size = serializeListParam(applied.size);
+
+  return params;
+}
+
+/** Storefront link for a category PLP (prefer slug route). */
+export function categoryListingPath(category) {
+  if (!category) return "/search";
+  const slug = String(category.slug || "").trim();
+  if (slug) return `/category/${slug}`;
+  if (category.id != null && category.id !== "") {
+    return `/search?category_id=${category.id}`;
+  }
+  return "/search";
+}
+
+export function toggleListParamValue(values, value) {
+  const list = Array.isArray(values) ? [...values] : [];
+  const key = String(value);
+  const idx = list.findIndex((v) => String(v) === key);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(key);
+  return list;
 }
 
 export function countStorefrontFilters(applied, browse = {}, priceBounds = null) {

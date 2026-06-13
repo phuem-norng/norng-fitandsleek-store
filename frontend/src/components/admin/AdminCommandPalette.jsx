@@ -24,6 +24,7 @@ import {
   Phone,
   Bot,
   RotateCcw,
+  Truck,
   CornerDownLeft,
   ArrowUp,
   ArrowDown,
@@ -35,20 +36,24 @@ import {
 } from "lucide-react";
 import api from "../../lib/api";
 import { useTheme } from "../../state/theme.jsx";
+import { useAuth } from "../../state/auth";
+import { canAccessAdminPath } from "../../lib/adminPermissions.js";
 
 const RECENTS_STORAGE_KEY = "fitandsleek_admin_command_recents";
 const MAX_RECENTS = 6;
 
 const PAGE_ITEMS = [
   { id: "page-dashboard", title: "Dashboard", description: "Overview & key metrics", path: "/admin", icon: LayoutDashboard, keywords: "home overview" },
+  { id: "page-purchase-orders", title: "Purchase Orders", description: "Supplier purchase orders", path: "/admin/purchase-orders", icon: FileText, keywords: "po supplier buying procurement stock in" },
   { id: "page-products", title: "Products", description: "Manage catalogue", path: "/admin/products", icon: Package, keywords: "catalogue items inventory" },
   { id: "page-orders", title: "Orders", description: "Customer orders & status", path: "/admin/orders", icon: ShoppingBag, keywords: "purchases sales transactions" },
   { id: "page-discounts", title: "Discount", description: "Product discounts & promo pricing", path: "/admin/discounts", icon: BarChart3, keywords: "discount promo sale price" },
   { id: "page-checkout", title: "Checkout / POS", description: "Point of sale", path: "/admin/checkout", icon: CreditCard, keywords: "point of sale register cashier pos" },
   { id: "page-categories", title: "Categories", description: "Product categories", path: "/admin/categories", icon: Tag, keywords: "taxonomy groups" },
   { id: "page-brands", title: "Brands", description: "Brand directory", path: "/admin/brands", icon: Bookmark, keywords: "manufacturers labels" },
+  { id: "page-suppliers", title: "Suppliers", description: "Vendor contacts for stock receiving", path: "/admin/suppliers", icon: Phone, keywords: "vendor supplier purchasing" },
   { id: "page-inventory", title: "Stock & Inventory", description: "Stock levels & barcodes", path: "/admin/stock-inventory", icon: Boxes, keywords: "barcode qr warehouse stock" },
-  { id: "page-inventory-integrity", title: "Inventory Integrity", description: "Audit stock vs Stock Received", path: "/admin/inventory-integrity", icon: ShieldCheck, keywords: "stock audit integrity monitor reconcile mismatch" },
+  { id: "page-inventory-lots", title: "Inventory Lots", description: "All lots — Clearance, on hand & sold by tier", path: "/admin/inventory-lots", icon: Boxes, keywords: "lot clearance stock older newer" },
   { id: "page-reports", title: "Reports", description: "Business reports", path: "/admin/reports", icon: FileText, keywords: "export pdf statistics" },
   { id: "page-customers", title: "Customers", description: "Customer accounts", path: "/admin/customers", icon: Users, keywords: "clients shoppers users" },
   { id: "page-admins", title: "Administrators", description: "Admin team & roles", path: "/admin/administrators", icon: ShieldCheck, keywords: "team staff roles permissions" },
@@ -59,6 +64,7 @@ const PAGE_ITEMS = [
   { id: "page-payments", title: "Payments", description: "Payment transactions", path: "/admin/payments", icon: CreditCard, keywords: "billing khqr transactions" },
   { id: "page-sale-history", title: "Sale History", description: "POS checkout sales", path: "/admin/payments/sale-history", icon: CreditCard, keywords: "pos sales checkout history" },
   { id: "page-replacements", title: "Replacements", description: "Replacement cases", path: "/admin/replacement-cases", icon: RotateCcw, keywords: "returns refunds exchange" },
+  { id: "page-shipments", title: "Shipments", description: "Order shipment tracking", path: "/admin/shipments", icon: Truck, keywords: "delivery shipping tracking" },
   { id: "page-homepage", title: "Home Page", description: "Storefront homepage", path: "/admin/homepage", icon: Home, keywords: "storefront banner hero" },
   { id: "page-homepage-complete", title: "Complete Homepage Manager", description: "Advanced homepage editor", path: "/admin/homepage-complete", icon: PanelsTopLeft, keywords: "homepage builder" },
   { id: "page-settings", title: "Settings", description: "System preferences", path: "/admin/settings", icon: Settings, keywords: "preferences config" },
@@ -152,6 +158,7 @@ const statusTone = {
 
 export default function AdminCommandPalette({ open, onClose }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { primaryColor } = useTheme();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -216,13 +223,18 @@ export default function AdminCommandPalette({ open, onClose }) {
   }, [debouncedQuery, open]);
 
   const filteredPages = useMemo(
-    () => PAGE_ITEMS.filter((p) => fuzzyMatch(p, debouncedQuery)).slice(0, debouncedQuery ? 6 : 8),
-    [debouncedQuery]
+    () =>
+      PAGE_ITEMS.filter((p) => canAccessAdminPath(user, p.path) && fuzzyMatch(p, debouncedQuery)).slice(
+        0,
+        debouncedQuery ? 6 : 8,
+      ),
+    [debouncedQuery, user],
   );
 
   const filteredActions = useMemo(
-    () => QUICK_ACTIONS.filter((p) => fuzzyMatch(p, debouncedQuery)).slice(0, 4),
-    [debouncedQuery]
+    () =>
+      QUICK_ACTIONS.filter((p) => canAccessAdminPath(user, p.path) && fuzzyMatch(p, debouncedQuery)).slice(0, 4),
+    [debouncedQuery, user],
   );
 
   const sections = useMemo(() => {

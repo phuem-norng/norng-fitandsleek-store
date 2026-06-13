@@ -8,12 +8,71 @@
 // 6) Keeps your UI exactly (only logic fixed)
 
 import React, { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
 import { useAuth } from "../../state/auth";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { useTheme } from "../../state/theme.jsx";
 import { AdminSectionLoader, AdminContentSkeleton } from "@/components/admin/AdminLoading";
+import { useAdminUiPreference } from "../../lib/adminUiPreferences";
+
+const BANNER_AUDIENCE_OPTIONS = [
+ { value: "all", label: "All users" },
+ { value: "guest", label: "Guests" },
+ { value: "bronze", label: "Bronze" },
+ { value: "silver", label: "Silver" },
+ { value: "gold", label: "Gold" },
+ { value: "vip", label: "VIP" },
+];
+const BANNER_PRIORITY_SEGMENTS = ["guest", "bronze", "silver", "gold", "vip"];
+const BANNER_PRIORITY_PRESETS = {
+ VIP_FIRST: { guest: 50, bronze: 40, silver: 30, gold: 20, vip: 10 },
+ GUEST_ACQUISITION: { guest: 10, bronze: 20, silver: 30, gold: 40, vip: 50 },
+ BALANCED: { guest: 100, bronze: 100, silver: 100, gold: 100, vip: 100 },
+};
+const DEFAULT_PRIORITY_PRESET_KEY = "BALANCED";
+
+const normalizeAudienceTargets = (targets) => {
+ if (!Array.isArray(targets) || targets.length === 0) return ["all"];
+ const normalized = targets
+ .map((value) => String(value || "").trim().toLowerCase())
+ .filter((value) => BANNER_AUDIENCE_OPTIONS.some((option) => option.value === value));
+ if (normalized.length === 0) return ["all"];
+ if (normalized.includes("all")) return ["all"];
+ return Array.from(new Set(normalized));
+};
+
+const normalizeAudiencePriorityMap = (priorityMap) => {
+ const map = priorityMap && typeof priorityMap === "object" ? priorityMap : {};
+ const normalized = {};
+ BANNER_PRIORITY_SEGMENTS.forEach((segment) => {
+ const raw = Number(map[segment]);
+ normalized[segment] = Number.isFinite(raw) ? Math.min(9999, Math.max(0, Math.round(raw))) : 100;
+ });
+ return normalized;
+};
+
+const resolvePriorityMapByPreset = (presetKey) => {
+ const key = String(presetKey || DEFAULT_PRIORITY_PRESET_KEY).toUpperCase();
+ return normalizeAudiencePriorityMap(
+ BANNER_PRIORITY_PRESETS[key] || BANNER_PRIORITY_PRESETS[DEFAULT_PRIORITY_PRESET_KEY]
+ );
+};
+
+const buildWinningOrderPreview = (priorityMap) => {
+ const normalized = normalizeAudiencePriorityMap(priorityMap);
+ return [...BANNER_PRIORITY_SEGMENTS]
+ .sort((a, b) => {
+ if (normalized[a] === normalized[b]) {
+ return BANNER_PRIORITY_SEGMENTS.indexOf(a) - BANNER_PRIORITY_SEGMENTS.indexOf(b);
+ }
+ return normalized[a] - normalized[b];
+ })
+ .map((segment) => ({ segment, value: normalized[segment] }));
+};
 
 const pickList = (res) => {
  // supports: {data:[...]} OR {data:{data:[...]}} OR [...]
@@ -51,7 +110,17 @@ const extractErr = (e, refreshAuth) => {
 
 export default function HomePageManager() {
  const { refresh: refreshAuth } = useAuth();
+ const { user: sessionUser, can, permissionsReady } = useAdminPermissions();
+ const canViewHomepage = can("homepage", "view");
+ const canCreateHomepage = can("homepage", "create");
+ const canEditHomepage = can("homepage", "edit");
+ const canDeleteHomepage = can("homepage", "delete");
+ const homepageCanMutate = canCreateHomepage || canEditHomepage || canDeleteHomepage;
  const { primaryColor, mode } = useTheme();
+ const [defaultPriorityPreset, setDefaultPriorityPreset] = useAdminUiPreference(
+ "banners.defaultPriorityPreset",
+ DEFAULT_PRIORITY_PRESET_KEY
+ );
  const accentColor = primaryColor;
  const accentIsWhite = (accentColor || "").toUpperCase() === "#FFFFFF";
  const accentText = accentIsWhite ? "#0b0b0f" : "#FFFFFF";
@@ -86,6 +155,8 @@ export default function HomePageManager() {
  show_title: true,
  show_subtitle: true,
  show_cta: true,
+ audience_targets: ["all"],
+ audience_priority_map: resolvePriorityMapByPreset(defaultPriorityPreset),
  };
 
  const [bannerForm, setBannerForm] = useState(defaultBannerForm);
@@ -144,6 +215,13 @@ export default function HomePageManager() {
  };
 
  const load = async () => {
+ if (!canViewHomepage) {
+ setBanners([]);
+ setCollections([]);
+ setCategories([]);
+ setLoading(false);
+ return;
+ }
  setLoading(true);
  setErr("");
  try {
@@ -164,9 +242,14 @@ export default function HomePageManager() {
  };
 
  useEffect(() => {
+ if (!permissionsReady) return;
+ if (!canViewHomepage) {
+ setLoading(false);
+ return;
+ }
  load();
  // eslint-disable-next-line react-hooks/exhaustive-deps
- }, []);
+ }, [permissionsReady, canViewHomepage]);
 
  // -------- FILE PREVIEW HELPERS --------
  const makeLocalPreview = (file) => (file ? URL.createObjectURL(file) : "");
@@ -188,6 +271,7 @@ export default function HomePageManager() {
  // -------- SAVE BANNER (multipart) --------
  const saveBanner = async (e) => {
  e.preventDefault();
+ if (bannerEditingId ? !canEditHomepage : !canCreateHomepage) return;
  setErr("");
 
  try {
@@ -202,6 +286,13 @@ export default function HomePageManager() {
  fd.append("show_title", bannerForm.show_title ? "1" : "0");
  fd.append("show_subtitle", bannerForm.show_subtitle ? "1" : "0");
  fd.append("show_cta", bannerForm.show_cta ? "1" : "0");
+ normalizeAudienceTargets(bannerForm.audience_targets).forEach((target) => {
+ fd.append("audience_targets[]", target);
+ });
+ const priorityMap = normalizeAudiencePriorityMap(bannerForm.audience_priority_map);
+ BANNER_PRIORITY_SEGMENTS.forEach((segment) => {
+ fd.append(`audience_priority_map[${segment}]`, String(priorityMap[segment]));
+ });
  if (bannerForm.media_url) fd.append("media_url", bannerForm.media_url);
 
  // backend usually expects: image (file). If your backend uses "image", keep "image".
@@ -231,6 +322,7 @@ export default function HomePageManager() {
  // -------- SAVE COLLECTION (multipart) --------
  const saveCollection = async (e) => {
  e.preventDefault();
+ if (collectionEditingId ? !canEditHomepage : !canCreateHomepage) return;
  setErr("");
 
  try {
@@ -267,15 +359,17 @@ export default function HomePageManager() {
 
  // -------- DELETE --------
  const deleteBanner = (id) => {
+ if (!canDeleteHomepage) return;
  setPendingDelete({ type: "banner", id });
  };
 
  const deleteCollection = (id) => {
+ if (!canDeleteHomepage) return;
  setPendingDelete({ type: "collection", id });
  };
 
  const confirmDelete = async () => {
- if (!pendingDelete) return;
+ if (!pendingDelete || !canDeleteHomepage) return;
  setDeleteBusy(true);
  setErr("");
  try {
@@ -297,6 +391,7 @@ export default function HomePageManager() {
 
  // -------- EDIT --------
  const editBanner = (b) => {
+ if (!canEditHomepage) return;
  setActiveTab("banners");
  setShowBannerForm(true);
  setBannerEditingId(b.id);
@@ -317,10 +412,13 @@ export default function HomePageManager() {
  show_title: b.show_title !== false,
  show_subtitle: b.show_subtitle !== false,
  show_cta: b.show_cta !== false,
+ audience_targets: normalizeAudienceTargets(b.audience_targets),
+ audience_priority_map: normalizeAudiencePriorityMap(b.audience_priority_map),
  });
  };
 
  const editCollection = (c) => {
+ if (!canEditHomepage) return;
  setActiveTab("collections");
  setShowCollectionForm(true);
  setCollectionEditingId(c.id);
@@ -335,6 +433,14 @@ export default function HomePageManager() {
  sort_order: c.sort_order ?? 0,
  });
  };
+
+ if (!permissionsReady || (loading && canViewHomepage)) {
+ return <AdminContentSkeleton title="Home Page Manager" />;
+ }
+
+ if (!canViewHomepage) {
+ return <Navigate to={getFirstAccessibleAdminPath(sessionUser)} replace />;
+ }
 
  if (loading) return <AdminContentSkeleton title="Home Page Manager" />;
 
@@ -399,6 +505,7 @@ export default function HomePageManager() {
  </div>
 
  {activeTab === "banners" ? (
+ canCreateHomepage ? (
  <button
  onClick={() => {
  setBannerEditingId(null);
@@ -414,7 +521,9 @@ export default function HomePageManager() {
  >
  New Banner
  </button>
+ ) : null
  ) : (
+ canCreateHomepage ? (
  <button
  onClick={() => {
  setCollectionEditingId(null);
@@ -434,13 +543,14 @@ export default function HomePageManager() {
  >
  New Collection
  </button>
+ ) : null
  )}
  </div>
 
  {/* ---------------- BANNERS ---------------- */}
  {activeTab === "banners" && (
  <div className="grid lg:grid-cols-3 gap-6">
- {(showBannerForm || bannerEditingId) && (
+ {(showBannerForm || bannerEditingId) && (bannerEditingId ? canEditHomepage : canCreateHomepage) && (
  <div className="lg:col-span-3">
  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
  <h2 className="text-lg font-semibold text-slate-900 mb-4">
@@ -547,6 +657,152 @@ export default function HomePageManager() {
  </select>
  </div>
 
+<div>
+<label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Audience targeting</label>
+<div className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900/60 p-3 space-y-2">
+{BANNER_AUDIENCE_OPTIONS.map((option) => {
+ const currentTargets = normalizeAudienceTargets(bannerForm.audience_targets);
+ const checked = currentTargets.includes(option.value);
+ const disableSpecific = option.value !== "all" && currentTargets.includes("all");
+ return (
+ <label key={option.value} className={`flex items-center gap-2 text-sm ${disableSpecific ? "opacity-60" : ""}`}>
+ <input
+ type="checkbox"
+ checked={checked}
+ disabled={disableSpecific}
+ onChange={(e) => {
+ setBannerForm((s) => {
+ const current = normalizeAudienceTargets(s.audience_targets);
+ if (option.value === "all") {
+ return { ...s, audience_targets: e.target.checked ? ["all"] : ["guest"] };
+ }
+ const withoutAll = current.filter((value) => value !== "all");
+ const next = e.target.checked
+ ? [...withoutAll, option.value]
+ : withoutAll.filter((value) => value !== option.value);
+ return { ...s, audience_targets: next.length > 0 ? Array.from(new Set(next)) : ["all"] };
+ });
+ }}
+ className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-[color:var(--admin-primary)] focus:ring-[rgba(var(--admin-primary-rgb),0.35)]"
+ />
+ <span className="text-slate-800 dark:text-slate-100">{option.label}</span>
+ </label>
+ );
+})}
+</div>
+<p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+If no tier-specific banner matches, storefront uses banners targeted to All users.
+</p>
+</div>
+
+<div>
+<label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Tier priority (lower number shows first)</label>
+<div className="mb-2 flex flex-wrap gap-2">
+<button
+ type="button"
+ onClick={() => setBannerForm((s) => ({ ...s, audience_priority_map: resolvePriorityMapByPreset("VIP_FIRST") }))}
+ className="h-8 px-3 rounded-md border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+>
+ VIP First
+</button>
+<button
+ type="button"
+ onClick={() => setBannerForm((s) => ({ ...s, audience_priority_map: resolvePriorityMapByPreset("GUEST_ACQUISITION") }))}
+ className="h-8 px-3 rounded-md border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+>
+ Guest Acquisition
+</button>
+<button
+ type="button"
+ onClick={() => setBannerForm((s) => ({ ...s, audience_priority_map: resolvePriorityMapByPreset("BALANCED") }))}
+ className="h-8 px-3 rounded-md border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+>
+ Balanced
+</button>
+<button
+ type="button"
+ onClick={() => {
+ const currentMap = normalizeAudiencePriorityMap(bannerForm.audience_priority_map);
+ const detectedPreset =
+ Object.entries(BANNER_PRIORITY_PRESETS).find(([, presetMap]) => {
+ const normalizedPreset = normalizeAudiencePriorityMap(presetMap);
+ return BANNER_PRIORITY_SEGMENTS.every((segment) => normalizedPreset[segment] === currentMap[segment]);
+ })?.[0] || DEFAULT_PRIORITY_PRESET_KEY;
+ setDefaultPriorityPreset(detectedPreset);
+ }}
+ className="h-8 px-3 rounded-md border border-[color:var(--admin-primary)] text-xs font-semibold text-[color:var(--admin-primary)] hover:bg-[rgba(var(--admin-primary-rgb),0.08)]"
+>
+ Save as default preset
+</button>
+<button
+ type="button"
+ onClick={() =>
+ setBannerForm((s) => ({
+ ...s,
+ audience_priority_map: resolvePriorityMapByPreset(defaultPriorityPreset),
+ }))
+ }
+ className="h-8 px-3 rounded-md border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+>
+ Use default now
+</button>
+<button
+ type="button"
+ onClick={() =>
+ setBannerForm((s) => ({
+ ...s,
+ audience_priority_map: resolvePriorityMapByPreset("BALANCED"),
+ }))
+ }
+ className="h-8 px-3 rounded-md border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+>
+ Reset to 100
+</button>
+</div>
+<p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+Current default preset: {String(defaultPriorityPreset || DEFAULT_PRIORITY_PRESET_KEY).replaceAll("_", " ")}
+</p>
+<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+{BANNER_PRIORITY_SEGMENTS.map((segment) => (
+ <label key={segment} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 bg-slate-50 dark:bg-slate-900/40">
+ <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase mb-1">{segment}</span>
+ <input
+ type="number"
+ min={0}
+ max={9999}
+ value={normalizeAudiencePriorityMap(bannerForm.audience_priority_map)[segment]}
+ onChange={(e) => {
+ const value = Number(e.target.value || 0);
+ setBannerForm((s) => ({
+ ...s,
+ audience_priority_map: {
+ ...normalizeAudiencePriorityMap(s.audience_priority_map),
+ [segment]: Number.isFinite(value) ? Math.max(0, Math.min(9999, value)) : 100,
+ },
+ }));
+ }}
+ className="w-full h-9 rounded-md border border-slate-300 dark:border-slate-600 px-2 text-sm focus:border-[var(--admin-primary)] focus:ring-1 focus:ring-[rgba(var(--admin-primary-rgb),0.18)] outline-none bg-white dark:bg-slate-900/60 text-slate-900 dark:text-slate-100"
+ />
+ </label>
+))}
+</div>
+<div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3">
+<p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Winning order preview (current form)</p>
+<div className="flex flex-wrap gap-2">
+{buildWinningOrderPreview(bannerForm.audience_priority_map).map((item, idx) => (
+ <span
+ key={item.segment}
+ className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200"
+ >
+ <span className="font-semibold">{idx + 1}.</span>
+ <span className="uppercase">{item.segment}</span>
+ <span className="text-slate-500 dark:text-slate-400">({item.value})</span>
+ </span>
+))}
+</div>
+</div>
+</div>
+
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Media URL (Image/GIF/Video)</label>
  <input
@@ -611,7 +867,7 @@ export default function HomePageManager() {
  {bannerEditingId ? "Edit Banner" : "Create Banner"}
  </button>
 
- {(showBannerForm || bannerEditingId) && (
+ {(showBannerForm || bannerEditingId) && (bannerEditingId ? canEditHomepage : canCreateHomepage) && (
  <button
  type="button"
  onClick={resetBannerForm}
@@ -674,6 +930,12 @@ export default function HomePageManager() {
  <div className={bannerViewMode === "grid" ? "space-y-2" : "flex-1"}>
  <h3 className="font-semibold text-slate-900 dark:text-white">{b.title || "Untitled"}</h3>
  <p className="text-sm text-slate-500 dark:text-slate-400">{(b.position || "hero")} • Order: {b.order ?? 0}</p>
+<p className="text-xs text-slate-400 dark:text-slate-500">
+Audience: {normalizeAudienceTargets(b.audience_targets).join(", ")}
+</p>
+<p className="text-xs text-slate-400 dark:text-slate-500">
+Priority map: {BANNER_PRIORITY_SEGMENTS.map((segment) => `${segment}:${normalizeAudiencePriorityMap(b.audience_priority_map)[segment]}`).join(" • ")}
+</p>
 
  {bannerViewMode === "grid" && (
  <span
@@ -692,7 +954,9 @@ export default function HomePageManager() {
  </span>
  )}
 
+ {homepageCanMutate ? (
  <div className={`flex gap-2 ${bannerViewMode === "grid" ? "mt-3" : ""}`}>
+ {canEditHomepage ? (
  <button
  onClick={() => editBanner(b)}
  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -701,6 +965,8 @@ export default function HomePageManager() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
  </svg>
  </button>
+ ) : null}
+ {canDeleteHomepage ? (
  <button
  onClick={() => deleteBanner(b.id)}
  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -709,7 +975,9 @@ export default function HomePageManager() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ ) : null}
  </div>
+ ) : null}
  </div>
  );
  })}
@@ -724,7 +992,7 @@ export default function HomePageManager() {
  {/* ---------------- COLLECTIONS ---------------- */}
  {activeTab === "collections" && (
  <div className="grid lg:grid-cols-3 gap-6">
- {(showCollectionForm || collectionEditingId) && (
+ {(showCollectionForm || collectionEditingId) && (collectionEditingId ? canEditHomepage : canCreateHomepage) && (
  <div className="lg:col-span-3">
  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
  <h2 className="text-lg font-semibold text-slate-900 mb-4">
@@ -831,7 +1099,7 @@ export default function HomePageManager() {
  {collectionEditingId ? "Edit Collection" : "Create Collection"}
  </button>
 
- {(showCollectionForm || collectionEditingId) && (
+ {(showCollectionForm || collectionEditingId) && (collectionEditingId ? canEditHomepage : canCreateHomepage) && (
  <button
  type="button"
  onClick={resetCollectionForm}
@@ -912,7 +1180,9 @@ export default function HomePageManager() {
  </span>
  )}
 
+ {homepageCanMutate ? (
  <div className={`flex gap-2 ${collectionViewMode === "grid" ? "mt-3" : ""}`}>
+ {canEditHomepage ? (
  <button
  onClick={() => editCollection(c)}
  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -921,6 +1191,8 @@ export default function HomePageManager() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
  </svg>
  </button>
+ ) : null}
+ {canDeleteHomepage ? (
  <button
  onClick={() => deleteCollection(c.id)}
  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -929,7 +1201,9 @@ export default function HomePageManager() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ ) : null}
  </div>
+ ) : null}
  </div>
  );
  })}

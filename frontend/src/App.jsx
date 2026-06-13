@@ -16,7 +16,6 @@ import PaymentProcess from "./pages/PaymentProcess.jsx";
 import Orders from "./pages/Orders.jsx";
 import ContactPage from "./pages/Contact.jsx";
 import SupportPage from "./pages/Support.jsx";
-import TrackOrderPage from "./pages/TrackOrder.jsx";
 import PrivacyPage from "./pages/Privacy.jsx";
 import FAQPage from "./pages/FAQ.jsx";
 import TermsPage from "./pages/Terms.jsx";
@@ -32,8 +31,10 @@ import {
   AdminProducts,
   AdminCategories,
   AdminBrands,
+  AdminSuppliers,
+  AdminStockInventoryList,
+  AdminInventoryLotsCatalog,
   AdminBarcodeQR,
-  InventoryIntegrity,
   AdminPosScan,
   AdminOrders,
   AdminInvoicePage,
@@ -53,7 +54,12 @@ import {
   AdminPayments,
   SaleHistory,
   AdminReplacementCases,
+  AdminShipments,
+  AdminPurchaseOrders,
+  AdminStockReceived,
   PaymentSettings,
+  LoyaltyTopFans,
+  UserProfileDetail,
 } from "./pages/admin/adminLazy.js";
 import { CatalogAvailabilityProvider } from "./state/catalogAvailability.jsx";
 import { HomepageSettingsProvider, useHomepageSettings } from "./state/homepageSettings.jsx";
@@ -74,6 +80,11 @@ function LegacyBarcodeQrToStockInventoryEdit() {
   return <Navigate to={`/admin/stock-inventory/${id}/edit`} replace />;
 }
 
+function AdminUserProfileRedirect() {
+  const { userId } = useParams();
+  return <Navigate to={`/admin/users/${userId}`} replace />;
+}
+
 /** Legacy chat/API links used `/products/:slug`; storefront route is `/p/:slug`. */
 function ProductSlugRedirect() {
   const { slug } = useParams();
@@ -82,7 +93,7 @@ function ProductSlugRedirect() {
 
 function CustomerPageSkeleton() {
   return (
-    <div className="container-safe py-8">
+    <div className="container-safe-inset py-8">
       <div className="mx-auto w-full max-w-5xl">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex items-center gap-4">
@@ -114,6 +125,13 @@ function CustomerPageSkeleton() {
       </div>
     </div>
   );
+}
+
+function TrackOrderRedirect() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set("tab", "track");
+  return <Navigate to={`/profile?${params.toString()}`} replace />;
 }
 
 function RequireAuth({ children }) {
@@ -187,6 +205,12 @@ function StorefrontHtmlThemeSync() {
   return null;
 }
 
+/** Legacy /shop URLs → /search (bottom nav and bookmarks). */
+function ShopToSearchRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/search${search}`} replace />;
+}
+
 export default function App() {
   return (
     <CatalogAvailabilityProvider>
@@ -198,6 +222,7 @@ export default function App() {
         <Route element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/shop" element={<ShopToSearchRedirect />} />
           <Route path="/image-search" element={<ImageSearch />} />
           <Route path="/brands/:slug" element={<BrandDetail />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
@@ -208,7 +233,14 @@ export default function App() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/support" element={<SupportPage />} />
-          <Route path="/track-order" element={<TrackOrderPage />} />
+          <Route
+            path="/track-order"
+            element={
+              <RequireAuth>
+                <TrackOrderRedirect />
+              </RequireAuth>
+            }
+          />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/faq" element={<FAQPage />} />
           <Route path="/terms" element={<TermsPage />} />
@@ -267,6 +299,7 @@ export default function App() {
           }
         >
           <Route index element={<AdminHome />} />
+          <Route path="purchase-orders" element={<AdminPurchaseOrders />} />
           <Route path="reports" element={<Reports />} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="inventory" element={<AdminProducts />} />
@@ -274,13 +307,14 @@ export default function App() {
           <Route path="sales" element={<AdminDiscounts />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="brands" element={<AdminBrands />} />
+          <Route path="suppliers" element={<AdminSuppliers />} />
           <Route path="stock-inventory/new" element={<AdminBarcodeQR />} />
           <Route path="stock-inventory/:id/edit" element={<AdminBarcodeQR />} />
-          <Route path="stock-inventory" element={<AdminBarcodeQR />} />
-          <Route path="stock-received/new" element={<AdminBarcodeQR />} />
-          <Route path="stock-received/:id/edit" element={<AdminBarcodeQR />} />
-          <Route path="stock-received" element={<AdminBarcodeQR />} />
-          <Route path="inventory-integrity" element={<InventoryIntegrity />} />
+          <Route path="stock-inventory" element={<AdminStockInventoryList />} />
+          <Route path="inventory-lots" element={<AdminInventoryLotsCatalog />} />
+          <Route path="stock-received/new" element={<Navigate to="/admin/purchase-orders" replace />} />
+          <Route path="stock-received/:id/edit" element={<Navigate to="/admin/stock-received" replace />} />
+          <Route path="stock-received" element={<AdminStockReceived />} />
           <Route path="barcode-qr/new" element={<Navigate to="/admin/stock-inventory/new" replace />} />
           <Route path="barcode-qr/:id/edit" element={<LegacyBarcodeQrToStockInventoryEdit />} />
           <Route path="barcode-qr" element={<Navigate to="/admin/stock-inventory" replace />} />
@@ -290,6 +324,9 @@ export default function App() {
           <Route path="homepage-complete" element={<CompleteHomepageManager />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="orders/:orderId/invoice" element={<AdminInvoicePage />} />
+          <Route path="users/:userId" element={<UserProfileDetail />} />
+          <Route path="customers/:userId" element={<AdminUserProfileRedirect />} />
+          <Route path="administrators/:userId" element={<AdminUserProfileRedirect />} />
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="administrators" element={<AdminAdministrators />} />
           <Route path="contacts" element={<Contacts />} />
@@ -303,7 +340,9 @@ export default function App() {
           <Route path="payments" element={<AdminPayments />} />
           <Route path="payments/sale-history" element={<SaleHistory />} />
           <Route path="replacement-cases" element={<AdminReplacementCases />} />
+          <Route path="shipments" element={<AdminShipments />} />
           <Route path="payment-settings" element={<PaymentSettings />} />
+          <Route path="loyalty-top-fans" element={<LoyaltyTopFans />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

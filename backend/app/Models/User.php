@@ -4,7 +4,6 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +27,7 @@ class User extends Authenticatable
         'facebook_id',
         'social_type',
         'role',
+        'admin_permissions',
         'phone',
         'address',
         'profile_image_path',
@@ -45,6 +45,7 @@ class User extends Authenticatable
         'remember_token',
         'two_factor_secret',
         'two_factor_recovery_codes',
+        'admin_permissions',
     ];
 
     /**
@@ -59,7 +60,22 @@ class User extends Authenticatable
             'password' => 'hashed',
             'profile_image_updated_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
+            'admin_permissions' => 'array',
         ];
+    }
+
+    public function hasAdminPermission(string $resource, string $action = 'view'): bool
+    {
+        return app(\App\Services\AdminPermissionService::class)->has($this, $resource, $action);
+    }
+
+    public function getEffectiveAdminPermissionsAttribute(): ?array
+    {
+        if (! $this->isAdmin()) {
+            return null;
+        }
+
+        return app(\App\Services\AdminPermissionService::class)->getEffectivePermissions($this);
     }
 
     public function hasTwoFactorEnabled(): bool
@@ -84,6 +100,11 @@ class User extends Authenticatable
         return $this->hasMany(Order::class);
     }
 
+    public function loyaltyProfile()
+    {
+        return $this->hasOne(LoyaltyProfile::class);
+    }
+
     public function paymentsVerified()
     {
         return $this->hasMany(Payment::class, 'verified_by');
@@ -102,11 +123,6 @@ class User extends Authenticatable
     public function deviceSessions()
     {
         return $this->hasMany(UserDeviceSession::class);
-    }
-
-    public function telegramUser(): HasOne
-    {
-        return $this->hasOne(TelegramUser::class);
     }
 
     // Helper methods
@@ -150,8 +166,5 @@ class User extends Authenticatable
         }
     }
 
-    /**
-     * Append profile_image_url to the model's array representation
-     */
-    protected $appends = ['profile_image_url'];
+    protected $appends = ['profile_image_url', 'effective_admin_permissions'];
 }

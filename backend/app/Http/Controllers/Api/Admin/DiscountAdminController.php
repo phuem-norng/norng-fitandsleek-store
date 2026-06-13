@@ -5,10 +5,33 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Discount;
 use App\Models\Product;
+use App\Services\InventoryLotService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class DiscountAdminController extends Controller
 {
+    public function __construct(
+        private readonly InventoryLotService $inventoryLots,
+    ) {
+    }
+
+    private function assertDiscountQuantityWithinStock(Product $product, ?int $quantity): void
+    {
+        if ($quantity === null) {
+            return;
+        }
+
+        $maxStock = $this->inventoryLots->productSellableStock($product);
+        if ($quantity > $maxStock) {
+            throw ValidationException::withMessages([
+                'quantity' => [
+                    "Discount quantity cannot exceed available stock ({$maxStock} units).",
+                ],
+            ]);
+        }
+    }
+
     public function index(Request $request)
     {
         $query = Discount::query();
@@ -55,20 +78,24 @@ class DiscountAdminController extends Controller
             'discount_type' => 'required|in:percentage,fixed',
             'discount_value' => 'required|numeric|min:0',
             'sale_price' => 'nullable|numeric|min:0',
+            'quantity' => 'nullable|integer|min:1',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after:start_date',
             'is_active' => 'boolean',
             'description' => 'nullable|string|max:500',
         ]);
 
+        $product = Product::findOrFail($validated['product_id']);
+
         if (empty($validated['sale_price'])) {
-            $product = Product::findOrFail($validated['product_id']);
             if ($validated['discount_type'] === 'percentage') {
                 $validated['sale_price'] = $product->price * (1 - $validated['discount_value'] / 100);
             } else {
                 $validated['sale_price'] = max(0, $product->price - $validated['discount_value']);
             }
         }
+
+        $this->assertDiscountQuantityWithinStock($product, $validated['quantity'] ?? null);
 
         $discount = Discount::create($validated);
 
@@ -87,15 +114,17 @@ class DiscountAdminController extends Controller
             'discount_type' => 'sometimes|in:percentage,fixed',
             'discount_value' => 'sometimes|numeric|min:0',
             'sale_price' => 'nullable|numeric|min:0',
+            'quantity' => 'nullable|integer|min:1',
             'start_date' => 'sometimes|date',
             'end_date' => 'sometimes|date|after_or_equal:start_date',
             'is_active' => 'boolean',
             'description' => 'nullable|string|max:500',
         ]);
 
+        $product = Product::findOrFail($validated['product_id'] ?? $discount->product_id);
+
         if (isset($validated['discount_value']) || isset($validated['discount_type'])) {
             if (empty($validated['sale_price'])) {
-                $product = Product::findOrFail($validated['product_id'] ?? $discount->product_id);
                 $discountType = $validated['discount_type'] ?? $discount->discount_type;
                 $discountValue = $validated['discount_value'] ?? $discount->discount_value;
 
@@ -106,6 +135,11 @@ class DiscountAdminController extends Controller
                 }
             }
         }
+
+        $nextQuantity = array_key_exists('quantity', $validated)
+            ? $validated['quantity']
+            : $discount->quantity;
+        $this->assertDiscountQuantityWithinStock($product, $nextQuantity !== null ? (int) $nextQuantity : null);
 
         $discount->update($validated);
 

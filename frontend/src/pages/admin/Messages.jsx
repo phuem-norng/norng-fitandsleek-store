@@ -1,11 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
 import { isAdminDarkChrome } from "../../lib/adminDarkChrome.js";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 export default function AdminMessages() {
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewMessages = can("messages", "view");
+ const canCreateMessages = can("messages", "create");
+ const canEditMessages = can("messages", "edit");
+ const canDeleteMessages = can("messages", "delete");
+ const canBulkSelect = canDeleteMessages;
  const [messages, setMessages] = useState([]);
  const [loading, setLoading] = useState(true);
  const [showForm, setShowForm] = useState(false);
@@ -35,7 +44,12 @@ export default function AdminMessages() {
  expires_at: ''
  });
 
- const loadMessages = async () => {
+ const loadMessages = useCallback(async () => {
+ if (!canViewMessages) {
+ setMessages([]);
+ setLoading(false);
+ return;
+ }
  setLoading(true);
  try {
  const params = new URLSearchParams();
@@ -49,7 +63,7 @@ export default function AdminMessages() {
  } finally {
  setLoading(false);
  }
- };
+ }, [canViewMessages, filters.language, filters.status]);
 
  const inferMediaType = (url, fallback = "") => {
  if (fallback) return fallback;
@@ -74,8 +88,9 @@ export default function AdminMessages() {
  });
 
  useEffect(() => {
+ if (!permissionsReady) return;
  loadMessages();
- }, [filters]);
+ }, [loadMessages, permissionsReady]);
 
  useEffect(() => {
  setSelectedIds((prev) => prev.filter((id) => messages.some((m) => m.id === id)));
@@ -83,6 +98,7 @@ export default function AdminMessages() {
 
  const handleSubmit = async (e) => {
  e.preventDefault();
+ if (editingMessage ? !canEditMessages : !canCreateMessages) return;
  try {
  if (formData.media_url && formData.media_url.startsWith('blob:')) {
  setUploadError('Please wait for upload to finish or use a media URL');
@@ -113,6 +129,7 @@ export default function AdminMessages() {
  };
 
  const handleEdit = (message) => {
+ if (!canEditMessages) return;
  setEditingMessage(message);
  setFormData({
  title: message.title,
@@ -136,10 +153,12 @@ export default function AdminMessages() {
  };
 
  const handleDelete = (id) => {
+ if (!canDeleteMessages) return;
  setPendingDeleteId(id);
  };
 
  const confirmDelete = async () => {
+ if (!canDeleteMessages) return;
  setDeleteBusy(true);
  try {
  if (pendingBulkDelete) {
@@ -180,11 +199,12 @@ export default function AdminMessages() {
  };
 
  const deleteSelected = () => {
- if (selectedIds.length === 0) return;
+ if (!canDeleteMessages || selectedIds.length === 0) return;
  setPendingBulkDelete(true);
  };
 
  const handleToggleActive = async (message) => {
+ if (!canEditMessages) return;
  try {
  await api.patch(`/admin/messages/${message.id}/toggle-active`);
  loadMessages();
@@ -192,6 +212,14 @@ export default function AdminMessages() {
  console.error("Failed to toggle message status", e);
  }
  };
+
+ if (!permissionsReady || (loading && messages.length === 0)) {
+ return <AdminContentSkeleton title="Messages" />;
+ }
+
+ if (!canViewMessages) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  if (loading) return <AdminContentSkeleton title="Messages" />;
 
@@ -211,6 +239,7 @@ export default function AdminMessages() {
  };
 
  const handleMediaUpload = async (e) => {
+ if (editingMessage ? !canEditMessages : !canCreateMessages) return;
  const file = e.target.files?.[0];
  if (!file) return;
 
@@ -298,6 +327,7 @@ export default function AdminMessages() {
  </h1>
  <p className="text-slate-500 dark:text-slate-400 text-lg">Send messages and notifications to customers and guests</p>
  </div>
+ {canCreateMessages ? (
  <button
  onClick={() => {
  setEditingMessage(null);
@@ -311,12 +341,14 @@ export default function AdminMessages() {
  </svg>
  New Message
  </button>
+ ) : null}
  </div>
  </div>
 
  {/* Filters */}
  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 mb-6">
  <div className="flex flex-wrap gap-4 items-end">
+ {canBulkSelect ? (
  <div className="flex items-center gap-2 pb-1">
  <input
  type="checkbox"
@@ -326,6 +358,7 @@ export default function AdminMessages() {
  />
  <span className="text-sm text-slate-600 dark:text-slate-300">Select all</span>
  </div>
+ ) : null}
  <div>
  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Language</label>
  <select
@@ -359,7 +392,7 @@ export default function AdminMessages() {
  className="w-full h-10 px-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:border-[var(--admin-primary)] focus:ring-1 focus:ring-[rgba(var(--admin-primary-rgb),0.22)]"
  />
  </div>
- {selectedIds.length > 0 && (
+ {canDeleteMessages && selectedIds.length > 0 && (
  <button
  onClick={deleteSelected}
  className="px-4 py-2 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-300 bg-white dark:bg-slate-900 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
@@ -393,6 +426,7 @@ export default function AdminMessages() {
  {filteredMessages.map((message) => (
  <div key={message.id} className="p-6 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
  <div className="flex items-start gap-4">
+ {canBulkSelect ? (
  <div className="pt-1">
  <input
  type="checkbox"
@@ -401,6 +435,7 @@ export default function AdminMessages() {
  className="rounded"
  />
  </div>
+ ) : null}
  <div className="flex items-start justify-between flex-1">
  <div className="flex-1 min-w-0">
  <div className="flex items-center gap-3 mb-2">
@@ -422,12 +457,15 @@ export default function AdminMessages() {
  </div>
  </div>
  <div className="flex items-center gap-2 ml-4">
+ {canEditMessages ? (
  <button
  onClick={() => handleToggleActive(message)}
  className={"px-3 py-1 text-xs font-medium rounded-full transition-colors " + (message.is_active ? 'bg-slate-800 text-white hover:bg-slate-700 dark:bg-[color:var(--admin-primary)] dark:hover:brightness-110' : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600')}
  >
  {message.is_active ? 'Active' : 'Inactive'}
  </button>
+ ) : null}
+ {canEditMessages ? (
  <button
  onClick={() => handleEdit(message)}
  className="h-9 w-9 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center justify-center"
@@ -437,6 +475,8 @@ export default function AdminMessages() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
  </svg>
  </button>
+ ) : null}
+ {canDeleteMessages ? (
  <button
  onClick={() => handleDelete(message.id)}
  title="Delete"
@@ -453,6 +493,7 @@ export default function AdminMessages() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ ) : null}
  </div>
  </div>
  </div>

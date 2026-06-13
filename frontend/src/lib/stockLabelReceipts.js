@@ -4,6 +4,13 @@ export const BARCODE_QR_TYPE = "barcode_qr";
 
 const normalizeType = (value) => String(value || "").toLowerCase().trim();
 
+/** Receive batch / sub-stock row (has `parent_id`). */
+export const isSubStockLabel = (item) =>
+    item != null && item.parent_id != null && item.parent_id !== "";
+
+/** Stock inventory rows do not expose scannable barcodes (use product / variant barcodes). */
+export const stockNumberForLabel = () => "";
+
 const effectiveDateIn = (item) => {
     if (!item) return null;
     if (item.date_in) return String(item.date_in).slice(0, 10);
@@ -82,23 +89,14 @@ export const receiveBatchesForMaster = (masterRow, allRows) => {
     return (allRows || []).filter((r) => String(r.parent_id) === masterId);
 };
 
-/** Master label barcode for a row (batch rows inherit their label slug). */
-export const masterBarcodeForRow = (item, allRows) => {
-    if (!item) return "";
-    if (item.parent_id != null && item.parent_id !== "") {
-        const master = (allRows || []).find((r) => String(r.id) === String(item.parent_id));
-        return String(master?.slug || item.slug || "").trim();
-    }
-    return String(item.slug || "").trim();
-};
+/** @deprecated Use `stockNumberForLabel` — only sub-stock has a scannable number. */
+export const masterBarcodeForRow = (item, allRows) => stockNumberForLabel(item, allRows);
 
-/** Batch receipt ref shown under the master barcode (Quick Restock slugs). */
-export const batchReceiptRefForRow = (item, allRows) => {
-    if (!item?.parent_id) return null;
-    const batchSlug = String(item.slug || "").trim();
-    const masterSlug = masterBarcodeForRow(item, allRows);
-    if (!batchSlug || batchSlug === masterSlug) return null;
-    return batchSlug;
+/** Optional subtitle for receive-batch rows (no stock barcode). */
+export const batchReceiptRefForRow = (item) => {
+    if (!isSubStockLabel(item)) return null;
+    const dateIn = effectiveDateIn(item);
+    return dateIn ? `Received ${dateIn}` : "Receive batch";
 };
 
 /**
@@ -127,38 +125,20 @@ export const buildStockReceivedLogRows = (filteredRows, allRows) => {
     });
 };
 
-/**
- * Barcode label dropdown on Products admin — mirrors Stock Received rows plus standalone masters.
- */
-export const buildProductBarcodeLabelOptions = (categories) => {
-    const allRows = stockLabelRows(categories);
-    const receipts = buildStockReceivedLogRows(allRows, allRows);
-    const receiptIds = new Set(receipts.map((r) => String(r.id)));
+/** @deprecated Stock labels are not linked by barcode; use `stock_label_id` on products. */
+export const buildProductBarcodeLabelOptions = () => [];
 
-    const extras = [];
-    for (const master of allRows.filter((r) => r.parent_id == null || r.parent_id === "")) {
-        if (receiptIds.has(String(master.id))) continue;
-        const children = receiveBatchesForMaster(master, allRows);
-        if (children.length > 0) continue;
-        if (!master.manage_stock) continue;
-        const st = master.stock != null ? parseInt(master.stock, 10) : NaN;
-        if (Number.isFinite(st) && st > 0) extras.push(master);
-    }
+/** Product form stock barcode picker — one row per inventory master. */
+export const buildProductStockBarcodePickerOptions = (categories) =>
+    stockLabelRows(categories)
+        .filter((row) => row.parent_id == null || row.parent_id === "")
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
 
-    const combined = [...receipts, ...extras];
-    return combined.sort((a, b) => {
-        const na = String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
-        if (na !== 0) return na;
-        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return tb - ta;
-    });
-};
+export const formatStockBarcodePickerLabel = (row) => String(row?.name || "Stock").trim();
 
 export const catalogUnitsForMasterLabel = (master, allCategories, products = [], ignoreProductId = null) => {
     if (!master?.id) return 0;
     const masterId = String(master.id);
-    const masterBarcode = String(master.slug || "").trim().toLowerCase();
     const batchIds = new Set(
         receiveBatchesForMaster(master, allCategories).map((b) => String(b.id)),
     );
@@ -172,8 +152,6 @@ export const catalogUnitsForMasterLabel = (master, allCategories, products = [],
         let linked = false;
         if (product.stock_label_id != null && product.stock_label_id !== "") {
             linked = batchIds.has(String(product.stock_label_id));
-        } else if (masterBarcode) {
-            linked = String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
         }
         if (!linked) continue;
         const st = Number(product?.stock);
@@ -186,8 +164,6 @@ export const formatBarcodeLabelOptionText = (row, categories, products = []) => 
     const allRows = stockLabelRows(categories);
     const master = resolveMasterCategoryForLabel(row, allRows);
     const name = row.name || row.slug || "Label";
-    const ref = batchReceiptRefForRow(row, allRows);
-    const displaySlug = ref || String(master?.slug || row.slug || "").trim();
     let qty = "";
     if (row.manage_stock || master?.manage_stock) {
         if (isAverageBundleCategory(master)) {
@@ -203,7 +179,7 @@ export const formatBarcodeLabelOptionText = (row, categories, products = []) => 
     }
     const dateIn = effectiveDateIn(row);
     const dateSuffix = dateIn ? ` · ${dateIn}` : "";
-    return `${name} · ${displaySlug}${qty}${dateSuffix}`;
+    return `${name}${qty}${dateSuffix}`;
 };
 
 /** Sellable units remaining on this receipt/label row (for product allocation pool). */
@@ -239,7 +215,6 @@ export const usedStockForInventoryLabel = (label, allCategories, products = [], 
         }
     }
 
-    const masterBarcode = String(master?.slug || "").trim().toLowerCase();
     let used = 0;
     for (const product of products || []) {
         if (ignoreProductId != null && String(product?.id) === String(ignoreProductId)) {
@@ -248,8 +223,6 @@ export const usedStockForInventoryLabel = (label, allCategories, products = [], 
         let linked = false;
         if (product.stock_label_id != null && product.stock_label_id !== "") {
             linked = labelIds.has(String(product.stock_label_id));
-        } else if (!isBatch && masterBarcode) {
-            linked = String(product?.barcode_code || "").trim().toLowerCase() === masterBarcode;
         }
         if (!linked) continue;
         const st = Number(product?.stock);
@@ -264,9 +237,19 @@ export const findBarcodeLabelBySlug = (slug, options) => {
     return (options || []).find((b) => String(b.slug || "").trim().toUpperCase() === codeU) ?? null;
 };
 
+/** Stock inventory rows are not matched by barcode (product / variant barcodes only). */
+export const findStockLabelByBarcode = () => null;
+
 export const findBarcodeLabelById = (id, options) => {
     if (id == null || id === "") return null;
     return (options || []).find((b) => String(b.id) === String(id)) ?? null;
+};
+
+export const findStockLabelById = (id, categories, preferredOptions = null) => {
+    const fromOptions = findBarcodeLabelById(id, preferredOptions || []);
+    if (fromOptions) return fromOptions;
+    if (id == null || id === "") return null;
+    return stockLabelRows(categories).find((b) => String(b.id) === String(id)) ?? null;
 };
 
 export const isAverageBundleCategory = (label) =>
@@ -310,7 +293,7 @@ export const labelPricePoolForProduct = (label, allCategories, options = {}) => 
     if (!label) return null;
 
     const master = resolveMasterCategoryForLabel(label, allCategories);
-    const slug = String(master?.slug || label.slug || "").trim();
+    const slug = "";
     const isAverageBundle = isAverageBundleCategory(master);
     const isSecondHand = String(master?.product_condition || "new") === "second_hand";
     const saleType = String(master?.second_hand_sale_type || "single");

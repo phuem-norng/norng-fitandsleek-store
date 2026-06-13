@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import QRCode from "qrcode.react";
 
 /* ─── KHQR official brand colours ────────────────────── */
@@ -64,6 +65,16 @@ export default function KhqrModal({
   const [copied, setCopied] = useState(null);
 
   useEffect(() => {
+    if (!open) return undefined;
+    document.body.classList.add("modal-open");
+    document.documentElement.classList.add("modal-open");
+    return () => {
+      document.body.classList.remove("modal-open");
+      document.documentElement.classList.remove("modal-open");
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open || !expiresAt) return;
     const end = new Date(expiresAt).getTime();
     const tick = () => setTimeLeft(Math.max(0, Math.floor((end - Date.now()) / 1000)));
@@ -89,13 +100,23 @@ export default function KhqrModal({
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center px-0 sm:px-4">
+  const modal = (
+    <div
+      className="fixed inset-0 z-[9998] flex items-center justify-center p-4 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="KHQR payment"
+    >
       {/* backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+        aria-label="Close"
+      />
 
       {/* sheet */}
-      <div className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 shadow-2xl overflow-hidden [animation:fsModalIn_220ms_ease-out]">
+      <div className="relative z-10 w-full sm:max-w-md max-h-[min(92dvh,calc(100dvh-2rem))] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl [animation:fsModalIn_220ms_ease-out]">
 
         {/* ── branded header ─────────────────── */}
         <div
@@ -249,6 +270,9 @@ export default function KhqrModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.body);
 }
 
 

@@ -1,22 +1,102 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { resolveImageUrl } from '../../lib/images';
 import { AdminContentSkeleton } from '@/components/admin/AdminLoading';
 import { useTheme } from '../../state/theme.jsx';
 import { AdminConfirmDialog } from '../../components/admin/AdminModal.jsx';
+import TopNavDropdownEditor from '../../components/admin/TopNavDropdownEditor.jsx';
+import ChromeBackgroundImageField from '../../components/admin/ChromeBackgroundImageField.jsx';
+import AdminSaveToast, { AdminFormErrorBanner, flashAdminMessage } from '../../components/admin/AdminFormToast.jsx';
+import { useAdminPermissions } from '../../hooks/useAdminPermissions.js';
+import { getFirstAccessibleAdminPath } from '../../lib/adminPermissions.js';
+import { DEFAULT_TOP_NAV_DROPDOWNS, mergeTopNavDropdowns } from '../../lib/defaultTopNavDropdowns.js';
+import { useHomepageSettings } from '../../state/homepageSettings.jsx';
+import {
+  DEFAULT_CHROME_BACKGROUND,
+  DEFAULT_CHROME_TEXT,
+} from '../../lib/storefrontChrome.js';
+import {
+  DEFAULT_FOOTER_SECTION_ORDER,
+  normalizeFooterSectionOrder,
+  orderFooterSectionEntries,
+  reorderFooterSectionKeys,
+  reorderFooterSectionsObject,
+} from '../../lib/footerSections.js';
+import {
+  DEFAULT_FAQ_BILINGUAL,
+  addFaqSection,
+  getFaqLocaleView,
+  moveFaqSection,
+  normalizeFaqPayload,
+  removeFaqSection,
+  updateFaqLocaleField,
+  updateFaqLocaleSection,
+} from '../../lib/faqContent.js';
+import FaqManagerPanel from '../../components/admin/FaqManagerPanel.jsx';
+import ContactPageManagerPanel from '../../components/admin/ContactPageManagerPanel.jsx';
+import PrivacyPageManagerPanel from '../../components/admin/PrivacyPageManagerPanel.jsx';
+import TermsPageManagerPanel from '../../components/admin/TermsPageManagerPanel.jsx';
+import CookiesPageManagerPanel from '../../components/admin/CookiesPageManagerPanel.jsx';
+import {
+  DEFAULT_CONTACT_BILINGUAL,
+  addContactInfoCard,
+  addContactSubject,
+  getContactLocaleView,
+  moveContactInfoCard,
+  moveContactSubject,
+  normalizeContactPagePayload,
+  removeContactInfoCard,
+  removeContactSubject,
+  updateContactFormField,
+  updateContactInfoCard,
+  updateContactLocaleField,
+  updateContactSubject,
+} from '../../lib/contactPageContent.js';
+import {
+  DEFAULT_PRIVACY_BILINGUAL,
+  addPrivacySection,
+  addPrivacySectionItem,
+  getPrivacyLocaleView,
+  movePrivacySection,
+  normalizePrivacyPagePayload,
+  removePrivacySection,
+  removePrivacySectionItem,
+  updatePrivacyInquiryField,
+  updatePrivacyLocaleField,
+  updatePrivacyLocaleSection,
+  updatePrivacySectionItem,
+} from '../../lib/privacyPageContent.js';
+import {
+  DEFAULT_TERMS_BILINGUAL,
+  addTermsSection,
+  getTermsLocaleView,
+  moveTermsSection,
+  normalizeTermsPagePayload,
+  removeTermsSection,
+  updateTermsLocaleField,
+  updateTermsLocaleSection,
+} from '../../lib/termsPageContent.js';
+import {
+  DEFAULT_COOKIES_BILINGUAL,
+  addCookiesSection,
+  addCookiesSectionItem,
+  getCookiesLocaleView,
+  moveCookiesSection,
+  normalizeCookiesPagePayload,
+  removeCookiesSection,
+  removeCookiesSectionItem,
+  updateCookiesLocaleField,
+  updateCookiesLocaleSection,
+  updateCookiesSectionItem,
+} from '../../lib/cookiesPageContent.js';
+
+function withoutMenuVisibilitySection(leftMenu) {
+ if (!Array.isArray(leftMenu)) return [];
+ return leftMenu.filter((s) => String(s?.title || '').trim() !== 'Menu Visibility');
+}
+
 const defaultLeftMenu = [
- {
- title: 'Menu Visibility',
- items: [
- { label: 'NEW IN', to: '/search?tab=new', image: '/placeholder.svg' },
- { label: 'Discounts', to: '/discounts', image: '/placeholder.svg' },
- { label: 'Women', to: '/search?gender=women', image: '/placeholder.svg' },
- { label: 'Men', to: '/search?gender=men', image: '/placeholder.svg' },
- { label: 'Boys', to: '/search?gender=boys', image: '/placeholder.svg' },
- { label: 'Girls', to: '/search?gender=girls', image: '/placeholder.svg' },
- { label: 'Sale', to: '/search?tab=sale', image: '/placeholder.svg' },
- ],
- },
  {
  title: 'New Product',
  items: [
@@ -71,15 +151,18 @@ const defaultLeftMenu = [
  },
 ];
 
-const DEFAULT_CHROME_BACKGROUND = '#6e8b7e';
-
 export default function CompleteHomepageManager() {
  const { mode } = useTheme();
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewHomepageComplete = can('homepage_complete', 'view');
+ const canEditHomepageComplete = can('homepage_complete', 'edit');
+ const { reloadSettings } = useHomepageSettings();
  const [activeTab, setActiveTab] = useState('sections');
  const [loading, setLoading] = useState(false);
  const [initialLoading, setInitialLoading] = useState(true);
  const [error, setError] = useState('');
  const [success, setSuccess] = useState('');
+ const showSuccess = (msg) => flashAdminMessage(setSuccess, msg);
  const [pendingRemove, setPendingRemove] = useState(null);
 
  // Sections data
@@ -101,6 +184,8 @@ export default function CompleteHomepageManager() {
  logo_text: 'FIT&SLEEK',
  logo_url: '/logo.png',
  background_color: DEFAULT_CHROME_BACKGROUND,
+ background_image: '',
+ text_color: DEFAULT_CHROME_TEXT,
  search_placeholder: 'Search items...',
  search_enabled: true,
  cart_enabled: true,
@@ -118,7 +203,8 @@ export default function CompleteHomepageManager() {
  custom_nav: [],
  left_menu: defaultLeftMenu,
  nav_labels: {},
- });
+ nav_dropdowns: DEFAULT_TOP_NAV_DROPDOWNS,
+});
 
  // Footer data
  const [footerSettings, setFooterSettings] = useState({
@@ -136,6 +222,8 @@ export default function CompleteHomepageManager() {
  contact_enabled: true,
  copyright_text: '© 2026 FIT&SLEEK Pro. All rights reserved.',
  background_color: DEFAULT_CHROME_BACKGROUND,
+ background_image: '',
+ text_color: DEFAULT_CHROME_TEXT,
  });
 
  // Footer links sections
@@ -151,7 +239,7 @@ export default function CompleteHomepageManager() {
  tracking: {
  title: 'TRACKING',
  items: [
- { label: 'Track Order', link: '/track-order' },
+ { label: 'Track Order', link: '/profile?tab=track' },
  { label: 'Returns', link: '/returns' },
  { label: 'Shipping Info', link: '/shipping' },
  ],
@@ -165,6 +253,20 @@ export default function CompleteHomepageManager() {
  ],
  },
  });
+
+ const [footerSectionOrder, setFooterSectionOrder] = useState(DEFAULT_FOOTER_SECTION_ORDER);
+
+ const [faqSettings, setFaqSettings] = useState(DEFAULT_FAQ_BILINGUAL);
+ const [faqEditLocale, setFaqEditLocale] = useState('en');
+
+ const [contactPage, setContactPage] = useState(DEFAULT_CONTACT_BILINGUAL);
+ const [contactEditLocale, setContactEditLocale] = useState('en');
+ const [privacyPage, setPrivacyPage] = useState(DEFAULT_PRIVACY_BILINGUAL);
+ const [privacyEditLocale, setPrivacyEditLocale] = useState('en');
+ const [termsPage, setTermsPage] = useState(DEFAULT_TERMS_BILINGUAL);
+ const [termsEditLocale, setTermsEditLocale] = useState('en');
+ const [cookiesPage, setCookiesPage] = useState(DEFAULT_COOKIES_BILINGUAL);
+ const [cookiesEditLocale, setCookiesEditLocale] = useState('en');
 
  const [footerSocials, setFooterSocials] = useState([
  { platform: 'facebook', url: '#' },
@@ -182,7 +284,7 @@ export default function CompleteHomepageManager() {
  { label: 'Cart', value: '/cart' },
  { label: 'Contact', value: '/contact' },
  { label: 'Support', value: '/support' },
- { label: 'Track Order', value: '/track-order' },
+ { label: 'Track Order', value: '/profile?tab=track' },
  { label: 'Privacy', value: '/privacy' },
  ];
 
@@ -190,7 +292,7 @@ export default function CompleteHomepageManager() {
  { label: 'Support', value: '/support' },
  { label: 'FAQ', value: '/faq' },
  { label: 'Contact', value: '/contact' },
- { label: 'Track Order', value: '/track-order' },
+ { label: 'Track Order', value: '/profile?tab=track' },
  { label: 'Returns', value: '/returns' },
  { label: 'Shipping Info', value: '/shipping' },
  { label: 'Privacy Policy', value: '/privacy' },
@@ -212,7 +314,13 @@ export default function CompleteHomepageManager() {
 
  if (response.data) {
  setSections(response.data.sections || sections);
- setHeaderSettings(response.data.header || headerSettings);
+ const loadedHeader = response.data.header || {};
+ setHeaderSettings({
+   ...headerSettings,
+   ...loadedHeader,
+   left_menu: withoutMenuVisibilitySection(loadedHeader.left_menu),
+   nav_dropdowns: mergeTopNavDropdowns(loadedHeader.nav_dropdowns),
+ });
  setFooterSettings(response.data.footer || footerSettings);
  if (response.data.footer_socials) {
  setFooterSocials(response.data.footer_socials);
@@ -222,26 +330,42 @@ export default function CompleteHomepageManager() {
  const isOldSupportList = Array.isArray(incoming.support);
  const isOldTrackingList = Array.isArray(incoming.tracking);
  const isOldLegalList = Array.isArray(incoming.legal);
+ let loadedFooterSections = incoming;
 
  if (isOldSupportList || isOldTrackingList || isOldLegalList) {
- setFooterSections({
+ loadedFooterSections = {
  support: { title: 'HELP', items: incoming.support || [] },
  tracking: { title: 'TRACKING', items: incoming.tracking || [] },
  legal: { title: 'LEGAL', items: incoming.legal || [] },
- });
- } else {
- setFooterSections(incoming);
+ };
  }
+
+ setFooterSections(loadedFooterSections);
+ setFooterSectionOrder(
+ normalizeFooterSectionOrder(response.data.footer_section_order, loadedFooterSections)
+ );
  }
- setSuccess('Settings loaded successfully');
+ if (response.data.faq) {
+ setFaqSettings(normalizeFaqPayload(response.data.faq));
+ }
+ if (response.data.contact_page) {
+ setContactPage(normalizeContactPagePayload(response.data.contact_page));
+ }
+ if (response.data.privacy_page) {
+ setPrivacyPage(normalizePrivacyPagePayload(response.data.privacy_page));
+ }
+ if (response.data.terms_page) {
+ setTermsPage(normalizeTermsPagePayload(response.data.terms_page));
+ }
+ if (response.data.cookies_page) {
+ setCookiesPage(normalizeCookiesPagePayload(response.data.cookies_page));
+ }
  }
  } catch (err) {
  console.warn('Using default settings (API not available):', err.message);
- setSuccess('Using default settings');
  } finally {
  setLoading(false);
  setInitialLoading(false);
- setTimeout(() => setSuccess(''), 3000);
  }
  };
 
@@ -249,6 +373,7 @@ export default function CompleteHomepageManager() {
  }, []);
 
  const handleSectionToggle = (sectionKey) => {
+ if (!canEditHomepageComplete) return;
  setSections(prev => ({
  ...prev,
  [sectionKey]: {
@@ -259,6 +384,7 @@ export default function CompleteHomepageManager() {
  };
 
  const handleSectionOrderChange = (sectionKey, newOrder) => {
+ if (!canEditHomepageComplete) return;
  setSections(prev => ({
  ...prev,
  [sectionKey]: {
@@ -269,6 +395,7 @@ export default function CompleteHomepageManager() {
  };
 
  const handleSectionTitleChange = (sectionKey, newTitle) => {
+ if (!canEditHomepageComplete) return;
  setSections(prev => ({
  ...prev,
  [sectionKey]: {
@@ -287,6 +414,7 @@ export default function CompleteHomepageManager() {
  };
 
  const handleAddSection = () => {
+ if (!canEditHomepageComplete) return;
  const normalizedKey = normalizeSectionKey(newSection.key || newSection.title);
  const title = String(newSection.title || '').trim();
  const order = parseInt(newSection.order, 10) || Object.keys(sections).length + 1;
@@ -325,10 +453,12 @@ export default function CompleteHomepageManager() {
  };
 
  const handleRemoveSection = (sectionKey) => {
+ if (!canEditHomepageComplete) return;
  setPendingRemove({ type: 'section', sectionKey });
  };
 
  const confirmRemove = () => {
+ if (!canEditHomepageComplete) return;
  if (!pendingRemove) return;
  if (pendingRemove.type === 'section') {
  setSections(prev => {
@@ -357,15 +487,74 @@ export default function CompleteHomepageManager() {
  [pendingRemove.section]: { ...prev[pendingRemove.section], items: (prev[pendingRemove.section]?.items || []).filter((_, i) => i !== pendingRemove.index) }
  }));
  }
+ if (pendingRemove.type === 'footer_section') {
+ setFooterSections(prev => {
+ const next = { ...prev };
+ delete next[pendingRemove.sectionKey];
+ return next;
+ });
+ setFooterSectionOrder(prev => prev.filter((key) => key !== pendingRemove.sectionKey));
+ }
+ if (pendingRemove.type === 'faq_section') {
+ setFaqSettings((prev) => removeFaqSection(prev, pendingRemove.sectionKey));
+ }
+ if (pendingRemove.type === 'faq_item') {
+ setFaqSettings((prev) => updateFaqLocaleSection(prev, pendingRemove.locale || faqEditLocale, pendingRemove.sectionKey, (section) => ({
+ ...section,
+ items: (section.items || []).filter((_, i) => i !== pendingRemove.index),
+ })));
+ }
+ if (pendingRemove.type === 'contact_subject') {
+ setContactPage((prev) => removeContactSubject(prev, pendingRemove.subjectKey));
+ }
+ if (pendingRemove.type === 'contact_info_card') {
+ setContactPage((prev) => removeContactInfoCard(prev, pendingRemove.cardKey));
+ }
+ if (pendingRemove.type === 'privacy_section') {
+ setPrivacyPage((prev) => removePrivacySection(prev, pendingRemove.sectionKey));
+ }
+ if (pendingRemove.type === 'privacy_item') {
+ setPrivacyPage((prev) => removePrivacySectionItem(prev, pendingRemove.locale || privacyEditLocale, pendingRemove.sectionKey, pendingRemove.index));
+ }
+ if (pendingRemove.type === 'terms_section') {
+ setTermsPage((prev) => removeTermsSection(prev, pendingRemove.sectionKey));
+ }
+ if (pendingRemove.type === 'cookies_section') {
+ setCookiesPage((prev) => removeCookiesSection(prev, pendingRemove.sectionKey));
+ }
+ if (pendingRemove.type === 'cookies_item') {
+ setCookiesPage((prev) => removeCookiesSectionItem(prev, pendingRemove.locale || cookiesEditLocale, pendingRemove.sectionKey, pendingRemove.index));
+ }
  if (pendingRemove.type === 'footer_social') {
  setFooterSocials(prev => prev.filter((_, i) => i !== pendingRemove.index));
  }
+ if (pendingRemove.type === 'nav_flat') {
+ const key = pendingRemove.navKey;
+ const next = { ...(headerSettings.nav_dropdowns || {}) };
+ next[key] = (next[key] || []).filter((_, i) => i !== pendingRemove.index);
+ handleHeaderChange('nav_dropdowns', next);
+ }
+ if (pendingRemove.type === 'nav_section') {
+ const key = pendingRemove.navKey;
+ const next = { ...(headerSettings.nav_dropdowns || {}) };
+ next[key] = (next[key] || []).filter((_, i) => i !== pendingRemove.index);
+ handleHeaderChange('nav_dropdowns', next);
+ }
+ if (pendingRemove.type === 'nav_section_link') {
+ const key = pendingRemove.navKey;
+ const next = { ...(headerSettings.nav_dropdowns || {}) };
+ const sections = [...(next[key] || [])];
+ const items = [...(sections[pendingRemove.sectionIndex]?.items || [])].filter((_, i) => i !== pendingRemove.index);
+ sections[pendingRemove.sectionIndex] = { ...sections[pendingRemove.sectionIndex], items };
+ next[key] = sections;
+ handleHeaderChange('nav_dropdowns', next);
+ }
  setPendingRemove(null);
- setSuccess('Removed. Click Save to publish changes.');
- setTimeout(() => setSuccess(''), 3000);
+ showSuccess('Removed. Save settings to publish changes.');
  };
 
  const handleHeaderChange = (key, value) => {
+ if (!canEditHomepageComplete) return;
  setHeaderSettings(prev => ({
  ...prev,
  [key]: value
@@ -373,15 +562,58 @@ export default function CompleteHomepageManager() {
  };
 
 const handleSharedChromeBackgroundColor = (color) => {
+ if (!canEditHomepageComplete) return;
 handleHeaderChange('background_color', color);
 handleFooterChange('background_color', color);
+};
+
+const handleSharedChromeTextColor = (color) => {
+ if (!canEditHomepageComplete) return;
+handleHeaderChange('text_color', color);
+handleFooterChange('text_color', color);
 };
 
 const resetSharedChromeBackgroundColor = () => {
 handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
 };
 
+const resetSharedChromeTextColor = () => {
+handleSharedChromeTextColor(DEFAULT_CHROME_TEXT);
+};
+
+const uploadChromeBackground = async (file, target) => {
+ if (!canEditHomepageComplete) return;
+ if (!file) return;
+ const formData = new FormData();
+ formData.append('image', file);
+ formData.append('target', target);
+ try {
+ setLoading(true);
+ const { data } = await api.post('/admin/homepage-settings/chrome-background-upload', formData, {
+ headers: { 'Content-Type': 'multipart/form-data' },
+ });
+ if (data?.background_image) {
+ if (target === 'header' || target === 'both') {
+ handleHeaderChange('background_image', data.background_image);
+ }
+ if (target === 'footer' || target === 'both') {
+ handleFooterChange('background_image', data.background_image);
+ }
+ }
+ const label = target === 'both' ? 'Header & footer' : target === 'footer' ? 'Footer' : 'Header';
+ showSuccess(`${label} background image uploaded. Save section settings to apply.`);
+ } catch (err) {
+ setError('Failed to upload background image: ' + (err.response?.data?.message || err.message));
+ } finally {
+ setLoading(false);
+ }
+};
+
+const sharedChromeBg = () =>
+ headerSettings.background_color || footerSettings.background_color || DEFAULT_CHROME_BACKGROUND;
+
  const uploadLeftMenuImage = async (sectionIndex, itemIndex, file) => {
+ if (!canEditHomepageComplete) return;
  if (!file) return;
  const formData = new FormData();
  formData.append('image', file);
@@ -397,8 +629,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  next[sectionIndex] = { ...next[sectionIndex], items };
  handleHeaderChange('left_menu', next);
  }
- setSuccess('✅ Image uploaded!');
- setTimeout(() => setSuccess(''), 3000);
+ showSuccess('Menu image uploaded. Save header settings to apply.');
  } catch (err) {
  setError('Failed to upload image: ' + (err.response?.data?.message || err.message));
  } finally {
@@ -422,6 +653,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  };
 
  const handleFooterChange = (key, value) => {
+ if (!canEditHomepageComplete) return;
  setFooterSettings(prev => ({
  ...prev,
  [key]: value
@@ -429,6 +661,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  };
 
  const handleFooterLinkChange = (section, index, field, value) => {
+ if (!canEditHomepageComplete) return;
  setFooterSections(prev => {
  const items = [...(prev[section]?.items || [])];
  items[index] = { ...items[index], [field]: value };
@@ -437,6 +670,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  };
 
  const handleAddFooterLink = (section) => {
+ if (!canEditHomepageComplete) return;
  setFooterSections(prev => ({
  ...prev,
  [section]: { ...prev[section], items: [...(prev[section]?.items || []), { label: '', link: '' }] }
@@ -444,27 +678,189 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  };
 
  const handleRemoveFooterLink = (section, index) => {
+ if (!canEditHomepageComplete) return;
  setPendingRemove({ type: 'footer_link', section, index });
  };
 
+ const handleAddFooterSection = () => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ while (footerSections[`custom_section_${index}`]) {
+ index += 1;
+ }
+ const sectionKey = `custom_section_${index}`;
+ setFooterSections(prev => ({
+ ...prev,
+ [sectionKey]: { title: 'New Section', items: [{ label: '', link: '' }] },
+ }));
+ setFooterSectionOrder(prev => [...prev, sectionKey]);
+ };
+
+ const handleMoveFooterSection = (sectionKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setFooterSectionOrder((prev) => {
+ const order = normalizeFooterSectionOrder(prev, footerSections);
+ return reorderFooterSectionKeys(order, sectionKey, direction);
+ });
+ };
+
+ const handleRemoveFooterSection = (sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'footer_section', sectionKey });
+ };
+
+ const handleFaqItemChange = (sectionKey, index, field, value) => {
+ if (!canEditHomepageComplete) return;
+ setFaqSettings((prev) => updateFaqLocaleSection(prev, faqEditLocale, sectionKey, (section) => {
+ const items = [...(section.items || [])];
+ items[index] = { ...items[index], [field]: value };
+ return { ...section, items };
+ }));
+ };
+
+ const handleAddFaqSection = () => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ const localeView = getFaqLocaleView(faqSettings, faqEditLocale);
+ while (localeView.sections[`faq_section_${index}`]) {
+ index += 1;
+ }
+ const sectionKey = `faq_section_${index}`;
+ setFaqSettings((prev) => addFaqSection(prev, sectionKey));
+ };
+
+ const handleRemoveFaqSection = (sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'faq_section', sectionKey });
+ };
+
+ const handleMoveFaqSection = (sectionKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setFaqSettings((prev) => moveFaqSection(prev, sectionKey, direction));
+ };
+
+ const handleAddFaqItem = (sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setFaqSettings((prev) => updateFaqLocaleSection(prev, faqEditLocale, sectionKey, (section) => ({
+ ...section,
+ items: [...(section.items || []), { question: '', answer: '' }],
+ })));
+ };
+
+ const handleRemoveFaqItem = (sectionKey, index) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'faq_item', sectionKey, index, locale: faqEditLocale });
+ };
+
+ const saveContactPage = async () => {
+ if (!canEditHomepageComplete) return;
+ try {
+ setLoading(true);
+ setError('');
+ const payload = normalizeContactPagePayload(contactPage);
+ await api.put('/admin/homepage-settings/contact-page', { contact_page: payload });
+ setContactPage(payload);
+ showSuccess('Contact page saved successfully.');
+ } catch (err) {
+ setError('Failed to save contact page: ' + (err.response?.data?.message || err.message));
+ } finally {
+ setLoading(false);
+ }
+ };
+
+ const savePrivacyPage = async () => {
+ if (!canEditHomepageComplete) return;
+ try {
+ setLoading(true);
+ setError('');
+ const payload = normalizePrivacyPagePayload(privacyPage);
+ await api.put('/admin/homepage-settings/privacy-page', { privacy_page: payload });
+ setPrivacyPage(payload);
+ showSuccess('Privacy page saved successfully.');
+ } catch (err) {
+ setError('Failed to save privacy page: ' + (err.response?.data?.message || err.message));
+ } finally {
+ setLoading(false);
+ }
+ };
+
+ const saveTermsPage = async () => {
+ if (!canEditHomepageComplete) return;
+ try {
+ setLoading(true);
+ setError('');
+ const payload = normalizeTermsPagePayload(termsPage);
+ await api.put('/admin/homepage-settings/terms-page', { terms_page: payload });
+ setTermsPage(payload);
+ showSuccess('Terms page saved successfully.');
+ } catch (err) {
+ setError('Failed to save terms page: ' + (err.response?.data?.message || err.message));
+ } finally {
+ setLoading(false);
+ }
+ };
+
+ const saveCookiesPage = async () => {
+ if (!canEditHomepageComplete) return;
+ try {
+ setLoading(true);
+ setError('');
+ const payload = normalizeCookiesPagePayload(cookiesPage);
+ await api.put('/admin/homepage-settings/cookies-page', { cookies_page: payload });
+ setCookiesPage(payload);
+ showSuccess('Cookies page saved successfully.');
+ } catch (err) {
+ setError('Failed to save cookies page: ' + (err.response?.data?.message || err.message));
+ } finally {
+ setLoading(false);
+ }
+ };
+
+ const saveFaqSettings = async () => {
+ if (!canEditHomepageComplete) return;
+ try {
+ setLoading(true);
+ setError('');
+ const payload = normalizeFaqPayload(faqSettings);
+ await api.put('/admin/homepage-settings/faq', { faq: payload });
+ setFaqSettings(payload);
+ showSuccess('FAQ settings saved successfully.');
+ } catch (err) {
+ setError('Failed to save FAQ settings: ' + (err.response?.data?.message || err.message));
+ } finally {
+ setLoading(false);
+ }
+ };
+
  const saveSections = async () => {
+ if (!canEditHomepageComplete) return;
  try {
  setLoading(true);
  setError('');
  await api.put('/admin/homepage-settings/sections', { sections });
- const chrome =
+ const chromeBg =
  headerSettings.background_color || footerSettings.background_color || DEFAULT_CHROME_BACKGROUND;
+ const chromeText =
+ headerSettings.text_color || footerSettings.text_color || DEFAULT_CHROME_TEXT;
  await api.put('/admin/homepage-settings/header-extended', {
  ...headerSettings,
- background_color: chrome,
+ left_menu: withoutMenuVisibilitySection(headerSettings.left_menu),
+ background_color: chromeBg,
+ background_image: headerSettings.background_image || '',
+ text_color: chromeText,
  });
  await api.put('/admin/homepage-settings/footer-extended', {
- footer: { ...footerSettings, background_color: chrome },
- footer_sections: footerSections,
+ footer: {
+ ...footerSettings,
+ background_color: chromeBg,
+ background_image: footerSettings.background_image || '',
+ text_color: chromeText,
+ },
+ footer_sections: reorderFooterSectionsObject(footerSections, footerSectionOrder),
+ footer_section_order: normalizeFooterSectionOrder(footerSectionOrder, footerSections),
  footer_socials: footerSocials,
  });
- setSuccess('✅ Section settings, header color, and footer color saved!');
- setTimeout(() => setSuccess(''), 3000);
+ showSuccess('Section settings saved successfully.');
  } catch (err) {
  console.error('Save error:', err);
  if (err.response?.status === 401) {
@@ -478,12 +874,16 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  };
 
  const saveHeaderSettings = async () => {
+ if (!canEditHomepageComplete) return;
  try {
  setLoading(true);
  setError('');
- await api.put('/admin/homepage-settings/header-extended', headerSettings);
- setSuccess('Header settings saved successfully!');
- setTimeout(() => setSuccess(''), 3000);
+ await api.put('/admin/homepage-settings/header-extended', {
+   ...headerSettings,
+   left_menu: withoutMenuVisibilitySection(headerSettings.left_menu),
+ });
+ await reloadSettings();
+ showSuccess('Header settings saved successfully.');
  } catch (err) {
  setError('Failed to save header settings: ' + (err.response?.data?.message || err.message));
  } finally {
@@ -492,16 +892,18 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  };
 
  const saveFooterSettings = async () => {
+ if (!canEditHomepageComplete) return;
  try {
  setLoading(true);
  setError('');
  await api.put('/admin/homepage-settings/footer-extended', {
  footer: footerSettings,
- footer_sections: footerSections,
+ footer_sections: reorderFooterSectionsObject(footerSections, footerSectionOrder),
+ footer_section_order: normalizeFooterSectionOrder(footerSectionOrder, footerSections),
  footer_socials: footerSocials,
  });
- setSuccess('✅ Footer settings saved successfully!');
- setTimeout(() => setSuccess(''), 3000);
+ await reloadSettings();
+ showSuccess('Footer settings saved successfully.');
  } catch (err) {
  console.error('Save error:', err);
  if (err.response?.status === 401) {
@@ -514,7 +916,11 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  }
  };
 
- if (initialLoading) return <AdminContentSkeleton title="Homepage Manager" />;
+ if (!permissionsReady || initialLoading) return <AdminContentSkeleton title="Homepage Manager" />;
+
+ if (!canViewHomepageComplete) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  return (
  <div className="min-h-full admin-soft text-slate-800 dark:text-slate-100">
@@ -535,18 +941,8 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  <p className="text-slate-500 dark:text-slate-400">Manage all homepage content including header, sections, and footer</p>
  </div>
 
- {/* Alerts */}
- {error && (
- <div className="mb-4 rounded-xl border border-red-200 dark:border-red-700/60 bg-red-50 dark:bg-red-900/40 p-4 text-red-700 dark:text-red-100">
- {error}
- <button onClick={() => setError('')} className="ml-4 text-sm font-semibold hover:underline">Dismiss</button>
- </div>
- )}
- {success && (
- <div className="mb-4 rounded-xl border border-[rgba(var(--admin-primary-rgb),0.4)] bg-[color:var(--admin-primary)] p-4 text-white shadow-sm">
- {success}
- </div>
- )}
+ <AdminSaveToast message={success} />
+ <AdminFormErrorBanner error={error} onDismiss={() => setError('')} />
 
  {/* Tabs */}
  <div className="mb-6 inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1">
@@ -577,6 +973,51 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  >
  🔚 Footer Settings
  </button>
+ <button
+ onClick={() => setActiveTab('faq')}
+ className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'faq'
+ ? 'bg-[color:var(--admin-primary)] text-white hover:brightness-110'
+ : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+ }`}
+ >
+ ❓ FAQ Page
+ </button>
+ <button
+ onClick={() => setActiveTab('contact')}
+ className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'contact'
+ ? 'bg-[color:var(--admin-primary)] text-white hover:brightness-110'
+ : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+ }`}
+ >
+ ✉️ Contact Page
+ </button>
+ <button
+ onClick={() => setActiveTab('privacy')}
+ className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'privacy'
+ ? 'bg-[color:var(--admin-primary)] text-white hover:brightness-110'
+ : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+ }`}
+ >
+ 🔒 Privacy Page
+ </button>
+ <button
+ onClick={() => setActiveTab('terms')}
+ className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'terms'
+ ? 'bg-[color:var(--admin-primary)] text-white hover:brightness-110'
+ : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+ }`}
+ >
+ 📜 Terms Page
+ </button>
+ <button
+ onClick={() => setActiveTab('cookies')}
+ className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${activeTab === 'cookies'
+ ? 'bg-[color:var(--admin-primary)] text-white hover:brightness-110'
+ : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70'
+ }`}
+ >
+ 🍪 Cookies Page
+ </button>
  </div>
 
  {/* Sections Tab */}
@@ -586,12 +1027,73 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  <p className="text-slate-500 dark:text-slate-400 mb-6">Manage sections displayed on the homepage. Enable/disable sections and set their display order.</p>
 
  <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 p-5 bg-white dark:bg-slate-900">
- <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Header &amp; footer background</h3>
+ <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Header &amp; footer appearance</h3>
  <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
- One color for both header and footer. Use <strong>Save Section Settings</strong> at the bottom of this tab to save it to the server.
+ Shared text and background colors; <strong>header and footer images are separate</strong> (or copy one to the other). Use <strong>Save Section Settings</strong> below to publish.
  </p>
+ <div className="mb-6 grid gap-4 lg:grid-cols-2">
+ <ChromeBackgroundImageField
+ label="Header background image"
+ description="Shown behind the top navigation. Overlay uses background color below."
+ imageUrl={headerSettings.background_image}
+ tintColor={headerSettings.background_color || sharedChromeBg()}
+ disabled={loading}
+ onFileSelect={(file) => uploadChromeBackground(file, 'header')}
+ onRemove={() => handleHeaderChange('background_image', '')}
+ extraActions={
+ footerSettings.background_image !== headerSettings.background_image ? (
+ <button
+ type="button"
+ disabled={loading || !headerSettings.background_image}
+ onClick={() => handleFooterChange('background_image', headerSettings.background_image || '')}
+ className="text-left text-xs font-semibold text-[color:var(--admin-primary)] hover:underline disabled:opacity-50"
+ >
+ Use same image for footer
+ </button>
+ ) : null
+ }
+ />
+ <ChromeBackgroundImageField
+ label="Footer background image"
+ description="Shown behind the site footer on desktop."
+ imageUrl={footerSettings.background_image}
+ tintColor={footerSettings.background_color || sharedChromeBg()}
+ disabled={loading}
+ onFileSelect={(file) => uploadChromeBackground(file, 'footer')}
+ onRemove={() => handleFooterChange('background_image', '')}
+ extraActions={
+ headerSettings.background_image && footerSettings.background_image !== headerSettings.background_image ? (
+ <button
+ type="button"
+ disabled={loading}
+ onClick={() => handleFooterChange('background_image', headerSettings.background_image || '')}
+ className="text-left text-xs font-semibold text-[color:var(--admin-primary)] hover:underline"
+ >
+ Use same image as header
+ </button>
+ ) : null
+ }
+ />
+ </div>
+ <div className="mb-6 rounded-lg border border-dashed border-slate-200 bg-white/60 px-4 py-3 dark:border-slate-700 dark:bg-slate-950/40">
+ <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+ Upload one image for <strong>both</strong> header and footer
+ </p>
+ <input
+ type="file"
+ accept="image/jpeg,image/png,image/webp,image/avif"
+ disabled={loading}
+ onChange={(e) => {
+ uploadChromeBackground(e.target.files?.[0], 'both');
+ e.target.value = '';
+ }}
+ className="block w-full max-w-md text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:brightness-110 dark:text-slate-300 dark:file:bg-slate-200 dark:file:text-slate-900"
+ />
+ </div>
+ <div className="grid gap-6 sm:grid-cols-2">
+ <div>
  <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
- Shared background color
+ Background color
  </label>
  <div className="flex flex-wrap items-center gap-3">
  <input
@@ -609,11 +1111,37 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  onClick={resetSharedChromeBackgroundColor}
  className="h-10 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-colors"
  >
- Reset color
+ Reset
  </button>
  </div>
+ </div>
+ <div>
+ <label className="block text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
+ Text color
+ </label>
+ <div className="flex flex-wrap items-center gap-3">
+ <input
+ type="color"
+ value={headerSettings.text_color || footerSettings.text_color || DEFAULT_CHROME_TEXT}
+ onChange={(e) => handleSharedChromeTextColor(e.target.value)}
+ className="h-10 w-20 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 cursor-pointer"
+ aria-label="Shared header and footer text color"
+ />
+ <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
+ {headerSettings.text_color || footerSettings.text_color || DEFAULT_CHROME_TEXT}
+ </span>
+ <button
+ type="button"
+ onClick={resetSharedChromeTextColor}
+ className="h-10 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-colors"
+ >
+ Reset
+ </button>
+ </div>
+ </div>
+ </div>
  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
- Default: {DEFAULT_CHROME_BACKGROUND}. Click <strong>Save Section Settings</strong> below to apply on the live site.
+ Defaults: background {DEFAULT_CHROME_BACKGROUND}, text {DEFAULT_CHROME_TEXT}. Click <strong>Save Section Settings</strong> below to apply on the live site.
  </p>
  </div>
 
@@ -724,6 +1252,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  </div>
  </div>
 
+ {canEditHomepageComplete ? (
  <div className="flex justify-end">
  <button
  onClick={saveSections}
@@ -733,6 +1262,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  Save Section Settings
  </button>
  </div>
+ ) : null}
  </div>
  )}
 
@@ -771,6 +1301,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  type="file"
  accept="image/*"
  onChange={async (e) => {
+ if (!canEditHomepageComplete) return;
  const file = e.target.files?.[0];
  if (!file) return;
  const formData = new FormData();
@@ -783,8 +1314,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  if (data?.logo_url) {
  handleHeaderChange('logo_url', data.logo_url);
  }
- setSuccess('✅ Logo uploaded!');
- setTimeout(() => setSuccess(''), 3000);
+ showSuccess('Logo uploaded. Save header settings to apply.');
  } catch (err) {
  setError('Failed to upload logo: ' + (err.response?.data?.message || err.message));
  } finally {
@@ -836,28 +1366,67 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  </div>
 
  <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 p-5 bg-white dark:bg-slate-900">
- <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Menu Visibility</h3>
- <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
- {[
- { key: 'newIn', label: 'NEW IN' },
- { key: 'discounts', label: 'Discounts' },
- { key: 'women', label: 'Women' },
- { key: 'men', label: 'Men' },
- { key: 'sale', label: 'Sale' },
- ].map((item) => (
- <label key={item.key} className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
- <input
- type="checkbox"
- checked={headerSettings.nav_visibility?.[item.key] !== false}
- onChange={(e) => handleHeaderChange('nav_visibility', {
- ...(headerSettings.nav_visibility || {}),
- [item.key]: e.target.checked,
- })}
- className="rounded border-slate-300 dark:border-slate-600 text-[color:var(--admin-primary)] focus:ring-2 focus:ring-[rgba(var(--admin-primary-rgb),0.35)]"
+ <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+ <div>
+ <h3 className="font-semibold text-slate-900 dark:text-white">Top Nav Dropdowns (desktop)</h3>
+ <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+ Edit WOMEN / MEN sections and links. Use &quot;From category&quot; to match your catalog slugs.
+ </p>
+ </div>
+ <button
+ type="button"
+ onClick={() => handleHeaderChange('nav_dropdowns', DEFAULT_TOP_NAV_DROPDOWNS)}
+ className="h-10 rounded-lg border border-slate-300 dark:border-slate-600 px-4 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+ >
+ Reset to defaults
+ </button>
+ </div>
+ <div className="space-y-4">
+ <TopNavDropdownEditor
+ title="NEW IN"
+ items={headerSettings.nav_dropdowns?.newIn || []}
+ onChange={(next) => handleHeaderChange('nav_dropdowns', { ...(headerSettings.nav_dropdowns || {}), newIn: next })}
+ onRequestRemove={(payload) => setPendingRemove({ type: 'nav_flat', navKey: 'newIn', index: payload.index })}
+ deleteButtonStyle={deleteButtonStyle}
  />
- {item.label}
- </label>
- ))}
+ <TopNavDropdownEditor
+ title="Discounts"
+ items={headerSettings.nav_dropdowns?.discounts || []}
+ onChange={(next) => handleHeaderChange('nav_dropdowns', { ...(headerSettings.nav_dropdowns || {}), discounts: next })}
+ onRequestRemove={(payload) => setPendingRemove({ type: 'nav_flat', navKey: 'discounts', index: payload.index })}
+ deleteButtonStyle={deleteButtonStyle}
+ />
+ <TopNavDropdownEditor
+ title="WOMEN"
+ sectionsMode
+ audienceGender="women"
+ items={headerSettings.nav_dropdowns?.women || []}
+ onChange={(next) => handleHeaderChange('nav_dropdowns', { ...(headerSettings.nav_dropdowns || {}), women: next })}
+ onRequestRemove={(payload) => {
+ if (payload.mode === 'section') setPendingRemove({ type: 'nav_section', navKey: 'women', index: payload.index });
+ else setPendingRemove({ type: 'nav_section_link', navKey: 'women', sectionIndex: payload.sectionIndex, index: payload.index });
+ }}
+ deleteButtonStyle={deleteButtonStyle}
+ />
+ <TopNavDropdownEditor
+ title="MEN"
+ sectionsMode
+ audienceGender="men"
+ items={headerSettings.nav_dropdowns?.men || []}
+ onChange={(next) => handleHeaderChange('nav_dropdowns', { ...(headerSettings.nav_dropdowns || {}), men: next })}
+ onRequestRemove={(payload) => {
+ if (payload.mode === 'section') setPendingRemove({ type: 'nav_section', navKey: 'men', index: payload.index });
+ else setPendingRemove({ type: 'nav_section_link', navKey: 'men', sectionIndex: payload.sectionIndex, index: payload.index });
+ }}
+ deleteButtonStyle={deleteButtonStyle}
+ />
+ <TopNavDropdownEditor
+ title="SALE"
+ items={headerSettings.nav_dropdowns?.sale || []}
+ onChange={(next) => handleHeaderChange('nav_dropdowns', { ...(headerSettings.nav_dropdowns || {}), sale: next })}
+ onRequestRemove={(payload) => setPendingRemove({ type: 'nav_flat', navKey: 'sale', index: payload.index })}
+ deleteButtonStyle={deleteButtonStyle}
+ />
  </div>
  </div>
 
@@ -1109,6 +1678,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  </div>
  </div>
 
+ {canEditHomepageComplete ? (
  <div className="flex justify-end">
  <button
  onClick={saveHeaderSettings}
@@ -1118,6 +1688,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  Save Header Settings
  </button>
  </div>
+ ) : null}
  </div>
  )}
 
@@ -1279,10 +1850,44 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
 
  {/* Footer Sections */}
  <div className="mb-8 rounded-xl border border-slate-200 dark:border-slate-700 p-5 bg-white dark:bg-slate-900">
- <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Footer Link Sections</h3>
- <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
- {Object.entries(footerSections).map(([sectionKey, section]) => (
+ <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+ <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Footer Link Sections</h3>
+ {canEditHomepageComplete ? (
+ <button
+ type="button"
+ onClick={handleAddFooterSection}
+ className="h-10 rounded-lg border border-slate-300 dark:border-slate-600 px-4 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+ >
+ + New Footer Section
+ </button>
+ ) : null}
+ </div>
+ <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+ {orderFooterSectionEntries(footerSections, footerSectionOrder).map(([sectionKey, section], sectionIndex, orderedSections) => (
  <div key={sectionKey} className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-800">
+ <div className="mb-4 flex items-start gap-2">
+ {canEditHomepageComplete ? (
+ <div className="flex shrink-0 flex-col gap-1">
+ <button
+ type="button"
+ onClick={() => handleMoveFooterSection(sectionKey, -1)}
+ disabled={sectionIndex === 0}
+ title="Move left"
+ className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+ >
+ <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+ </button>
+ <button
+ type="button"
+ onClick={() => handleMoveFooterSection(sectionKey, 1)}
+ disabled={sectionIndex === orderedSections.length - 1}
+ title="Move right"
+ className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+ >
+ <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+ </button>
+ </div>
+ ) : null}
  <input
  type="text"
  value={section?.title || sectionKey.toUpperCase()}
@@ -1290,8 +1895,19 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  ...prev,
  [sectionKey]: { ...prev[sectionKey], title: e.target.value }
  }))}
- className="h-11 w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm font-semibold mb-4 focus:border-[var(--admin-primary)] focus:ring-0 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+ className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 dark:border-slate-600 px-3 text-sm font-semibold focus:border-[var(--admin-primary)] focus:ring-0 outline-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
  />
+ {canEditHomepageComplete ? (
+ <button
+ type="button"
+ onClick={() => handleRemoveFooterSection(sectionKey)}
+ title="Remove Section"
+ className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600"
+ >
+ <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+ </button>
+ ) : null}
+ </div>
  <div className="space-y-3">
  {(section?.items || []).map((link, idx) => (
  <div key={idx} className="flex flex-col gap-2">
@@ -1335,6 +1951,7 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  </div>
  </div>
 
+ {canEditHomepageComplete ? (
  <div className="flex justify-end">
  <button
  onClick={saveFooterSettings}
@@ -1344,7 +1961,218 @@ handleSharedChromeBackgroundColor(DEFAULT_CHROME_BACKGROUND);
  Save Footer Settings
  </button>
  </div>
+ ) : null}
  </div>
+ )}
+
+ {activeTab === 'faq' && (
+ <FaqManagerPanel
+ faqLocale={faqEditLocale}
+ onLocaleChange={setFaqEditLocale}
+ faqTitle={getFaqLocaleView(faqSettings, faqEditLocale).title}
+ faqSubtitle={getFaqLocaleView(faqSettings, faqEditLocale).subtitle}
+ faqSections={getFaqLocaleView(faqSettings, faqEditLocale).sections}
+ faqSectionOrder={getFaqLocaleView(faqSettings, faqEditLocale).section_order}
+ canEdit={canEditHomepageComplete}
+ loading={loading}
+ onTitleChange={(value) => setFaqSettings((prev) => updateFaqLocaleField(prev, faqEditLocale, 'title', value))}
+ onSubtitleChange={(value) => setFaqSettings((prev) => updateFaqLocaleField(prev, faqEditLocale, 'subtitle', value))}
+ onSectionTitleChange={(sectionKey, value) => setFaqSettings((prev) => updateFaqLocaleSection(prev, faqEditLocale, sectionKey, (section) => ({
+ ...section,
+ title: value,
+ })))}
+ onItemChange={handleFaqItemChange}
+ onAddSection={handleAddFaqSection}
+ onRemoveSection={handleRemoveFaqSection}
+ onMoveSection={handleMoveFaqSection}
+ onAddItem={handleAddFaqItem}
+ onRemoveItem={handleRemoveFaqItem}
+ onSave={saveFaqSettings}
+ />
+ )}
+
+ {activeTab === 'contact' && (
+ <ContactPageManagerPanel
+ contactLocale={contactEditLocale}
+ onLocaleChange={setContactEditLocale}
+ contactPage={getContactLocaleView(contactPage, contactEditLocale)}
+ canEdit={canEditHomepageComplete}
+ loading={loading}
+ onPageFieldChange={(field, value) => setContactPage((prev) => updateContactLocaleField(prev, contactEditLocale, field, value))}
+ onFormFieldChange={(field, value) => setContactPage((prev) => updateContactFormField(prev, contactEditLocale, field, value))}
+ onSubjectChange={(subjectKey, field, value) => {
+ if (field === 'value') return;
+ setContactPage((prev) => updateContactSubject(prev, contactEditLocale, subjectKey, (subject) => ({
+ ...subject,
+ [field]: value,
+ })));
+ }}
+ onAddSubject={() => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ const localeView = getContactLocaleView(contactPage, contactEditLocale);
+ while (localeView.form.subjects[`subject_${index}`]) index += 1;
+ const subjectKey = `subject_${index}`;
+ setContactPage((prev) => addContactSubject(prev, subjectKey));
+ }}
+ onRemoveSubject={(subjectKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'contact_subject', subjectKey });
+ }}
+ onMoveSubject={(subjectKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setContactPage((prev) => moveContactSubject(prev, subjectKey, direction));
+ }}
+ onInfoCardChange={(cardKey, field, value) => setContactPage((prev) => updateContactInfoCard(prev, contactEditLocale, cardKey, (card) => ({
+ ...card,
+ [field]: value,
+ })))}
+ onAddInfoCard={() => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ const localeView = getContactLocaleView(contactPage, contactEditLocale);
+ while (localeView.info_cards[`info_card_${index}`]) index += 1;
+ const cardKey = `info_card_${index}`;
+ setContactPage((prev) => addContactInfoCard(prev, cardKey));
+ }}
+ onRemoveInfoCard={(cardKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'contact_info_card', cardKey });
+ }}
+ onMoveInfoCard={(cardKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setContactPage((prev) => moveContactInfoCard(prev, cardKey, direction));
+ }}
+ onSave={saveContactPage}
+ />
+ )}
+
+ {activeTab === 'privacy' && (
+ <PrivacyPageManagerPanel
+ privacyLocale={privacyEditLocale}
+ onLocaleChange={setPrivacyEditLocale}
+ privacyPage={getPrivacyLocaleView(privacyPage, privacyEditLocale)}
+ canEdit={canEditHomepageComplete}
+ loading={loading}
+ onPageFieldChange={(field, value) => setPrivacyPage((prev) => updatePrivacyLocaleField(prev, privacyEditLocale, field, value))}
+ onInquiryFieldChange={(field, value) => setPrivacyPage((prev) => updatePrivacyInquiryField(prev, privacyEditLocale, field, value))}
+ onSectionFieldChange={(sectionKey, field, value) => setPrivacyPage((prev) => updatePrivacyLocaleSection(prev, privacyEditLocale, sectionKey, (section) => ({
+ ...section,
+ [field]: value,
+ })))}
+ onSectionItemChange={(sectionKey, index, field, value) => setPrivacyPage((prev) => updatePrivacySectionItem(prev, privacyEditLocale, sectionKey, index, field, value))}
+ onSectionContactBoxChange={(sectionKey, field, value) => setPrivacyPage((prev) => updatePrivacyLocaleSection(prev, privacyEditLocale, sectionKey, (section) => ({
+ ...section,
+ contact_box: {
+ ...(section.contact_box || {}),
+ [field]: value,
+ },
+ })))}
+ onToggleSectionContactBox={(sectionKey, enabled) => setPrivacyPage((prev) => updatePrivacyLocaleSection(prev, privacyEditLocale, sectionKey, (section) => ({
+ ...section,
+ contact_box: enabled
+ ? (section.contact_box || { company: '', email_label: 'Email:', email: '', location: '' })
+ : null,
+ })))}
+ onAddSection={() => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ const localeView = getPrivacyLocaleView(privacyPage, privacyEditLocale);
+ while (localeView.sections[`privacy_section_${index}`]) index += 1;
+ const sectionKey = `privacy_section_${index}`;
+ setPrivacyPage((prev) => addPrivacySection(prev, sectionKey));
+ }}
+ onRemoveSection={(sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'privacy_section', sectionKey });
+ }}
+ onMoveSection={(sectionKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setPrivacyPage((prev) => movePrivacySection(prev, sectionKey, direction));
+ }}
+ onAddSectionItem={(sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setPrivacyPage((prev) => addPrivacySectionItem(prev, privacyEditLocale, sectionKey));
+ }}
+ onRemoveSectionItem={(sectionKey, index) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'privacy_item', sectionKey, index, locale: privacyEditLocale });
+ }}
+ onSave={savePrivacyPage}
+ />
+ )}
+
+ {activeTab === 'terms' && (
+ <TermsPageManagerPanel
+ termsLocale={termsEditLocale}
+ onLocaleChange={setTermsEditLocale}
+ termsPage={getTermsLocaleView(termsPage, termsEditLocale)}
+ canEdit={canEditHomepageComplete}
+ loading={loading}
+ onPageFieldChange={(field, value) => setTermsPage((prev) => updateTermsLocaleField(prev, termsEditLocale, field, value))}
+ onSectionFieldChange={(sectionKey, field, value) => setTermsPage((prev) => updateTermsLocaleSection(prev, termsEditLocale, sectionKey, (section) => ({
+ ...section,
+ [field]: value,
+ })))}
+ onAddSection={() => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ const localeView = getTermsLocaleView(termsPage, termsEditLocale);
+ while (localeView.sections[`terms_section_${index}`]) index += 1;
+ const sectionKey = `terms_section_${index}`;
+ setTermsPage((prev) => addTermsSection(prev, sectionKey));
+ }}
+ onRemoveSection={(sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'terms_section', sectionKey });
+ }}
+ onMoveSection={(sectionKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setTermsPage((prev) => moveTermsSection(prev, sectionKey, direction));
+ }}
+ onSave={saveTermsPage}
+ />
+ )}
+
+ {activeTab === 'cookies' && (
+ <CookiesPageManagerPanel
+ cookiesLocale={cookiesEditLocale}
+ onLocaleChange={setCookiesEditLocale}
+ cookiesPage={getCookiesLocaleView(cookiesPage, cookiesEditLocale)}
+ canEdit={canEditHomepageComplete}
+ loading={loading}
+ onPageFieldChange={(field, value) => setCookiesPage((prev) => updateCookiesLocaleField(prev, cookiesEditLocale, field, value))}
+ onSectionFieldChange={(sectionKey, field, value) => setCookiesPage((prev) => updateCookiesLocaleSection(prev, cookiesEditLocale, sectionKey, (section) => ({
+ ...section,
+ [field]: value,
+ })))}
+ onSectionItemChange={(sectionKey, index, field, value) => setCookiesPage((prev) => updateCookiesSectionItem(prev, cookiesEditLocale, sectionKey, index, field, value))}
+ onAddSection={() => {
+ if (!canEditHomepageComplete) return;
+ let index = 1;
+ const localeView = getCookiesLocaleView(cookiesPage, cookiesEditLocale);
+ while (localeView.sections[`cookies_section_${index}`]) index += 1;
+ const sectionKey = `cookies_section_${index}`;
+ setCookiesPage((prev) => addCookiesSection(prev, sectionKey));
+ }}
+ onRemoveSection={(sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'cookies_section', sectionKey });
+ }}
+ onMoveSection={(sectionKey, direction) => {
+ if (!canEditHomepageComplete) return;
+ setCookiesPage((prev) => moveCookiesSection(prev, sectionKey, direction));
+ }}
+ onAddSectionItem={(sectionKey) => {
+ if (!canEditHomepageComplete) return;
+ setCookiesPage((prev) => addCookiesSectionItem(prev, cookiesEditLocale, sectionKey));
+ }}
+ onRemoveSectionItem={(sectionKey, index) => {
+ if (!canEditHomepageComplete) return;
+ setPendingRemove({ type: 'cookies_item', sectionKey, index, locale: cookiesEditLocale });
+ }}
+ onSave={saveCookiesPage}
+ />
  )}
  </div>
  </div>

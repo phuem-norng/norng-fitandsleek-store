@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../lib/api";
 import { useAuth } from "../../state/auth";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 import { useTheme } from "../../state/theme.jsx";
 import { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../../lib/swal";
 import AdminModal, { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
@@ -8,6 +11,11 @@ import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/A
 
 export default function AdminCategories() {
  const { refresh: refreshAuth } = useAuth();
+ const { user, can, permissionsReady } = useAdminPermissions();
+ const canViewCategories = can("categories", "view");
+ const canCreateCategories = can("categories", "create");
+ const canEditCategories = can("categories", "edit");
+ const canDeleteCategories = can("categories", "delete");
  const { primaryColor, mode } = useTheme();
  const accentColor = primaryColor;
  const accentIsWhite = (accentColor || "").toUpperCase() === "#FFFFFF";
@@ -87,6 +95,11 @@ export default function AdminCategories() {
  const isCatalogCategory = (c) => String(c?.type || "").toLowerCase() !== "barcode_qr";
 
  const load = async () => {
+ if (!canViewCategories) {
+ setRows([]);
+ setLoading(false);
+ return;
+ }
  setLoading(true);
  try {
  const { data } = await api.get("/admin/categories");
@@ -99,14 +112,19 @@ export default function AdminCategories() {
  };
 
  useEffect(() => {
+ if (!permissionsReady) return;
  load();
- }, []);
+ }, [permissionsReady, canViewCategories]);
 
  useEffect(() => {
  setSelectedIds((prev) => prev.filter((id) => rows.some((c) => c.id === id)));
  }, [rows]);
 
- if (loading) return <AdminContentSkeleton lines={3} imageHeight={220} />;
+ if (!permissionsReady || loading) return <AdminContentSkeleton lines={3} imageHeight={220} />;
+
+ if (!canViewCategories) {
+ return <Navigate to={getFirstAccessibleAdminPath(user)} replace />;
+ }
 
  const showSuccess = (msg) => {
  setSuccess(msg);
@@ -119,6 +137,14 @@ export default function AdminCategories() {
 
  const create = async (e) => {
  e.preventDefault();
+ if (!canCreateCategories) {
+ await errorAlert({
+ khTitle: "គ្មានសិទ្ធិ",
+ enTitle: "Not allowed",
+ detail: "You don't have permission to create categories.",
+ });
+ return;
+ }
  if (isCreating) return;
  setErr("");
  setCreateError("");
@@ -166,9 +192,16 @@ export default function AdminCategories() {
  }
  };
 
- const startEdit = (c) => setEditing({ ...c });
+ const startEdit = (c) => {
+ if (!canEditCategories) return;
+ setEditing({ ...c });
+ };
 
  const saveEdit = async () => {
+ if (!canEditCategories) {
+ setErr("You don't have permission to edit categories.");
+ return;
+ }
  if (!editing?.id) return;
  setErr("");
  try {
@@ -187,10 +220,12 @@ export default function AdminCategories() {
  };
 
  const del = (id) => {
+ if (!canDeleteCategories) return;
  setPendingDeleteId(id);
  };
 
  const confirmDelete = async () => {
+ if (!canDeleteCategories) return;
  setDeleteBusy(true);
  setErr("");
  try {
@@ -245,7 +280,7 @@ export default function AdminCategories() {
  };
 
  const deleteSelected = () => {
- if (selectedIds.length === 0) return;
+ if (!canDeleteCategories || selectedIds.length === 0) return;
  setPendingBulkDelete(true);
  };
 
@@ -272,6 +307,7 @@ export default function AdminCategories() {
  </h1>
  <p className="text-slate-500 dark:text-slate-400 text-lg">Manage your product categories with full CRUD operations</p>
  </div>
+ {canCreateCategories ? (
  <button
  onClick={() => setShowCreateForm(true)}
  className={`px-6 py-3 font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 ${accentIsWhite ? "border border-slate-300" : "text-white"}`}
@@ -282,6 +318,7 @@ export default function AdminCategories() {
  </svg>
  Add New Category
  </button>
+ ) : null}
  </div>
 
  {/* Error Alert */}
@@ -392,7 +429,7 @@ export default function AdminCategories() {
  <div className="md:col-span-12 flex justify-end">
  <button
  type="submit"
- disabled={isCreating}
+ disabled={isCreating || !canCreateCategories}
  className={`h-12 min-w-44 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed border ${accentIsWhite ? 'border-slate-300' : ''}`}
  style={{ backgroundColor: accentColor, color: accentIsWhite ? '#0b0b0f' : '#FFFFFF', borderColor: accentIsWhite ? '#cbd5e1' : accentColor }}
  >
@@ -436,6 +473,7 @@ export default function AdminCategories() {
  placeholder="Search categories..."
  className="h-10 w-64 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-slate-500"
  />
+ {canDeleteCategories ? (
  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
  <input
  type="checkbox"
@@ -445,7 +483,8 @@ export default function AdminCategories() {
  />
  Select all
  </label>
- {selectedIds.length > 0 && (
+ ) : null}
+ {canDeleteCategories && selectedIds.length > 0 ? (
  <button
  onClick={deleteSelected}
  style={deleteButtonStyle}
@@ -453,7 +492,7 @@ export default function AdminCategories() {
  >
  Delete Selected ({selectedIds.length})
  </button>
- )}
+ ) : null}
  <button
  onClick={load}
  className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
@@ -506,12 +545,14 @@ export default function AdminCategories() {
  </div>
 
  <div className="flex items-center gap-6">
+ {canDeleteCategories ? (
  <input
  type="checkbox"
  checked={selectedIds.includes(c.id)}
  onChange={() => toggleSelect(c.id)}
  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-slate-900 focus:ring-0"
  />
+ ) : null}
  <span
  className="px-3 py-1 rounded-full text-xs font-semibold border"
  style={c.gender
@@ -533,6 +574,7 @@ export default function AdminCategories() {
  </span>
 
  <div className="flex items-center gap-2">
+ {canEditCategories ? (
  <button
  type="button"
  onClick={() => startEdit(c)}
@@ -544,6 +586,8 @@ export default function AdminCategories() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
  </svg>
  </button>
+ ) : null}
+ {canDeleteCategories ? (
  <button
  type="button"
  onClick={() => del(c.id)}
@@ -556,6 +600,7 @@ export default function AdminCategories() {
  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
  </svg>
  </button>
+ ) : null}
  </div>
  </div>
  </div>
@@ -636,6 +681,7 @@ export default function AdminCategories() {
  >
  Cancel
  </button>
+ {canEditCategories ? (
  <button
  type="button"
  onClick={saveEdit}
@@ -644,6 +690,7 @@ export default function AdminCategories() {
  >
  Save Changes
  </button>
+ ) : null}
  </div>
  </div>
  ) : null}

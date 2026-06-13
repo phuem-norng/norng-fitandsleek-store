@@ -8,8 +8,9 @@ import { useLanguage } from "../lib/i18n.jsx";
 import CheckoutPaymentKhqr from "../components/payments/CheckoutPaymentKhqr";
 import CheckoutPaymentCard from "../components/payments/CheckoutPaymentCard";
 import KhqrSuccessModal from "../components/alerts/KhqrSuccessModal";
-import { setupTelegramBackButton, setupTelegramMainButton, triggerTelegramHaptic } from "../lib/telegramWebApp";
 import { requestDeliveryPin } from "../lib/geolocation";
+import { resolveImageUrl } from "../lib/images";
+import { DEFAULT_DELIVERY_RATES, resolveDeliveryFee } from "../lib/deliveryFee.js";
 
 const KHQR_REDIRECT_SECONDS = 60;
 
@@ -28,6 +29,8 @@ export default function Checkout() {
   const [khqrOpen, setKhqrOpen] = useState(false);
   const [khqrOrder, setKhqrOrder] = useState(null);
   const [khqrSuccessOpen, setKhqrSuccessOpen] = useState(false);
+  const [loyalty, setLoyalty] = useState(null);
+  const [deliveryRates, setDeliveryRates] = useState(DEFAULT_DELIVERY_RATES);
 
   useEffect(() => {
     if (!khqrSuccessOpen) return;
@@ -46,6 +49,50 @@ export default function Checkout() {
   const [cardErrors, setCardErrors] = useState({});
   const { t } = useLanguage();
   const cartItems = cart.cart?.items || [];
+
+  useEffect(() => {
+    let mounted = true;
+    if (!user) {
+      setLoyalty(null);
+      return undefined;
+    }
+    (async () => {
+      try {
+        const { data } = await api.get("/user/loyalty");
+        if (!mounted) return;
+        setLoyalty(data?.data || null);
+      } catch {
+        if (!mounted) return;
+        setLoyalty(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await api.get("/delivery-fees");
+        if (!mounted) return;
+        const rates = data?.data;
+        if (rates?.phnom_penh != null && rates?.province != null) {
+          setDeliveryRates({
+            phnom_penh: Number(rates.phnom_penh),
+            province: Number(rates.province),
+          });
+        }
+      } catch {
+        if (!mounted) return;
+        setDeliveryRates(DEFAULT_DELIVERY_RATES);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -227,37 +274,6 @@ export default function Checkout() {
     }
   };
 
-  useEffect(() => {
-    const safeTotal = Number(cart.total || 0);
-    const buttonText = paymentMethod === "bakong_khqr"
-      ? (t("payWithKHQR") || "Pay with KHQR")
-      : (t("placeOrder") || "Place Order");
-    const buttonTextWithTotal = `${buttonText} • $${safeTotal.toFixed(2)}`;
-    const canSubmit = !loading && !!paymentMethod;
-
-    const onMainClick = () => {
-      triggerTelegramHaptic("impact", "light");
-      place();
-    };
-    const onBackClick = () => nav("/cart");
-
-    const cleanupMain = setupTelegramMainButton({
-      text: loading ? (t("processing") || "Processing...") : buttonTextWithTotal,
-      onClick: onMainClick,
-      color: paymentMethod === "bakong_khqr" ? "#C88F09" : "#567D74",
-      textColor: "#FFFFFF",
-      isVisible: true,
-      isEnabled: canSubmit,
-      showProgress: loading,
-    });
-    const cleanupBack = setupTelegramBackButton({ onClick: onBackClick, isVisible: true });
-
-    return () => {
-      cleanupMain();
-      cleanupBack();
-    };
-  }, [cart.total, loading, nav, paymentMethod, t, user]);
-
   /* ── helpers ── */
   const getPriceMeta = (item) => {
     const unitPaid = Number(item?.unit_price || item?.product?.final_price || item?.product?.price || 0);
@@ -279,8 +295,14 @@ export default function Checkout() {
     const pricing = getPriceMeta(item);
     return sum + pricing.linePaid;
   }, 0);
-  const shipping = 0; // free shipping
-  const grandTotal = subtotal + shipping;
+  const selectedAddress = addresses.find((a) => String(a.id) === String(selectedAddressId));
+  const deliveryQuote = selectedAddress
+    ? resolveDeliveryFee(selectedAddress.province, deliveryRates)
+    : { fee: 0, zone: null, label: "" };
+  const shipping = deliveryQuote.fee;
+  const loyaltyPercent = Number(loyalty?.discount_percent || 0);
+  const loyaltyDiscount = loyaltyPercent > 0 ? (subtotal * loyaltyPercent) / 100 : 0;
+  const grandTotal = subtotal + shipping - loyaltyDiscount;
 
   const RadioDot = ({ active }) => (
     <span className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${active ? "border-[#567D74] bg-[#567D74]" : "border-slate-300 dark:border-slate-500"
@@ -396,8 +418,12 @@ export default function Checkout() {
                   </div>
                 ) : (
                   <div className="grid gap-3">
+                    <p className="text-xs text-slate-500">
+                      {t("deliveryFeeHint") || "Delivery fee is based on your address province (Phnom Penh vs other provinces)."}
+                    </p>
                     {addresses.map((addr) => {
                       const active = String(selectedAddressId) === String(addr.id);
+                      const addrDelivery = resolveDeliveryFee(addr.province, deliveryRates);
                       return (
                         <label
                           key={addr.id}
@@ -421,6 +447,12 @@ export default function Checkout() {
                             </p>
                             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 leading-snug">
                               {addr.formatted_address || [addr.street, addr.city, addr.state, addr.zip, addr.country].filter(Boolean).join(", ")}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-[#567D74]">
+                              {t("delivery") || "Delivery"}: ${addrDelivery.fee.toFixed(2)}
+                              <span className="font-normal text-slate-500">
+                                {" "}({addrDelivery.label})
+                              </span>
                             </p>
                           </div>
                         </label>
@@ -684,7 +716,8 @@ export default function Checkout() {
                 ) : cartItems.map((item, idx) => {
                   const name = item?.product?.name || item?.name || item?.product_name || "Item";
                   const pricing = getPriceMeta(item);
-                  const img = item?.product?.images?.[0]?.url || item?.product?.image_url || null;
+                  const rawImg = item?.product?.images?.[0]?.url || item?.product?.image_url || null;
+                  const img = resolveImageUrl(rawImg);
                   return (
                     <div key={item?.id || idx} className="flex items-center gap-3 px-6 py-3.5">
                       {/* product thumbnail */}
@@ -726,9 +759,22 @@ export default function Checkout() {
                   <span>${subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-slate-600">
-                  <span>{t('shipping') || "Shipping"}</span>
-                  <span className="text-emerald-600 font-semibold">{t('freeShipping') || "FREE"}</span>
+                  <span>
+                    {t('shipping') || "Shipping"}
+                    {deliveryQuote.label ? (
+                      <span className="block text-xs text-slate-400">{deliveryQuote.label}</span>
+                    ) : null}
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {selectedAddress ? `$${shipping.toFixed(2)}` : (t("selectAddressForDelivery") || "Select address")}
+                  </span>
                 </div>
+                {loyaltyPercent > 0 ? (
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Loyalty Discount ({String(loyalty?.tier || "").toUpperCase()} {loyaltyPercent}%)</span>
+                    <span className="font-semibold text-emerald-700">-${loyaltyDiscount.toFixed(2)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-sm text-slate-600">
                   <span>{t('tax') || "Tax"}</span>
                   <span>{t('includedInPrice') || "Included"}</span>

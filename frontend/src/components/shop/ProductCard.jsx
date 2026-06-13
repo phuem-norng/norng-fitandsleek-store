@@ -3,6 +3,11 @@ import { Heart } from "lucide-react";
 import { Link } from "react-router-dom";
 import { resolveImageUrl } from "../../lib/images";
 import { useWishlist } from "../../state/wishlist";
+import {
+  hasStorefrontAdminDiscount,
+  hasStorefrontLotDiscount,
+  resolveStorefrontPriceDisplay,
+} from "../../lib/storefrontLotPrice.js";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -49,18 +54,26 @@ export default function ProductCard({ p }) {
     p.discount_percentage ??
     p.discount?.discount_percentage ??
     (p.discount?.type === "percentage" ? Number(p.discount?.value || 0) : null);
+  const priceDisplay = resolveStorefrontPriceDisplay(p);
+  const { sale: displayPrice, compare: discountCompare, pctLabel } = priceDisplay;
+
   const hasDiscount =
+    hasStorefrontAdminDiscount(p) ||
+    hasStorefrontLotDiscount(p) ||
     Boolean(p.has_discount) ||
     (discountPrice !== null && Number(discountPrice) > 0 && Number(discountPrice) < Number(p.price || 0));
 
   const badge = hasDiscount
     ? discountPercentage && Number(discountPercentage) > 0
       ? `Discount ${Math.round(Number(discountPercentage))}%`
-      : "Discount"
-    : (p.old_price ? "SALE" : null);
-
-  const displayPrice = hasDiscount ? discountPrice : (p.final_price ?? p.price);
-  const originalPrice = hasDiscount ? p.price : p.old_price;
+      : pctLabel
+        ? `Discount ${pctLabel.replace(/^-/, "")}`
+        : "Discount"
+    : p.old_price
+      ? "SALE"
+      : null;
+  const originalPrice = discountCompare ?? (hasDiscount ? null : p.old_price ?? null);
+  const saleBadge = badge;
 
   return (
     <div className="fs-card group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.995]">
@@ -96,9 +109,9 @@ export default function ProductCard({ p }) {
         </button>
 
         <div className="absolute top-2 left-2 flex flex-col gap-1">
-          {badge && (
+          {saleBadge && (
             <div className="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold leading-tight text-white shadow-sm whitespace-nowrap">
-              {badge}
+              {saleBadge}
             </div>
           )}
 

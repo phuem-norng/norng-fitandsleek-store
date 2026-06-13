@@ -9,13 +9,15 @@ import { filterStorefrontMedia } from "../../lib/catalogContent.js";
 function HeroPlaceholder() {
   return (
     <section
-      className="container-safe pt-4 md:pt-6 max-w-[1600px] mx-auto"
+      className="container-safe fs-hero-shell"
       aria-label="Hero banner"
     >
       <div
-        className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-zinc-200/80 bg-gradient-to-br from-zinc-300 via-zinc-200 to-zinc-100 shadow-sm aspect-video md:aspect-auto md:min-h-[400px] lg:min-h-[560px]"
+        className="fs-hero-banner relative overflow-hidden border border-zinc-200/80 bg-gradient-to-br from-zinc-300 via-zinc-200 to-zinc-100"
         aria-hidden
-      />
+      >
+        <div className="fs-hero-banner__frame" />
+      </div>
       <span className="sr-only">Hero banner area</span>
     </section>
   );
@@ -41,7 +43,7 @@ const imageVariants = {
       ease: "easeOut",
     },
   },
-  
+
   // Style 2: Zoom-In / Ken Burns Effect (Cinematic)
   zoomInEnter: {
     scale: 1.2,
@@ -63,7 +65,7 @@ const imageVariants = {
       ease: "easeOut",
     },
   },
-  
+
   // Style 3: Slide-from-Right (Dynamic)
   slideFromRightEnter: {
     x: "100%",
@@ -110,8 +112,8 @@ const textContainerVariants = {
 
 // Individual text element animations
 const badgeVariants = {
-  hidden: { 
-    y: -20, 
+  hidden: {
+    y: -20,
     opacity: 0,
     scale: 0.8,
   },
@@ -133,8 +135,8 @@ const badgeVariants = {
 };
 
 const titleVariants = {
-  hidden: { 
-    y: 40, 
+  hidden: {
+    y: 40,
     opacity: 0,
   },
   visible: {
@@ -152,7 +154,7 @@ const titleVariants = {
 };
 
 const subtitleVariants = {
-  hidden: { 
+  hidden: {
     opacity: 0,
     y: 20,
   },
@@ -172,7 +174,7 @@ const subtitleVariants = {
 
 // Button with continuous pulse animation
 const buttonVariants = {
-  hidden: { 
+  hidden: {
     scale: 0.5,
     opacity: 0,
   },
@@ -265,8 +267,9 @@ export default function Hero() {
 
   if (loading) {
     return (
-      <section className="container-safe pt-4 md:pt-6 max-w-[1600px] mx-auto">
-        <div className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-zinc-200 bg-gradient-to-r from-zinc-100 via-zinc-50 to-white animate-pulse aspect-video md:aspect-auto md:min-h-[400px] lg:min-h-[560px]">
+      <section className="container-safe fs-hero-shell">
+        <div className="fs-hero-banner relative overflow-hidden border border-zinc-200 bg-gradient-to-r from-zinc-100 via-zinc-50 to-white animate-pulse">
+          <div className="fs-hero-banner__frame">
           <div className="absolute inset-0 flex items-end p-4 md:p-10">
             <div className="w-full max-w-xl">
               <div className="h-3 md:h-4 w-16 md:w-20 bg-zinc-200 rounded mb-3 md:mb-4"></div>
@@ -274,6 +277,7 @@ export default function Hero() {
               <div className="h-3 md:h-4 w-full max-w-xs bg-zinc-200 rounded mb-4 md:mb-6"></div>
               <div className="h-8 md:h-10 w-24 md:w-28 bg-zinc-200 rounded-full"></div>
             </div>
+          </div>
           </div>
         </div>
       </section>
@@ -303,7 +307,7 @@ export default function Hero() {
 
   const handleTouchEnd = () => {
     if (!touchStart || !touchEnd) return;
-    
+
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > 50;
     const isRightSwipe = distance < -50;
@@ -330,10 +334,10 @@ export default function Hero() {
   };
 
   return (
-    <section className="container-safe pt-4 max-w-[1600px] mx-auto">
-      <div className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-white shadow-sm ring-1 ring-black/5">
-        <div 
-          className="relative aspect-video md:aspect-auto md:min-h-[400px] lg:min-h-[560px] overflow-hidden cursor-grab active:cursor-grabbing"
+    <section className="container-safe fs-hero-shell">
+      <div className="fs-hero-banner relative overflow-hidden bg-white shadow-sm ring-1 ring-black/5">
+        <div
+          className="fs-hero-banner__frame overflow-hidden cursor-grab active:cursor-grabbing"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -361,7 +365,7 @@ export default function Hero() {
                   aria-hidden
                 />
               )}
-              
+
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
             </motion.div>
           </AnimatePresence>
@@ -436,14 +440,13 @@ export default function Hero() {
                   aria-label={`Go to slide ${idx + 1}`}
                 >
                   {/* Dot background */}
-                  <span 
-                    className={`block rounded-full transition-all duration-500 ${
-                      idx === i
+                  <span
+                    className={`block rounded-full transition-all duration-500 ${idx === i
                         ? "w-8 md:w-10 h-1.5 md:h-2 bg-white shadow-lg"
                         : "w-1.5 md:w-2 h-1.5 md:h-2 bg-white/40 group-hover:bg-white/70"
-                    }`}
+                      }`}
                   />
-                  
+
                   {/* Active progress bar */}
                   {idx === i && (
                     <motion.span

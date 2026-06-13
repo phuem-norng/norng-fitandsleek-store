@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
 import { useAuth } from "./auth";
-import { triggerTelegramHaptic } from "../lib/telegramWebApp";
-import { clientVariantMaxQty } from "../lib/variantMatrix.js";
+import {
+  cartQtyForVariantLine,
+  remainingSellableQty,
+  sellableQtyForVariantLine,
+} from "../lib/variantMatrix.js";
+import { resolveStorefrontCustomerPrice } from "../lib/storefrontLotPrice.js";
 
 const CartCtx = createContext(null);
 const LOCAL_CART_KEY = "fs_guest_cart";
@@ -85,24 +89,16 @@ export function CartProvider({ children }) {
       const product = typeof productOrId === "object" ? productOrId : null;
       if (!product?.id) throw new Error("PRODUCT_REQUIRED");
 
-      const unitPrice =
-        product.discount?.sale_price ??
-          product.active_discount?.sale_price ??
-          product.activeDiscount?.sale_price ??
-          product.price ??
-          0;
+      const unitPrice = resolveStorefrontCustomerPrice(product, size, color);
 
       const current = readLocalCart().items;
-      const maxStock = clientVariantMaxQty(product, color, size);
-      const variantKey = `${product.id}::${size || ""}::${color || ""}`;
-      const existing = current.find((it) => it.id === variantKey);
-      const totalForVariant = current
-        .filter((it) => it.product?.id === product.id && it.color === color && it.size === size)
-        .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
-      if (totalForVariant + quantity > maxStock) {
+      const remaining = remainingSellableQty(product, color, size, current);
+      if (quantity > remaining) {
         setError("Stock limit reached for this product.");
-        throw new Error("STOCK_LIMIT");
+        throw new Error(`STOCK_LIMIT:${sellableQtyForVariantLine(product, color, size)}`);
       }
+      const variantKey = `${product.id}::${String(size || "").trim().toLowerCase()}::${String(color || "").trim().toLowerCase()}`;
+      const existing = current.find((it) => it.id === variantKey);
       let next = [];
       if (existing) {
         next = current.map((it) =>
@@ -126,7 +122,6 @@ export function CartProvider({ children }) {
       const local = writeLocalCart(next);
       setCart({ items: local.items });
       setTotal(local.total);
-      triggerTelegramHaptic("impact", "medium");
       return { cart: { items: local.items }, total: local.total };
     }
 
@@ -136,11 +131,9 @@ export function CartProvider({ children }) {
       const { data } = await api.post("/cart/items", { product_id: productId, quantity, size: size || null, color: color || null });
       setCart(data.cart);
       setTotal(data.total);
-      triggerTelegramHaptic("impact", "medium");
       return data;
     } catch (err) {
       console.error("Add to cart error:", err);
-      triggerTelegramHaptic("notification", "error");
       if (err.response?.status === 401 || err.response?.status === 403) {
         throw new Error("LOGIN_REQUIRED");
       }
@@ -152,22 +145,17 @@ export function CartProvider({ children }) {
     if (!user || !token) {
       const current = readLocalCart().items;
       const item = current.find((it) => it.id === itemId);
-      const maxStock = item?.product
-        ? clientVariantMaxQty(item.product, item.color, item.size)
-        : null;
-      if (Number.isFinite(maxStock)) {
-        const otherQty = current
-          .filter(
-            (it) =>
-              it.product?.id === item?.product?.id &&
-              it.id !== itemId &&
-              it.color === item?.color &&
-              it.size === item?.size
-          )
-          .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
-        if (otherQty + quantity > maxStock) {
+      if (item?.product) {
+        const cap = sellableQtyForVariantLine(item.product, item.color, item.size);
+        const otherQty = cartQtyForVariantLine(
+          current.filter((it) => it.id !== itemId),
+          item.product.id,
+          item.color,
+          item.size
+        );
+        if (otherQty + quantity > cap) {
           setError("Stock limit reached for this product.");
-          quantity = Math.max(1, maxStock - otherQty);
+          quantity = Math.max(1, cap - otherQty);
         }
       }
       const next = current

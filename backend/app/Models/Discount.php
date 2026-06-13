@@ -13,6 +13,7 @@ class Discount extends Model
         'discount_type',
         'discount_value',
         'sale_price',
+        'quantity',
         'start_date',
         'end_date',
         'is_active',
@@ -22,6 +23,7 @@ class Discount extends Model
     protected $casts = [
         'discount_value' => 'decimal:2',
         'sale_price' => 'decimal:2',
+        'quantity' => 'integer',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
         'is_active' => 'boolean',

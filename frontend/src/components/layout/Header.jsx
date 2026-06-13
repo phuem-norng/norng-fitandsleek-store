@@ -13,6 +13,10 @@ import Logo from "../Logo.jsx";
 import LoginDialog from "../dialogs/LoginDialog.jsx";
 import RegisterDialog from "../dialogs/RegisterDialog.jsx";
 import SmartSearchModal from "../search/SmartSearchModal.jsx";
+import MegaMenuEmptyState from "./MegaMenuEmptyState.jsx";
+import { storefrontSearchUrl as navSearch } from "../../lib/storefrontNavLinks.js";
+import { mergeTopNavDropdowns } from "../../lib/defaultTopNavDropdowns.js";
+import { resolveHeaderChromeStyle } from "../../lib/storefrontChrome.js";
 
 function cn(...xs) {
   return xs.filter(Boolean).join(" ");
@@ -97,7 +101,7 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
   if (!user) return null;
 
   return (
-    <div className={cn("relative", className)} ref={ref}>
+    <div className={cn("relative shrink-0 overflow-visible", className)} ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="fs-avatar-ring"
@@ -105,19 +109,21 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <span className="fs-avatar-ring__inner">
-          {avatarSrc && !avatarBroken ? (
-            <img
-              src={avatarSrc}
-              alt={user?.name || "Profile"}
-              className="w-full h-full object-cover"
-              onError={() => setAvatarBroken(true)}
-            />
-          ) : (
-            <span>{initials || "U"}</span>
-          )}
+        <span className="fs-avatar-ring__frame">
+          <span className="fs-avatar-ring__inner">
+            {avatarSrc && !avatarBroken ? (
+              <img
+                src={avatarSrc}
+                alt={user?.name || "Profile"}
+                className="w-full h-full object-cover"
+                onError={() => setAvatarBroken(true)}
+              />
+            ) : (
+              <span>{initials || "U"}</span>
+            )}
+          </span>
+          <span className="fs-avatar-ring__status" aria-hidden="true" />
         </span>
-        <span className="fs-avatar-ring__status" aria-hidden="true" />
       </button>
 
       {open && (
@@ -183,100 +189,69 @@ function ProfileMenu({ user, onLogout, t, className = "" }) {
 }
 
 
-// Enhanced Dropdown Menu Component with sections support
-function DropdownMenu({ items, children, hasSubtitle }) {
-  const [isOpen, setIsOpen] = useState(false);
+function NavDropdownPanel({ items }) {
   const safeItems = Array.isArray(items) ? items : [];
+  if (!safeItems.length) return null;
 
-  // Check if items have sections (groups)
-  const hasSections = safeItems.some(item => item?.type === 'section');
+  const hasSections = safeItems.some((item) => item?.type === "section");
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setIsOpen(true)}
-      onMouseLeave={() => setIsOpen(false)}
-    >
-      {children(isOpen)}
-      <div
-        className={`
-          fixed left-0 right-0 top-[108px] pt-4
-          bg-transparent
-          overflow-visible transition-all duration-200 ease-out z-50
-          ${isOpen ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"}
-        `}
-      >
-        <div className="bg-white shadow-xl border-t border-zinc-100">
-          {hasSections ? (
-            // Full-width sections layout
-            <div className="container-safe mx-auto py-6 px-8">
-              <div className="grid grid-cols-4 gap-10">
-                {safeItems.filter(item => item?.type === 'section').map((section, idx) => (
-                  <div key={idx} className={section.className || ''}>
-                    {section.to ? (
-                      <Link
-                        to={section.to}
-                        className="block group mb-3"
-                      >
-                        <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1 group-hover:text-emerald-600 transition-colors">
-                          {section.label}
-                        </h4>
-                        {section.description && (
-                          <p className="text-xs text-zinc-500 leading-relaxed">
-                            {section.description}
-                          </p>
-                        )}
-                      </Link>
-                    ) : (
-                      <div className="block mb-3">
-                        <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1">
-                          {section.label}
-                        </h4>
-                        {section.description && (
-                          <p className="text-xs text-zinc-500 leading-relaxed">
-                            {section.description}
-                          </p>
-                        )}
-                      </div>
+    <div className="bg-white shadow-xl border-t border-zinc-100">
+      {hasSections ? (
+        <div className="container-safe mx-auto py-6 px-8">
+          <div className="grid grid-cols-4 gap-10">
+            {safeItems.filter((item) => item?.type === "section").map((section, idx) => (
+              <div key={idx} className={section.className || ""}>
+                {section.to ? (
+                  <Link to={section.to} className="block group mb-3">
+                    <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1 group-hover:text-emerald-600 transition-colors">
+                      {section.label}
+                    </h4>
+                    {section.description && (
+                      <p className="text-xs text-zinc-500 leading-relaxed">{section.description}</p>
                     )}
-                    <div className="space-y-2">
-                      {section.items && section.items.map((item, itemIdx) => (
-                        <Link
-                          key={itemIdx}
-                          to={item.to}
-                          className="fs-menu-item"
-                        >
-                          {item.label}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            // Simple list layout - horizontal row
-            <div className="container-safe mx-auto py-6 px-8">
-              <div className="flex items-center justify-center gap-3 flex-wrap">
-                {safeItems.map((item, idx) => (
-                  <Link
-                    key={idx}
-                    to={item.to}
-                    className={cn(
-                      "px-6 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
-                      item.highlight
-                        ? "text-zinc-900 font-semibold bg-zinc-100 hover:bg-zinc-200"
-                        : "text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50"
-                    )}
-                  >
-                    {item.label}
                   </Link>
-                ))}
+                ) : (
+                  <div className="block mb-3">
+                    <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider mb-1">
+                      {section.label}
+                    </h4>
+                    {section.description && (
+                      <p className="text-xs text-zinc-500 leading-relaxed">{section.description}</p>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {section.items?.map((item, itemIdx) => (
+                    <Link key={itemIdx} to={item.to} className="fs-menu-item">
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="container-safe mx-auto py-6 px-8">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            {safeItems.map((item, idx) => (
+              <Link
+                key={idx}
+                to={item.to}
+                className={cn(
+                  "px-6 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
+                  item.highlight
+                    ? "text-zinc-900 font-semibold bg-zinc-100 hover:bg-zinc-200"
+                    : "text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -302,14 +277,16 @@ function AnimatedNavLink({ to, label, hasDropdown, onHover, index, hoveredIndex,
 }
 
 function NavBar({ navItems }) {
+  const { t } = useLanguage();
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [showMore, setShowMore] = useState(false);
 
-  // Responsive menu: show fewer items on smaller desktops, more on larger screens
   const visibleItemsCount = navItems.length > 8 ? 5 : navItems.length > 6 ? 5 : Math.min(6, navItems.length);
   const visibleItems = navItems.slice(0, visibleItemsCount);
   const moreItems = navItems.slice(visibleItemsCount);
   const hasMore = moreItems.length > 0;
+  const hoveredItem = hoveredIndex != null ? visibleItems[hoveredIndex] : null;
+  const panelOpen = Boolean(hoveredItem?.items?.length);
 
   return (
     <div
@@ -319,37 +296,31 @@ function NavBar({ navItems }) {
         setShowMore(false);
       }}
     >
-      <nav className="flex items-center justify-center gap-8 container-safe relative z-10 max-w-[1600px] mx-auto px-4 py-2">
+      <nav className="fs-header-bar flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:gap-x-5 lg:gap-x-6 xl:gap-x-8 relative z-10 py-2">
         {visibleItems.map((item, index) => {
           const itemKey = item.to || item.label || `nav-${index}`;
-          return item.items ? (
-            <DropdownMenu key={itemKey} items={item.items}>
-              {(isOpen) => (
-                <AnimatedNavLink
-                  to={item.to}
-                  label={item.label}
-                  hasDropdown
-                  index={index}
-                  hoveredIndex={hoveredIndex}
-                  isDropdownOpen={isOpen}
-                  onHover={() => setHoveredIndex(index)}
-                />
-              )}
-            </DropdownMenu>
-          ) : (
-            <AnimatedNavLink
+          const hasDropdown = Boolean(item.items?.length);
+          return (
+            <div
               key={itemKey}
-              to={item.to}
-              label={item.label}
-              hasDropdown={false}
-              index={index}
-              hoveredIndex={hoveredIndex}
-              onHover={() => setHoveredIndex(index)}
-            />
+              className="relative"
+              onMouseEnter={() => {
+                if (hasDropdown) setHoveredIndex(index);
+              }}
+            >
+              <AnimatedNavLink
+                to={item.to}
+                label={item.label}
+                hasDropdown={hasDropdown}
+                index={index}
+                hoveredIndex={hoveredIndex}
+                isDropdownOpen={hoveredIndex === index}
+                onHover={() => setHoveredIndex(hasDropdown ? index : null)}
+              />
+            </div>
           );
         })}
 
-        {/* More dropdown for overflow items */}
         {hasMore && (
           <div className="relative">
             <button
@@ -358,7 +329,7 @@ function NavBar({ navItems }) {
               onMouseEnter={() => setShowMore(true)}
               onMouseLeave={() => setShowMore(false)}
             >
-              {t('more') || 'More'}
+              {t("more") || "More"}
             </button>
             {showMore && (
               <div className="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-lg border border-zinc-200 overflow-hidden z-50">
@@ -377,12 +348,19 @@ function NavBar({ navItems }) {
           </div>
         )}
       </nav>
+
+      {panelOpen && (
+        <div className="absolute left-0 right-0 top-full z-50 pt-1">
+          <NavDropdownPanel items={hoveredItem.items} />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function Header({ onOpenCart, onOpenNotifications, notificationsUnread = 0 }) {
   const nav = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const { count } = useCart();
   const wishlist = useWishlist();
@@ -422,9 +400,13 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
 
 
   // Get header settings with fallback defaults
+  const footerSettings = settings?.footer || {};
   const headerSettings = settings?.header || {
     logo_text: "FIT&SLEEK",
     logo_url: "/logo.png",
+    background_color: "#6e8b7e",
+    background_image: "",
+    text_color: "#ffffff",
     search_placeholder: "Search everything",
     search_enabled: false,
     cart_enabled: true,
@@ -444,6 +426,11 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     nav_labels: {},
   };
 
+  const chromeStyle = useMemo(
+    () => resolveHeaderChromeStyle(headerSettings, footerSettings),
+    [headerSettings, footerSettings],
+  );
+
   const headerLabels = headerSettings.nav_labels || {};
   const localizedNavLabels = (headerLabels && (headerLabels.en || headerLabels.km))
     ? (headerLabels[language] || headerLabels.en || {})
@@ -456,18 +443,6 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   const isVisible = (key) => navVisibility[key] !== false;
   const customNavItems = Array.isArray(headerSettings.custom_nav) ? headerSettings.custom_nav : [];
   const defaultLeftMenu = [
-    {
-      title: t('menuVisibility'),
-      items: [
-        { label: t('newIn'), to: '/search?tab=new', image: '/placeholder.svg' },
-        { label: t('discounts'), to: '/discounts', image: '/placeholder.svg' },
-        { label: t('women'), to: '/search?parent_category=Women', image: '/placeholder.svg' },
-        { label: t('men'), to: '/search?parent_category=Men', image: '/placeholder.svg' },
-        { label: t('boys'), to: '/search?parent_category=Boys', image: '/placeholder.svg' },
-        { label: t('girls'), to: '/search?parent_category=Girls', image: '/placeholder.svg' },
-        { label: t('sale'), to: '/search?tab=sale', image: '/placeholder.svg' },
-      ],
-    },
     {
       title: t('newProduct'),
       items: [
@@ -521,9 +496,13 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       ],
     },
   ];
-  const leftMenu = Array.isArray(headerSettings.left_menu) && headerSettings.left_menu.length > 0
-    ? headerSettings.left_menu
-    : defaultLeftMenu;
+  const leftMenuSource =
+    Array.isArray(headerSettings.left_menu) && headerSettings.left_menu.length > 0
+      ? headerSettings.left_menu
+      : defaultLeftMenu;
+  const leftMenu = (leftMenuSource || []).filter(
+    (s) => String(s?.title || "").toLowerCase() !== "menu visibility",
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -559,16 +538,16 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           image: resolveImageUrl(p.image_url),
         }));
 
-        const brandItems = brands.slice(0, 6).map((b) => ({
+        const brandItems = brands.map((b) => ({
           label: b.name,
-          to: `/search?q=${encodeURIComponent(b.name)}`,
-          image: resolveImageUrl(b.logo_url),
+          to: b.slug ? `/brands/${b.slug}` : `/search?q=${encodeURIComponent(b.name)}`,
+          image: b.logo_url || null,
         }));
 
-        const categoryItems = categories.slice(0, 6).map((c) => ({
+        const categoryItems = categories.map((c) => ({
           label: c.name,
-          to: c.id ? `/search?category_id=${c.id}` : "/search",
-          image: resolveImageUrl(c.image_url),
+          to: c.slug ? `/category/${c.slug}` : c.id ? `/search?category_id=${c.id}` : "/search",
+          image: c.image_url || null,
         }));
 
         if (mounted) {
@@ -576,7 +555,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             newProduct: newProductItems,
             trending: trendingItems.length ? trendingItems : newProductItems,
             discounts: discountItems,
-            brandsCategories: [...brandItems, ...categoryItems].slice(0, 8),
+            brandsCategories: [...brandItems, ...categoryItems],
           });
         }
       } catch {
@@ -666,7 +645,6 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   const getLeftMenuTitle = (title) => {
     const key = String(title || '').toLowerCase();
     const map = {
-      'menu visibility': 'menuVisibility',
       'new product': 'newProduct',
       'product trending': 'productTrending',
       'product discounts': 'productDiscounts',
@@ -676,138 +654,141 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     return tKey ? t(tKey) : title;
   };
 
+  const closeMegaMenu = () => setShowLeftMenu(false);
+
+  useEffect(() => {
+    setShowLeftMenu(false);
+  }, [location.pathname, location.search]);
+
+  const isBrandsCategoriesSection = (section) => {
+    const key = String(section?.title || "").toLowerCase();
+    return key === "brands & categories" || key === "brands and categories";
+  };
+
+  const renderMegaMenuItems = (activeItems, { compact = false } = {}) => {
+    const emptyLabel = t("megaMenuNothingYet") || "មិនទាន់មាន";
+    if (activeItems.length === 0) {
+      return <MegaMenuEmptyState message={emptyLabel} />;
+    }
+
+    if (compact) {
+      return (
+        <div className="max-h-[440px] overflow-y-auto pr-2 scrollbar-hide">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+            {activeItems.map((item, i) => (
+              <Link
+                key={`${item.to}-${item.label}-${i}`}
+                to={item.to || "/search"}
+                onClick={closeMegaMenu}
+                className="group flex flex-col items-center gap-1 rounded-lg border border-transparent p-1.5 text-center hover:border-zinc-200 hover:bg-zinc-50/80"
+              >
+                <div className="flex h-12 w-full items-center justify-center rounded-md bg-zinc-50 ring-1 ring-zinc-100">
+                  {item.image ? (
+                    <img
+                      src={resolveImageUrl(item.image)}
+                      alt=""
+                      className="max-h-8 max-w-[4.25rem] object-contain transition-transform duration-200 group-hover:scale-105"
+                      onError={(e) => {
+                        e.currentTarget.src = "/placeholder.svg";
+                      }}
+                    />
+                  ) : (
+                    <span className="px-1 text-[10px] font-bold uppercase tracking-wide text-zinc-600">
+                      {getInitials(item.label)}
+                    </span>
+                  )}
+                </div>
+                <span className="line-clamp-1 w-full text-[11px] font-medium leading-tight text-zinc-700 group-hover:text-zinc-900">
+                  {item.label}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-h-[440px] overflow-y-auto pr-2 scrollbar-hide">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {activeItems.map((item, i) => {
+            const isBrandLink = String(item.to || "").startsWith("/brands/");
+            return (
+              <Link
+                key={`${item.to}-${item.label}-${i}`}
+                to={item.to || "/search"}
+                onClick={closeMegaMenu}
+                className="group flex flex-col gap-2 rounded-xl border border-transparent p-2 text-left hover:border-zinc-200 hover:bg-zinc-50/70"
+              >
+                <div
+                  className="relative w-full overflow-hidden rounded-lg bg-zinc-100"
+                  style={{ aspectRatio: "4 / 5" }}
+                >
+                  {item.image ? (
+                    <img
+                      src={resolveImageUrl(item.image)}
+                      alt={item.label}
+                      className={cn(
+                        "h-full w-full transition-transform duration-300 group-hover:scale-105",
+                        isBrandLink ? "object-contain p-4" : "object-cover"
+                      )}
+                      onError={(e) => {
+                        e.currentTarget.src = "/placeholder.svg";
+                      }}
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center px-2 text-center text-sm font-bold text-zinc-500">
+                      {getInitials(item.label)}
+                    </span>
+                  )}
+                </div>
+                <span className="line-clamp-2 text-sm font-semibold text-zinc-800 group-hover:text-zinc-900 group-hover:underline">
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const navDropdowns = useMemo(
+    () => mergeTopNavDropdowns(headerSettings.nav_dropdowns),
+    [headerSettings.nav_dropdowns]
+  );
+
   const navItems = useMemo(
     () => [
       {
         key: 'newIn',
-        label: 'NEW IN',
-        to: "/search?tab=new",
-        items: [
-          { label: 'New Arrivals', to: "/search?tab=new" },
-          { label: 'Trending Now', to: "/search?q=Trending%20Now" },
-          { label: 'This Week', to: "/search?q=This%20Week" },
-        ],
+        label: label('newIn', 'NEW IN'),
+        to: navSearch({ tab: 'new' }),
+        items: navDropdowns.newIn,
       },
       {
         key: 'discounts',
         label: label('discounts', t('discounts')).replace(/^🎉\s*/, ''),
         to: "/discounts",
-        items: [
-          { label: 'All Discounts', to: '/discounts' },
-          { label: 'Clothes', to: '/discounts/clothes' },
-          { label: 'Shoes', to: '/discounts/shoes' },
-          { label: 'Bags', to: '/discounts/bags' },
-          { label: 'Belts', to: '/discounts/belts' },
-          { label: 'Accessories', to: '/discounts/accessories' },
-        ],
+        items: navDropdowns.discounts,
       },
       {
         key: 'women',
-        label: 'WOMEN',
+        label: label('women', 'WOMEN'),
         to: "/search?parent_category=Women",
-        items: [
-          {
-            type: 'section',
-            label: 'Tops/Bottoms/...',
-            items: [
-              { label: 'Tops', to: '/search?parent_category=Women&q=Tops' },
-              { label: 'Bottoms', to: '/search?parent_category=Women&q=Bottoms' },
-              { label: 'Dresses', to: '/search?parent_category=Women&q=Dresses' },
-              { label: 'Outerwear', to: '/search?parent_category=Women&q=Outerwear' },
-              { label: 'Activewear', to: '/search?parent_category=Women&q=Activewear' },
-            ],
-          },
-          {
-            type: 'section',
-            label: 'Sneakers/Heels/...',
-            items: [
-              { label: 'Sneakers', to: '/search?parent_category=Women&q=Sneakers' },
-              { label: 'Slides', to: '/search?parent_category=Women&q=Slides' },
-              { label: 'Heels', to: '/search?parent_category=Women&q=Heels' },
-              { label: 'Boots', to: '/search?parent_category=Women&q=Boots' },
-            ],
-          },
-          {
-            type: 'section',
-            label: 'Bags/Hats/...',
-            items: [
-              { label: 'Bags', to: '/search?parent_category=Women&q=Bags' },
-              { label: 'Belts', to: '/search?parent_category=Women&q=Belts' },
-              { label: 'Hats', to: '/search?parent_category=Women&q=Hats' },
-              { label: 'Jewelry', to: '/search?parent_category=Women&q=Jewelry' },
-            ],
-          },
-          {
-            type: 'section',
-            label: 'Girls',
-            description: 'Fresh drops for everyday fits',
-            items: [
-              { label: 'View All', to: '/search?parent_category=Girls' },
-              { label: 'New Arrivals', to: '/search?parent_category=Girls&q=New%20Arrivals' },
-              { label: 'Trending Now', to: '/search?parent_category=Girls&q=Trending%20Now' },
-              { label: 'This Week', to: '/search?parent_category=Girls&q=This%20Week' },
-            ],
-          },
-        ],
+        items: navDropdowns.women,
       },
       {
         key: 'men',
-        label: 'MEN',
+        label: label('men', 'MEN'),
         to: "/search?parent_category=Men",
-        items: [
-          {
-            type: 'section',
-            label: 'T-Shirts/Hoodies/...',
-            items: [
-              { label: 'T-Shirts', to: '/search?parent_category=Men&q=T-Shirts' },
-              { label: 'Shirts', to: '/search?parent_category=Men&q=Shirts' },
-              { label: 'Hoodies', to: '/search?parent_category=Men&q=Hoodies' },
-              { label: 'Jeans', to: '/search?parent_category=Men&q=Jeans' },
-              { label: 'Shorts', to: '/search?parent_category=Men&q=Shorts' },
-            ],
-          },
-          {
-            type: 'section',
-            label: 'Sneakers/Running/...',
-            items: [
-              { label: 'Sneakers', to: '/search?parent_category=Men&q=Sneakers' },
-              { label: 'Running', to: '/search?parent_category=Men&q=Running' },
-              { label: 'Slides', to: '/search?parent_category=Men&q=Slides' },
-              { label: 'Boots', to: '/search?parent_category=Men&q=Boots' },
-            ],
-          },
-          {
-            type: 'section',
-            label: 'Bags/Watches/...',
-            items: [
-              { label: 'Bags', to: '/search?parent_category=Men&q=Bags' },
-              { label: 'Belts', to: '/search?parent_category=Men&q=Belts' },
-              { label: 'Caps & Hats', to: '/search?parent_category=Men&q=Caps%20Hats' },
-              { label: 'Watches', to: '/search?parent_category=Men&q=Watches' },
-            ],
-          },
-          {
-            type: 'section',
-            label: 'Boys',
-            description: 'Grab deals before they\'re gone',
-            items: [
-              { label: 'View All', to: '/search?parent_category=Boys' },
-              { label: 'New Arrivals', to: '/search?parent_category=Boys&q=New%20Arrivals' },
-              { label: 'Trending Now', to: '/search?parent_category=Boys&q=Trending%20Now' },
-              { label: 'This Week', to: '/search?parent_category=Boys&q=This%20Week' },
-            ],
-          },
-        ],
+        items: navDropdowns.men,
       },
       {
         key: 'sale',
         label: label('sale', t('sale')),
-        to: "/search?tab=sale",
-        items: [
-          { label: label('allSaleItems', t('allSaleItems')), to: "/search?tab=sale" },
-          { label: label('womensSale', t('womensSale')), to: "/search?tab=sale&gender=women" },
-          { label: label('mensSale', t('mensSale')), to: "/search?tab=sale&gender=men" },
-        ],
+        to: navSearch({ tab: 'sale' }),
+        items: navDropdowns.sale,
       },
     ]
       .filter((item) => (item.key ? isVisible(item.key) : true))
@@ -816,7 +797,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           .filter((item) => item && item.label && item.to)
           .map((item) => ({ label: item.label, to: item.to, items: item.items || [] }))
       ),
-    [t, headerSettings.nav_labels, headerSettings.nav_visibility, headerSettings.custom_nav]
+    [t, label, navDropdowns, headerSettings.nav_labels, headerSettings.nav_visibility, headerSettings.custom_nav]
   );
 
   useEffect(() => {
@@ -831,11 +812,14 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
   }, [headerSettings.search_enabled]);
 
   return (
-    <div className="sticky top-0 z-30 backdrop-blur-md shadow-sm" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
-      {/* Mobile: logo + search only */}
-      <div className="lg:hidden container-safe h-14 md:h-16 flex items-center gap-2 sm:gap-3">
-        <Link to="/" className="shrink-0 max-w-[80px] sm:max-w-none">
-          <Logo className="h-12 sm:h-14 md:h-16 w-auto" src={headerSettings.logo_url || "/logo.png"} />
+    <div className="fs-site-chrome sticky top-0 z-30 backdrop-blur-md shadow-sm" style={chromeStyle}>
+      {/* Mobile: logo + search + theme only (desktop bar hidden below lg) */}
+      <div className="fs-header-bar fs-header-bar--mobile lg:hidden">
+        <Link to="/" className="shrink-0">
+          <Logo
+            className="fs-header-bar__logo-mobile"
+            src={headerSettings.logo_url || "/logo.png"}
+          />
         </Link>
 
         {headerSettings.search_enabled && (
@@ -873,46 +857,48 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
         </button>
       </div>
 
-      {/* Desktop: full header */}
+      {/* Desktop: 3-column grid — scales on 13"–ultrawide (must stay hidden below lg) */}
       <div
-        className="hidden lg:flex container-safe h-16 items-center justify-center gap-2 lg:gap-3 xl:gap-4 relative max-w-[1600px] mx-auto"
+        className="fs-header-bar fs-header-bar--desktop hidden min-h-[5rem] py-1.5 lg:grid"
         onMouseLeave={() => setShowLeftMenu(false)}
       >
-        {headerSettings.search_enabled && (
-          <div className="absolute left-0 items-center gap-1 lg:gap-1.5 xl:gap-2 flex">
-            <button
-              type="button"
-              className="fs-btn fs-btn-sm text-white bg-transparent hover:bg-transparent hidden xl:flex border-0"
-              onMouseEnter={() => setShowLeftMenu(true)}
-            >
-              <Menu className="w-4 h-4" />
-              <span className="hidden 2xl:inline">{t('menu')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowSearchDialog(true)}
-              className="transition-all duration-300 w-40 md:w-44 lg:w-48 xl:w-56 2xl:w-64 max-w-[300px]"
-            >
-              <div className="relative group">
-                <div className="fs-header-search w-full h-9 rounded-full border border-white/50 bg-black/25 pl-10 pr-10 text-xs text-white outline-none transition-all duration-300 flex items-center">
-                  <span className="truncate text-white font-medium">{searchPlaceholder}</span>
+        <div className="flex min-w-0 items-center justify-start gap-1 lg:gap-1.5">
+          {headerSettings.search_enabled && (
+            <>
+              <button
+                type="button"
+                className="fs-btn fs-btn-sm bg-transparent hover:bg-transparent hidden lg:flex shrink-0 border-0"
+                onMouseEnter={() => setShowLeftMenu(true)}
+              >
+                <Menu className="w-4 h-4" />
+                <span className="hidden xl:inline">{t('menu')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSearchDialog(true)}
+                className="fs-header-bar__search min-w-0 shrink"
+              >
+                <div className="relative">
+                  <div className="fs-header-search w-full h-9 rounded-full border pl-10 pr-10 text-xs outline-none flex items-center">
+                    <span className="truncate font-medium">{searchPlaceholder}</span>
+                  </div>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                    <Icon name="search" />
+                  </span>
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <Camera className="w-3.5 h-3.5" />
+                  </span>
                 </div>
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white transition-colors duration-300">
-                  <Icon name="search" />
-                </span>
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-white">
-                  <Camera className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </button>
-          </div>
-        )}
+              </button>
+            </>
+          )}
+        </div>
 
-        <Link to="/" className="transition-transform duration-300 hover:scale-105 flex-shrink-0">
-          <Logo className="h-16 lg:h-20 xl:h-24 w-auto" src={headerSettings.logo_url || "/logo.png"} />
+        <Link to="/" className="flex shrink-0 justify-self-center px-1">
+          <Logo className="fs-header-bar__logo" src={headerSettings.logo_url || "/logo.png"} />
         </Link>
 
-        <div className="absolute right-0 items-center gap-1.5 lg:gap-2 flex">
+        <div className="fs-header-actions flex min-w-0 items-center justify-end gap-1 lg:gap-1.5 overflow-visible">
           {headerSettings.language_enabled && (
             <div className="relative group flex">
               <button
@@ -942,10 +928,10 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             aria-label={storefrontMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
           >
-          {storefrontMode === "dark"
-            ? <Sun className="w-[18px] h-[18px]" strokeWidth={2} />
-            : <Moon className="w-[18px] h-[18px]" strokeWidth={2} />
-          }
+            {storefrontMode === "dark"
+              ? <Sun className="w-[18px] h-[18px]" strokeWidth={2} />
+              : <Moon className="w-[18px] h-[18px]" strokeWidth={2} />
+            }
           </button>
 
           <span className="fs-header-divider" aria-hidden="true" />
@@ -986,7 +972,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           <ProfileMenu user={user} onLogout={logout} t={t} />
 
           {user ? null : (
-            <div className="hidden md:flex items-center gap-2 ml-1">
+            <div className="hidden xl:flex items-center gap-2 ml-1 shrink-0">
               <button
                 onClick={() => setShowLoginDialog(true)}
                 className="fs-btn fs-btn-secondary fs-btn-sm"
@@ -1005,18 +991,18 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       </div>
 
       {/* Desktop Navigation Row */}
-      <div className="hidden lg:block border-b border-white/20 relative" style={{ backgroundColor: headerSettings.background_color || '#6e8b7e' }}>
+      <div className="hidden lg:block border-b fs-chrome-border relative">
         <NavBar navItems={navItems} />
       </div>
 
       {/* Desktop Left Mega Menu Panel */}
       {showLeftMenu && (
         <div
-          className="hidden lg:block absolute left-0 right-0 top-16 bg-white shadow-xl border-t border-zinc-200/60 z-40 transition-all duration-200 ease-out"
+          className="hidden lg:block absolute left-0 right-0 top-16 bg-white shadow-xl border-t border-zinc-200/60 z-40"
           onMouseEnter={() => setShowLeftMenu(true)}
           onMouseLeave={() => setShowLeftMenu(false)}
         >
-          <div className="container-safe py-6 max-w-[1600px] mx-auto">
+          <div className="container-safe py-6">
             {leftMenuWithAuto.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
                 <div className="max-h-[440px] overflow-y-auto pr-3 scrollbar-hide border-r border-zinc-100 space-y-1">
@@ -1026,9 +1012,9 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
                       type="button"
                       onMouseEnter={() => setActiveLeftSection(idx)}
                       className={cn(
-                        "relative w-full text-left px-4 py-3 text-base font-semibold rounded-lg transition-all duration-200 ease-out hover:translate-x-0.5",
+                        "relative w-full text-left px-4 py-3 rounded-lg fs-nav-link-typo",
                         activeLeftSection === idx
-                          ? "bg-zinc-50 text-zinc-900 font-semibold"
+                          ? "bg-zinc-50 text-zinc-900"
                           : "text-zinc-700 hover:bg-zinc-100/70 hover:text-zinc-900"
                       )}
                     >
@@ -1042,36 +1028,13 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
                   ))}
                 </div>
 
-                <div>
-                  <div className="text-base font-black tracking-wide uppercase text-zinc-500 mb-4">
+                <div className="min-w-0">
+                  <div className="mb-4 fs-nav-link-typo text-zinc-500">
                     {getLeftMenuTitle(leftMenuWithAuto[activeLeftSection]?.title)}
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {(leftMenuWithAuto[activeLeftSection]?.items || []).map((item, i) => (
-                      <Link
-                        key={i}
-                        to={item.to}
-                        className="group flex flex-col items-center text-center gap-2 p-4 rounded-xl border border-transparent hover:border-zinc-200 hover:bg-zinc-50/70 hover:shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5"
-                      >
-                        <span className="relative inline-flex items-center justify-center w-14 h-14 rounded-full bg-zinc-100 text-zinc-900 text-xs font-bold transition-transform duration-200 group-hover:scale-105 overflow-hidden">
-                          {getInitials(item.label)}
-                          {item.image ? (
-                            <img
-                              src={resolveImageUrl(item.image)}
-                              alt={item.label}
-                              className="absolute inset-0 w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                          ) : null}
-                        </span>
-                        <span className="text-base font-semibold text-zinc-700 group-hover:text-zinc-900">
-                          {item.label}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
+                  {renderMegaMenuItems(leftMenuWithAuto[activeLeftSection]?.items || [], {
+                    compact: isBrandsCategoriesSection(leftMenuWithAuto[activeLeftSection]),
+                  })}
                 </div>
               </div>
             ) : null}

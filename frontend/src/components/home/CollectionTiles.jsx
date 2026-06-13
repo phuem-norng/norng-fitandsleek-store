@@ -98,7 +98,7 @@ export default function CollectionTiles() {
   }
 
   return (
-    <section className="container-safe mt-10 max-w-[1600px] mx-auto">
+    <section className="container-safe mt-10">
       <div className="grid grid-cols-2 md:grid-cols-2 gap-4 md:gap-6">
         {collections.map((tile) => (
           <Tile

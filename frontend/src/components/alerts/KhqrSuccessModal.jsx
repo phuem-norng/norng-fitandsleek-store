@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 /* ── brand tokens ── */
 const KHQR_RED  = "#C0272D";
@@ -73,9 +74,15 @@ export default function KhqrSuccessModal({
   const [timeLeft, setTimeLeft] = useState(redirectSeconds);
 
   useEffect(() => {
-    if (!open) { setTimeLeft(redirectSeconds); return; }
+    if (!open) { setTimeLeft(redirectSeconds); return undefined; }
+    document.body.classList.add("modal-open");
+    document.documentElement.classList.add("modal-open");
     const t = setInterval(() => setTimeLeft((v) => Math.max(0, v - 1)), 1000);
-    return () => clearInterval(t);
+    return () => {
+      clearInterval(t);
+      document.body.classList.remove("modal-open");
+      document.documentElement.classList.remove("modal-open");
+    };
   }, [open, redirectSeconds]);
 
   if (!open) return null;
@@ -83,14 +90,17 @@ export default function KhqrSuccessModal({
   const fmt = (v) =>
     Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  return (
+  const modal = (
     <div
-      className="ks-overlay fixed inset-0 z-[2000] flex items-center justify-center px-4"
+      className="ks-overlay fixed inset-0 z-[9998] flex items-center justify-center p-4 sm:p-6"
       style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="khqr-success-title"
     >
       {/* ── card ── */}
       <div
-        className="ks-card relative w-full max-w-sm overflow-hidden rounded-3xl bg-white dark:bg-slate-900 shadow-2xl"
+        className="ks-card relative z-10 w-full max-w-sm max-h-[min(92dvh,calc(100dvh-2rem))] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl"
       >
         {/* confetti burst */}
         <div className="absolute inset-x-0 top-0 h-1 overflow-visible pointer-events-none">
@@ -151,7 +161,7 @@ export default function KhqrSuccessModal({
           </div>
 
           {/* headline */}
-          <h2 className="ks-fade-0 relative mt-4 text-2xl font-black text-white leading-snug">
+          <h2 id="khqr-success-title" className="ks-fade-0 relative mt-4 text-2xl font-black text-white leading-snug">
             Payment Successful!
           </h2>
           <p className="ks-fade-1 relative mt-1 text-sm text-white/70">
@@ -234,4 +244,7 @@ export default function KhqrSuccessModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.body);
 }

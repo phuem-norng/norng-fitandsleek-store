@@ -26,6 +26,7 @@ const menuItems = [
   { path: "/admin/discounts", label: "Discount", icon: BadgePercent },
   { path: "/admin/categories", label: "Categories", icon: Tags },
   { path: "/admin/brands", label: "Brands", icon: Building2 },
+  { path: "/admin/suppliers", label: "Suppliers", icon: Building2 },
   { path: "/admin/homepage", label: "Home Page", icon: Home },
   { path: "/admin/homepage-complete", label: "Homepage Manager", icon: LayoutGrid },
   { path: "/admin/orders", label: "Orders", icon: ClipboardList },

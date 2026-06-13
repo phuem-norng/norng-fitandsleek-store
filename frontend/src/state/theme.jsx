@@ -1,4 +1,5 @@
 ﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import api from "../lib/api";
 
 const THEME_STORAGE_KEY = "fitandsleek_admin_theme";
 const STOREFRONT_THEME_KEY = "fitandsleek_storefront_theme";
@@ -262,6 +263,8 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
+  const isAdminPath = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+
   useEffect(() => {
     try {
       const storedRaw = localStorage.getItem(THEME_STORAGE_KEY);
@@ -290,6 +293,31 @@ export function ThemeProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!hydrated || !isAdminPath) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await api.get("/admin/ui-preferences");
+        const remoteTheme = data?.data?.theme;
+        if (!mounted || !remoteTheme || typeof remoteTheme !== "object") return;
+        const merged = normalizeStored({ ...DEFAULT_THEME, ...remoteTheme });
+        setMode(merged.mode);
+        setPrimaryColor(merged.primaryColor);
+        setPresetId(merged.presetId);
+        setScale(merged.scale);
+        setRadius(merged.radius);
+        setContentLayout(merged.contentLayout);
+        setSidebarMode(merged.sidebarMode);
+      } catch {
+        // local fallback stays active
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [hydrated, isAdminPath]);
+
+  useEffect(() => {
     if (!hydrated) return;
     const derivedPreset = presetIdForPrimaryColor(primaryColor);
     const activePreset = ADMIN_APPEARANCE_PRESETS.find((p) => p.id === normalizePresetId(presetId))
@@ -308,6 +336,23 @@ export function ThemeProvider({ children }) {
       contentLayout,
       sidebarMode,
     });
+    if (isAdminPath) {
+      api.put("/admin/ui-preferences", {
+        data: {
+          theme: {
+            mode,
+            primaryColor,
+            presetId: activePreset,
+            scale,
+            radius,
+            contentLayout,
+            sidebarMode,
+          },
+        },
+      }).catch(() => {
+        // keep local persistence even when API save fails
+      });
+    }
   }, [
     hydrated,
     mode,
@@ -318,6 +363,7 @@ export function ThemeProvider({ children }) {
     contentLayout,
     sidebarMode,
     persist,
+    isAdminPath,
   ]);
 
   const saveTheme = useCallback((nextMode, nextColor) => {

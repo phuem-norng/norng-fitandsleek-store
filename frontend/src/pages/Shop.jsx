@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import ProductCard from "../components/shop/ProductCard.jsx";
-import StorefrontFilterDrawer, { StorefrontFilterToolbarButton } from "../components/shop/StorefrontFilterDrawer.jsx";
+import StorefrontFilterDrawer from "../components/shop/StorefrontFilterDrawer.jsx";
+import ProductListingToolbar from "../components/shop/ProductListingToolbar.jsx";
 import { useWishlist } from "../state/wishlist.jsx";
 import { useCart } from "../state/cart.jsx";
 import { useStorefrontFilterDrawer } from "../hooks/useStorefrontFilterDrawer.js";
@@ -11,12 +12,14 @@ import {
   applyBrowseToSearchParams,
   applyFiltersToSearchParams,
   buildProductApiParams,
-  buildStorefrontFilterChips,
+  buildProductFacetsApiParams,
   browseFromSearchParams,
   countStorefrontFilters,
   filtersFromSearchParams,
+  toggleListParamValue,
 } from "../lib/storefrontProductFilters.js";
 import { useStorefrontBrowseDraft } from "../hooks/useStorefrontBrowseDraft.js";
+import { useProductListingFacets } from "../hooks/useProductListingFacets.js";
 import { Camera, Image as ImageIcon, Sparkles } from "lucide-react";
 import { useLanguage } from "../lib/i18n.jsx";
 import { resolveImageUrl } from "../lib/images";
@@ -171,16 +174,6 @@ export default function Shop() {
     nav(`/shop?${n.toString()}`);
   };
 
-  const clearAllFilters = () => {
-    listFilters.clearAll();
-    browse.clearBrowseDraft();
-    const n = new URLSearchParams();
-    if (q) n.set("q", q);
-    if (tab && tab !== "wishlist") n.set("tab", tab);
-    if (parentCategory) n.set("parent_category", parentCategory);
-    nav(`/shop?${n.toString()}`);
-  };
-
   const clearDrawerDraft = () => {
     listFilters.clearDraft();
     browse.clearBrowseDraft();
@@ -188,37 +181,10 @@ export default function Shop() {
 
   const totalActiveFilters = countStorefrontFilters(appliedFilters, browse.browseFromUrl, priceBounds);
 
-  const removeFilterValue = (sectionKey, value) => {
-    const next = {
-      ...appliedFilters,
-      [sectionKey]: (appliedFilters[sectionKey] || []).filter((v) => v !== value),
-    };
-    const n = applyFiltersToSearchParams(qs, next);
-    if (next.gender?.length) n.delete("parent_category");
-    n.delete("page");
-    listFilters.syncFromExternal(next);
-    nav(`/shop?${n.toString()}`);
-  };
-
-  const filterChipLabels = useMemo(
-    () =>
-      buildStorefrontFilterChips({
-        applied: appliedFilters,
-        browse: browse.browseFromUrl,
-        priceBounds,
-        filterSections,
-        categories,
-        brands,
-        removeFilterValue,
-        changeBrowseParams: change,
-      }),
-    [appliedFilters, categories, brands, filterSections, browse.browseFromUrl, priceBounds],
-  );
-
   const handleImageSearch = async ({ image, colors }) => {
     setImageSearchResults({ image, colors });
     setShowImageSearch(false);
-    
+
     // Navigate to shop page with image search params
     const encodedColors = encodeURIComponent(JSON.stringify(colors));
     nav(`/shop?image_search=1&colors=${encodedColors}`);
@@ -236,6 +202,42 @@ export default function Shop() {
 
   const meta = data?.meta || null;
   const lastPage = data?.last_page || meta?.last_page || 1;
+  const totalItems = data?.total ?? meta?.total ?? products.length;
+
+  const facetsParams = useMemo(
+    () =>
+      buildProductFacetsApiParams({
+        q,
+        tab,
+        parentCategory,
+        applied: appliedFilters,
+        browse: browse.browseFromUrl,
+      }),
+    [q, tab, parentCategory, appliedFilters, browse.browseFromUrl],
+  );
+
+  const { brandFacets, facetsLoading } = useProductListingFacets(
+    facetsParams,
+    !imageSearchResults,
+  );
+
+  const shopToolbarTitle = useMemo(() => {
+    if (imageSearchResults) return t("similarItems");
+    if (parentCollectionLabel) return parentCollectionLabel;
+    return t("shop");
+  }, [imageSearchResults, parentCollectionLabel, t]);
+
+  const handleSortChange = (sort) => {
+    change({ sort: sort === "recommend" ? "" : sort });
+  };
+
+  const handleBrandToggle = (brandId) => {
+    const nextBrands = toggleListParamValue(appliedFilters.brand, brandId);
+    const next = applyFiltersToSearchParams(qs, { ...appliedFilters, brand: nextBrands });
+    if (appliedFilters.gender?.length) next.delete("parent_category");
+    listFilters.syncFromExternal({ ...appliedFilters, brand: nextBrands });
+    nav(`/shop?${next.toString()}`);
+  };
 
   const clearCollectionChip = () => {
     setImageSearchResults(null);
@@ -245,31 +247,40 @@ export default function Shop() {
 
   return (
     <div className={`container-safe py-8 ${cart.count > 0 ? "pb-28 sm:pb-32" : ""}`}>
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-black tracking-tight truncate">
-            {imageSearchResults ? t('similarItems') : t('shop')}
-          </h1>
-          {parentCollectionLabel && (
-            <span className="fs-filter-chip mt-2 text-xs">
-              <span>🧩 {parentCollectionLabel}</span>
-              <button
-                type="button"
-                onClick={clearCollectionChip}
-                aria-label="Clear collection"
-                title="Clear collection"
-              >
-                ×
-              </button>
-            </span>
-          )}
-        </div>
-        <StorefrontFilterToolbarButton
-          activeCount={totalActiveFilters}
-          onClick={openFilterDrawer}
-          className="shrink-0"
+      {!imageSearchResults ? (
+        <ProductListingToolbar
+          title={shopToolbarTitle}
+          itemCount={totalItems}
+          filterActiveCount={totalActiveFilters}
+          onFilterClick={openFilterDrawer}
+          brandFacets={brandFacets}
+          selectedBrandIds={appliedFilters.brand}
+          onBrandToggle={handleBrandToggle}
+          sortValue={browse.browseFromUrl.sort}
+          onSortChange={handleSortChange}
+          facetsLoading={facetsLoading}
         />
-      </div>
+      ) : (
+        <div className="mb-6">
+          <h1 className="text-2xl font-black tracking-tight truncate">{t("similarItems")}</h1>
+        </div>
+      )}
+
+      {parentCollectionLabel && !imageSearchResults ? (
+        <div className="mb-4 -mt-2">
+          <span className="fs-filter-chip text-xs">
+            <span>🧩 {parentCollectionLabel}</span>
+            <button
+              type="button"
+              onClick={clearCollectionChip}
+              aria-label="Clear collection"
+              title="Clear collection"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      ) : null}
 
       <StorefrontFilterDrawer
         open={listFilters.open}
@@ -287,29 +298,6 @@ export default function Shop() {
         onPriceMinChange={browse.setDraftMinPrice}
         onPriceMaxChange={browse.setDraftMaxPrice}
       />
-
-      {filterChipLabels.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2 items-center text-xs">
-          <span className="text-zinc-600 font-medium">{t("activeFilters")}:</span>
-          {filterChipLabels.map((chip) => (
-            <span key={chip.key} className="fs-filter-chip">
-              {chip.label}
-              {chip.onClear ? (
-                <button type="button" onClick={chip.onClear} aria-label="Remove">×</button>
-              ) : null}
-            </span>
-          ))}
-          {totalActiveFilters > 0 && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="text-zinc-600 underline hover:text-zinc-900"
-            >
-              {t("resetFilters") || "Reset"}
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Image Search Results Info */}
       {imageSearchResults && (
@@ -339,7 +327,7 @@ export default function Shop() {
         </div>
       )}
 
-      <div className="mt-6 max-w-[1600px] mx-auto">
+      <div className="mt-6 w-full">
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             {Array.from({ length: 8 }).map((_, idx) => (
@@ -358,7 +346,7 @@ export default function Shop() {
             {imageSearchResults ? (
               <div className="space-y-4">
                 <p>{t('noMatchingProductsForImage')}</p>
-                
+
                 {/* Fallback Suggestions */}
                 <div className="mt-8">
                   <p className="font-medium text-zinc-800 mb-4 flex items-center justify-center gap-2">

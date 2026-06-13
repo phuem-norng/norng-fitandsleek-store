@@ -8,9 +8,11 @@ import { useLanguage } from "../../lib/i18n.jsx";
 import AdminAppearancePanel from "./AdminAppearancePanel.jsx";
 import AdminCommandPalette from "./AdminCommandPalette.jsx";
 import AdminAiAssistant, { AdminAiAssistantButton } from "./AdminAiAssistant.jsx";
+import { canAccessAdminPath } from "../../lib/adminPermissions.js";
 
 const PAGE_TITLES = {
  "/admin": "Dashboard",
+ "/admin/purchase-orders": "Purchase Orders",
  "/admin/products": "Products",
  "/admin/orders": "Orders",
  "/admin/discounts": "Discount",
@@ -19,9 +21,10 @@ const PAGE_TITLES = {
   "/admin/pos": "Checkout",
  "/admin/categories": "Categories",
  "/admin/brands": "Brands",
+ "/admin/suppliers": "Suppliers",
   "/admin/stock-inventory": "Stock & Inventory",
+  "/admin/inventory-lots": "Inventory Lots",
   "/admin/stock-received": "Stock Received",
-  "/admin/inventory-integrity": "Inventory Integrity",
  "/admin/reports": "Reports",
  "/admin/contacts": "Contacts",
  "/admin/messages": "Messages",
@@ -30,6 +33,7 @@ const PAGE_TITLES = {
  "/admin/payments": "Payments",
  "/admin/payments/sale-history": "Sale History",
  "/admin/replacement-cases": "Replacements",
+  "/admin/shipments": "Shipments",
  "/admin/settings": "Settings",
  "/admin/profile": "My Profile",
  "/admin/customers": "Customers",
@@ -54,6 +58,9 @@ export default function AdminTopbar({
  const location = useLocation();
 
  const pathNorm = (location.pathname || "/").replace(/\/+$/, "") || "/";
+
+ const canOpenProfile = canAccessAdminPath(user, "/admin/profile");
+ const canOpenGeneralSettings = canAccessAdminPath(user, "/admin/settings");
 
  const pageTitle = useMemo(() => {
  if (PAGE_TITLES[pathNorm]) return PAGE_TITLES[pathNorm];
@@ -370,6 +377,7 @@ export default function AdminTopbar({
  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email || ""}</p>
  </div>
  <div className="py-1">
+ {canOpenProfile ? (
  <button
  onClick={() => {
  navigate("/admin/profile");
@@ -379,6 +387,8 @@ export default function AdminTopbar({
  >
  My Profile
  </button>
+ ) : null}
+ {canOpenGeneralSettings ? (
  <button
  onClick={() => {
  navigate("/admin/settings");
@@ -388,6 +398,7 @@ export default function AdminTopbar({
  >
  Settings
  </button>
+ ) : null}
  </div>
  <div className="border-t border-slate-200 dark:border-slate-800 py-1">
  <button

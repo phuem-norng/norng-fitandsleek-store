@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../../state/auth";
 import api from "../../lib/api";
 import { resolveImageUrl } from "../../lib/images";
 import { useTheme } from "../../state/theme.jsx";
 import { AdminConfirmDialog } from "../../components/admin/AdminModal.jsx";
 import { AdminContentSkeleton, AdminDashboardLoader } from "@/components/admin/AdminLoading";
+import AdminSaveToast, { AdminFormErrorBanner, flashAdminMessage } from "../../components/admin/AdminFormToast.jsx";
+import TrustedDeviceSessionsList from "../../components/security/TrustedDeviceSessionsList.jsx";
 import TwoFactorSettings from "../../components/security/TwoFactorSettings.jsx";
+import { useAdminPermissions } from "../../hooks/useAdminPermissions.js";
+import { getFirstAccessibleAdminPath } from "../../lib/adminPermissions.js";
 
 export default function Profile() {
  const { user, refresh } = useAuth();
+ const { user: sessionUser, can, permissionsReady } = useAdminPermissions();
+ const canViewProfile = can("profile", "view");
+ const canEditProfile = can("profile", "edit");
  const { primaryColor, mode } = useTheme();
  const accentColor = primaryColor;
  const [form, setForm] = useState({
@@ -66,11 +74,12 @@ export default function Profile() {
  }, [activeTab]);
 
  const revokeSession = async (sessionId) => {
+ if (!canEditProfile) return;
  setPendingSessionId(sessionId);
  };
 
  const confirmRevokeSession = async () => {
- if (!pendingSessionId) return;
+ if (!pendingSessionId || !canEditProfile) return;
  setSessionBusy(true);
  try {
  const { data } = await api.delete(`/auth/sessions/${pendingSessionId}`);
@@ -79,7 +88,7 @@ export default function Profile() {
  return;
  }
  await loadSessions();
- setSuccess("Session revoked successfully");
+ flashAdminMessage(setSuccess, "Session revoked successfully.");
  } catch (e) {
  setErr(e.response?.data?.message || "Failed to revoke session");
  } finally {
@@ -89,6 +98,7 @@ export default function Profile() {
  };
 
  const handleImageUpload = async (e) => {
+ if (!canEditProfile) return;
  const file = e.target.files?.[0];
  if (!file) return;
 
@@ -113,7 +123,7 @@ export default function Profile() {
  });
  setProfileImage(data?.profile_image_url || URL.createObjectURL(file));
  await refresh();
- setSuccess("Profile image updated successfully");
+ flashAdminMessage(setSuccess, "Profile image updated successfully.");
  } catch (e) {
  setErr(e.response?.data?.message || "Failed to upload image");
  } finally {
@@ -123,6 +133,7 @@ export default function Profile() {
 
  const handleProfileUpdate = async (e) => {
  e.preventDefault();
+ if (!canEditProfile) return;
  setProfileSaving(true);
  setErr("");
  setSuccess("");
@@ -130,7 +141,7 @@ export default function Profile() {
  try {
  await api.put("/admin/profile", form);
  await refresh();
- setSuccess("Profile updated successfully");
+ flashAdminMessage(setSuccess, "Profile updated successfully.");
  } catch (e) {
  setErr(e.response?.data?.message || "Failed to update profile");
  } finally {
@@ -140,6 +151,7 @@ export default function Profile() {
 
  const handlePasswordUpdate = async (e) => {
  e.preventDefault();
+ if (!canEditProfile) return;
  setPasswordSaving(true);
  setErr("");
  setSuccess("");
@@ -162,7 +174,7 @@ export default function Profile() {
  password: passwordForm.password,
  });
  setPasswordForm({ current_password: "", password: "", password_confirmation: "" });
- setSuccess("Password updated successfully");
+ flashAdminMessage(setSuccess, "Password updated successfully.");
  } catch (e) {
  setErr(e.response?.data?.message || "Failed to update password");
  } finally {
@@ -170,7 +182,11 @@ export default function Profile() {
  }
  };
 
- if (loading) return <AdminContentSkeleton lines={3} imageHeight={200} />;
+ if (!permissionsReady || loading) return <AdminContentSkeleton lines={3} imageHeight={200} />;
+
+ if (!canViewProfile) {
+ return <Navigate to={getFirstAccessibleAdminPath(sessionUser)} replace />;
+ }
 
  const tabButtonClass = (tabKey) =>
  `relative px-4 md:px-5 py-3 text-sm font-semibold rounded-xl transition-colors ${
@@ -212,29 +228,8 @@ export default function Profile() {
  </p>
  </div>
 
- {success && (
- <div className="rounded-2xl border border-[rgba(var(--admin-primary-rgb),0.3)] dark:border-[rgba(var(--admin-primary-rgb),0.4)] bg-[rgba(var(--admin-primary-rgb),0.09)] dark:bg-[rgba(var(--admin-primary-rgb),0.14)] p-4 flex items-center gap-3">
- <svg className="w-5 h-5 text-[color:var(--admin-primary)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
- </svg>
- <p className="text-[color:var(--admin-primary)] dark:text-white text-sm">{success}</p>
- <button onClick={() => setSuccess("")} className="ml-auto text-[color:var(--admin-primary)] hover:brightness-125">
- &times;
- </button>
- </div>
- )}
-
- {err && (
- <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 flex items-center gap-3">
- <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
- <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
- </svg>
- <p className="text-red-700 dark:text-red-300 text-sm">{err}</p>
- <button onClick={() => setErr("")} className="ml-auto text-red-500 hover:text-red-700">
- &times;
- </button>
- </div>
- )}
+ <AdminSaveToast message={success} />
+ <AdminFormErrorBanner error={err} onDismiss={() => setErr("")} />
 
  <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
  <aside className="xl:col-span-1 space-y-6">
@@ -257,6 +252,7 @@ export default function Profile() {
  user?.name?.charAt(0).toUpperCase() || "A"
  )}
  </div>
+ {canEditProfile ? (
  <label className="absolute -bottom-2 -right-2 w-9 h-9 bg-white dark:bg-slate-700 rounded-full border border-slate-200 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 transition ">
  <input
  type="file"
@@ -278,6 +274,7 @@ export default function Profile() {
  </svg>
  )}
  </label>
+ ) : null}
  </div>
 
  <div className="mt-4">
@@ -361,6 +358,8 @@ export default function Profile() {
  value={form.name}
  onChange={(e) => setForm({ ...form, name: e.target.value })}
  required
+ readOnly={!canEditProfile}
+ disabled={!canEditProfile}
  className={inputClass}
  />
  </div>
@@ -372,6 +371,8 @@ export default function Profile() {
  value={form.email}
  onChange={(e) => setForm({ ...form, email: e.target.value })}
  required
+ readOnly={!canEditProfile}
+ disabled={!canEditProfile}
  className={inputClass}
  />
  </div>
@@ -383,6 +384,8 @@ export default function Profile() {
  type="text"
  value={form.phone}
  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+ readOnly={!canEditProfile}
+ disabled={!canEditProfile}
  className={inputClass}
  placeholder="+855 12 345 678"
  />
@@ -399,11 +402,14 @@ export default function Profile() {
  value={form.address}
  onChange={(e) => setForm({ ...form, address: e.target.value })}
  rows={4}
+ readOnly={!canEditProfile}
+ disabled={!canEditProfile}
  className={textAreaClass}
  placeholder="Street, city, province, country"
  />
  </div>
 
+ {canEditProfile ? (
  <div className="pt-2">
  <button
  type="submit"
@@ -418,11 +424,13 @@ export default function Profile() {
  {profileSaving ? "Saving..." : "Save Changes"}
  </button>
  </div>
+ ) : null}
  </form>
  )}
 
 {activeTab === "security" && (
  <div className="max-w-2xl space-y-6">
+ {canEditProfile ? (
  <form onSubmit={handlePasswordUpdate} className="space-y-5">
  <div>
  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Current Password</label>
@@ -474,13 +482,15 @@ export default function Profile() {
  </button>
  </div>
  </form>
- <TwoFactorSettings variant="admin" accentColor={accentColor} />
+ ) : null}
+ {canEditProfile ? <TwoFactorSettings variant="admin" accentColor={accentColor} /> : null}
  </div>
  )}
 
  {activeTab === "sessions" && (
  <div className="max-w-3xl">
- <h3 className="text-base md:text-lg font-semibold text-slate-900 dark:text-white mb-4">Trusted Devices</h3>
+ <h3 className="text-base md:text-lg font-semibold text-slate-900 dark:text-white mb-2">Trusted Devices</h3>
+ <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Tap the arrow on a device to see older sessions from the same machine.</p>
  {sessionsLoading ? (
  <div className="flex justify-center py-10">
  <AdminDashboardLoader />
@@ -488,48 +498,25 @@ export default function Profile() {
  ) : sessions.length === 0 ? (
  <p className="text-slate-500 dark:text-slate-400">No active sessions found.</p>
  ) : (
- <div className="space-y-3">
- {sessions.map((session) => (
- <div
- key={session.id}
- className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-700/30"
- >
- <div className="flex items-start justify-between gap-3">
- <div>
- <p className="font-semibold text-slate-800 dark:text-white">
- {session.device_name || "Unknown device"}
- </p>
- <p className="text-sm text-slate-500 dark:text-slate-400">
- {session.browser || "Unknown browser"} • {session.os || "Unknown OS"}
- </p>
- <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">IP: {session.ip_address || "-"}</p>
- <p className="text-xs text-slate-500 dark:text-slate-400">Last used: {session.last_used_at || "-"}</p>
- </div>
- <div className="flex items-center gap-2">
- {session.is_current ? (
- <span
- className="rounded-full px-2.5 py-1 text-xs font-semibold"
- style={{
+ <TrustedDeviceSessionsList
+ sessions={sessions}
+ onRevoke={revokeSession}
+ canRevoke={canEditProfile}
+ titleClassName="font-semibold text-slate-800 dark:text-white"
+ metaClassName="text-slate-500 dark:text-slate-400"
+ mutedMetaClassName="text-slate-500 dark:text-slate-400"
+ cardClassName="rounded-xl border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-700/30"
+ nestedCardClassName="rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-white/80 dark:bg-slate-900/50 ml-8"
+ currentBadgeClassName="rounded-full px-2.5 py-1 text-xs font-semibold"
+ currentBadgeStyle={{
  backgroundColor: mode === "dark" ? "rgba(255,255,255,0.12)" : "rgba(var(--admin-primary-rgb),0.14)",
  color: accentColor,
  }}
- >
- Current
- </span>
- ) : null}
- <button
- type="button"
- onClick={() => revokeSession(session.id)}
- className="rounded-lg border px-3 py-1.5 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
- style={{ borderColor: accentColor, color: accentColor }}
- >
- Logout
- </button>
- </div>
- </div>
- </div>
- ))}
- </div>
+ revokeButtonClassName="rounded-lg border px-3 py-1.5 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+ revokeButtonStyle={{ borderColor: accentColor, color: accentColor }}
+ expandButtonClassName="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+ compactMeta
+ />
  )}
  </div>
  )}

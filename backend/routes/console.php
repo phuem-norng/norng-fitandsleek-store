@@ -8,8 +8,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('telegram:maintenance')->dailyAt('03:00');
-
 // PostgreSQL → Qdrant: index active products that have image_url but no vector yet (no manual artisan needed).
 Schedule::command('qdrant:index-products --only-missing')
     ->everyTenMinutes()

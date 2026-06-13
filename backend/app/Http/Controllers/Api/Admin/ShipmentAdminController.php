@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Models\Order;
 use App\Models\Shipment;
 use App\Models\ShipmentTrackingEvent;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +16,8 @@ class ShipmentAdminController extends BaseAdminController
 
         $data = $shipment->toArray();
         $data['tracking_number'] = $shipment->tracking_code;
+        $data['external_tracking_url'] = $shipment->external_tracking_url;
+        $data['internal_tracking_url'] = $shipment->tracking_url;
         $data['tracking_events'] = $shipment->trackingEvents->map(function ($event) {
             return [
                 'id' => $event->id,
@@ -104,20 +107,52 @@ class ShipmentAdminController extends BaseAdminController
             'order_id' => 'required|exists:orders,id',
             'provider' => 'required|string|max:100',
             'tracking_code' => 'required|string|max:100',
+            'external_tracking_url' => 'nullable|url|max:500',
+            'mark_shipped' => 'sometimes|boolean',
         ]);
 
-        $shipment = Shipment::updateOrCreate(
-            ['order_id' => $validated['order_id']],
-            [
-                'provider' => $validated['provider'],
-                'tracking_code' => $validated['tracking_code'],
-                'status' => 'pending',
-            ]
-        );
+        $shipment = Shipment::firstOrNew(['order_id' => $validated['order_id']]);
+        $wasShipped = $shipment->exists && in_array($shipment->status, ['shipped', 'in_transit', 'delivered'], true);
+
+        $shipment->provider = $validated['provider'];
+        $shipment->tracking_code = $validated['tracking_code'];
+
+        if (array_key_exists('external_tracking_url', $validated)) {
+            $shipment->external_tracking_url = $validated['external_tracking_url'] ?: null;
+        }
+
+        $shouldMarkShipped = ! empty($validated['external_tracking_url'])
+            || ($validated['mark_shipped'] ?? false);
+
+        if ($shouldMarkShipped) {
+            $shipment->status = 'shipped';
+            if (! $shipment->shipped_at) {
+                $shipment->shipped_at = now();
+            }
+        } elseif (! $shipment->exists) {
+            $shipment->status = 'pending';
+        }
+
+        $shipment->save();
+
+        if ($shouldMarkShipped && ! $wasShipped) {
+            ShipmentTrackingEvent::create([
+                'shipment_id' => $shipment->id,
+                'status' => 'shipped',
+                'note' => 'Package handed to courier.',
+                'updated_by' => auth()->guard('sanctum')->id(),
+                'event_time' => now(),
+            ]);
+
+            $order = Order::find($validated['order_id']);
+            if ($order && ! in_array($order->status, ['completed', 'cancelled', 'delivered'], true)) {
+                $order->update(['status' => 'shipped']);
+            }
+        }
 
         return response()->json([
             'message' => 'Shipment created/updated successfully',
-            'data' => $this->transformShipment($shipment),
+            'data' => $this->transformShipment($shipment->fresh()),
         ]);
     }
 
@@ -219,12 +254,12 @@ class ShipmentAdminController extends BaseAdminController
     public function providers(): JsonResponse
     {
         $providers = [
-            'JNE',
-            'TIKI',
-            'Pos Indonesia',
+            'J&T Express',
+            'Vireak Buntham Express',
             'Grab Express',
-            'GoSend',
-            'Shopee Express',
+            'Ninja Van',
+            'Kerry Express',
+            'Other',
         ];
 
         return response()->json([

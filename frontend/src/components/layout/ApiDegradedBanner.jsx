@@ -21,7 +21,7 @@ export default function ApiDegradedBanner() {
       role="alert"
       className="border-b border-amber-200/80 bg-amber-50 text-amber-950 px-3 sm:px-4 py-2.5 text-sm leading-snug"
     >
-      <div className="mx-auto max-w-[1600px] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="container-safe flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div>
           <p className="font-semibold">{t("catalogUnavailable")}</p>
           <p className="mt-0.5 text-amber-900/90 text-xs sm:text-sm">{t("catalogUnavailableHint")}</p>

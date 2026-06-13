@@ -4,86 +4,30 @@ namespace App\Http\Controllers\Api\Storefront;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Services\InventoryLotService;
+use App\Services\ProductRecommendationService;
+use App\Services\StorefrontEventService;
+use App\Services\ProductVariantInventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class ProductController extends Controller
 {
+    public function __construct(
+        private ProductRecommendationService $recommendationService,
+        private StorefrontEventService $eventService,
+        private InventoryLotService $inventoryLots,
+    ) {
+    }
+
     public function index(Request $request)
     {
         $q = Product::query()
             ->with(['category', 'brand', 'activeDiscount'])
             ->where('products.is_active', true);
 
-        // Filter by specific product IDs (used by wishlist)
-        if ($request->filled('ids')) {
-            $ids = array_filter(array_map('intval', explode(',', $request->input('ids'))));
-            if (!empty($ids)) {
-                $q->whereIn('id', $ids);
-            }
-        }
-
-        $this->applyParentCategoryFilter($q, $request);
-        $this->applyMinMaxPriceFilter($q, $request);
-        $this->applyPriceFilter($q, $request);
-
-        if ($request->filled('category')) {
-            $categorySlug = (string) $request->input('category');
-            $q->whereHas('category', function ($categoryQuery) use ($categorySlug) {
-                $categoryQuery->where('slug', $categorySlug);
-            });
-        }
-
-        if ($request->filled('q')) {
-            $term = $request->string('q')->toString();
-            $q->where(function ($w) use ($term) {
-                // Case-insensitive search (works for "Nike" = "nike")
-                $w->where('name', 'LIKE', "%{$term}%")
-                    ->orWhere('description', 'LIKE', "%{$term}%");
-
-                // Fuzzy search for typos (if 4+ chars)
-                if (strlen($term) >= 4) {
-                    // Search with missing/swapped characters
-                    $chars = str_split(strtolower($term));
-                    foreach ($chars as $i => $char) {
-                        if ($i < strlen($term) - 1) {
-                            // Try skipping one character (e.g., "nke" finds "Nike")
-                            $pattern = substr($term, 0, $i) . substr($term, $i + 1);
-                            $w->orWhere('name', 'LIKE', "%{$pattern}%");
-                        }
-                    }
-                }
-            });
-        }
-
-        $this->applyGenderFilter($q, $request);
-        $this->applySectionFilter($q, $request);
-        $this->applyColorFilter($q, $request);
-        $this->applySizeFilter($q, $request);
-
-        if ($request->filled('category_id') && str_contains((string) $request->input('category_id'), ',')) {
-            $ids = $this->parseCommaList($request->input('category_id'));
-            if (!empty($ids)) {
-                $q->whereIn('category_id', $ids);
-            }
-        } elseif ($request->filled('category_id')) {
-            $q->where('category_id', (int) $request->input('category_id'));
-        }
-
-        if ($request->filled('brand_id') && str_contains((string) $request->input('brand_id'), ',')) {
-            $ids = $this->parseCommaList($request->input('brand_id'));
-            if (!empty($ids)) {
-                $q->whereIn('brand_id', $ids);
-            }
-        } elseif ($request->filled('brand_id')) {
-            $q->where('brand_id', (int) $request->input('brand_id'));
-        }
-
-        if ($request->filled('brand_slug')) {
-            $q->whereHas('brand', function ($b) use ($request) {
-                $b->where('slug', $request->string('brand_slug'));
-            });
-        }
+        $this->applyStorefrontListingFilters($q, $request);
 
         $perPage = min((int) $request->get('per_page', 12), 200);
         $sort = strtolower(trim((string) $request->input('sort', '')));
@@ -93,8 +37,40 @@ class ProductController extends Controller
             $q->orderByDesc('products.id');
         }
         $products = $q->paginate($perPage);
+        $products->getCollection()->transform(function (Product $product) {
+            return $this->enrichStorefrontPricing($product->toArray(), $product);
+        });
 
         return response()->json($products);
+    }
+
+    /**
+     * Brand counts and totals for PLP toolbar (same filters as /products, brand facet excludes brand_id).
+     */
+    public function filterFacets(Request $request)
+    {
+        $q = Product::query()->where('products.is_active', true);
+        $this->applyStorefrontListingFilters($q, $request, excludeBrandFilter: true);
+
+        $brandRows = (clone $q)
+            ->join('brands', 'products.brand_id', '=', 'brands.id')
+            ->where('brands.is_active', true)
+            ->whereNotNull('products.brand_id')
+            ->selectRaw('brands.id, brands.name, brands.slug, COUNT(products.id) as product_count')
+            ->groupBy('brands.id', 'brands.name', 'brands.slug')
+            ->orderByDesc('product_count')
+            ->orderBy('brands.name')
+            ->limit(60)
+            ->get();
+
+        return response()->json([
+            'brands' => $brandRows->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'name' => $row->name,
+                'slug' => $row->slug,
+                'count' => (int) $row->product_count,
+            ])->values()->all(),
+        ]);
     }
 
     /**
@@ -194,6 +170,82 @@ class ProductController extends Controller
         });
 
         return array_values($sizes);
+    }
+
+    /**
+     * Shared listing filters for index() and filterFacets().
+     */
+    private function applyStorefrontListingFilters($query, Request $request, bool $excludeBrandFilter = false): void
+    {
+        if ($request->filled('ids')) {
+            $ids = array_filter(array_map('intval', explode(',', $request->input('ids'))));
+            if (!empty($ids)) {
+                $query->whereIn('products.id', $ids);
+            }
+        }
+
+        $this->applyParentCategoryFilter($query, $request);
+        $this->applyMinMaxPriceFilter($query, $request);
+        $this->applyPriceFilter($query, $request);
+
+        if ($request->filled('category')) {
+            $categorySlug = (string) $request->input('category');
+            $query->whereHas('category', function ($categoryQuery) use ($categorySlug) {
+                $categoryQuery->where('slug', $categorySlug);
+            });
+        }
+
+        if ($request->filled('q')) {
+            $term = $request->string('q')->toString();
+            $query->where(function ($w) use ($term) {
+                $w->where('products.name', 'LIKE', "%{$term}%")
+                    ->orWhere('products.description', 'LIKE', "%{$term}%");
+
+                if (strlen($term) >= 4) {
+                    foreach (str_split(strtolower($term)) as $i => $char) {
+                        if ($i < strlen($term) - 1) {
+                            $pattern = substr($term, 0, $i) . substr($term, $i + 1);
+                            $w->orWhere('products.name', 'LIKE', "%{$pattern}%");
+                        }
+                    }
+                }
+            });
+        }
+
+        $this->applyGenderFilter($query, $request);
+        $this->applySectionFilter($query, $request);
+        $this->applyColorFilter($query, $request);
+        $this->applySizeFilter($query, $request);
+
+        if ($request->filled('category_id') && str_contains((string) $request->input('category_id'), ',')) {
+            $ids = $this->parseCommaList($request->input('category_id'));
+            if (!empty($ids)) {
+                $query->whereIn('category_id', $ids);
+            }
+        } elseif ($request->filled('category_id')) {
+            $query->where('category_id', (int) $request->input('category_id'));
+        }
+
+        if (!$excludeBrandFilter) {
+            if ($request->filled('brand_id') && str_contains((string) $request->input('brand_id'), ',')) {
+                $ids = $this->parseCommaList($request->input('brand_id'));
+                if (!empty($ids)) {
+                    $query->whereIn('brand_id', $ids);
+                }
+            } elseif ($request->filled('brand_id')) {
+                $query->where('brand_id', (int) $request->input('brand_id'));
+            }
+
+            if ($request->filled('brand_slug')) {
+                $query->whereHas('brand', function ($b) use ($request) {
+                    $b->where('slug', $request->string('brand_slug'));
+                });
+            }
+        }
+
+        if ($request->filled('tab') && strtolower(trim((string) $request->input('tab'))) === 'sale') {
+            $query->whereHas('activeDiscount');
+        }
     }
 
     private function applySortFilter($query, Request $request): void
@@ -474,16 +526,67 @@ class ProductController extends Controller
     {
         $product = Product::with(['category', 'activeDiscount'])->where('slug', $slug)->firstOrFail();
         if ($product->activeDiscount) {
-            $product->discount = [
-                'type' => $product->activeDiscount->discount_type,
-                'value' => $product->activeDiscount->discount_value,
-                'original_price' => (float) $product->price,
-                'sale_price' => (float) $product->activeDiscount->sale_price,
-                'discount_percentage' => $this->calculateDiscountPercentage($product),
-                'end_date' => $product->activeDiscount->end_date,
-            ];
+            $product->discount = $this->formatStorefrontDiscount($product);
         }
-        return response()->json($product);
+
+        if (ProductVariantInventory::usesMatrix($product)) {
+            $matrixTotal = ProductVariantInventory::totalMatrixQty($product);
+            if ($matrixTotal > 0 && (int) ($product->stock ?? 0) < $matrixTotal) {
+                $product->stock = $matrixTotal;
+            }
+        }
+
+        $user = Auth::guard('sanctum')->user();
+        $sessionId = request()->header('X-Session-Id') ?: request()->query('session_id');
+        $this->eventService->track(
+            'product_view',
+            $user?->id ? (int) $user->id : null,
+            $sessionId ? (string) $sessionId : null,
+            (int) $product->id
+        );
+
+        $payload = $this->enrichStorefrontPricing($product->toArray(), $product);
+        if (ProductVariantInventory::usesMatrix($product)) {
+            $payload['variant_lot_prices'] = array_map(
+                function (array $row) use ($product) {
+                    $size = $row['size'];
+                    $color = $row['color'];
+                    $lotPrice = $this->inventoryLots->resolveStorefrontUnitPrice($product, $size, $color);
+                    $variantRow = [
+                        'size' => $size,
+                        'color' => $color,
+                        'unit_price' => $lotPrice,
+                        'customer_price' => $this->inventoryLots->resolveStorefrontCustomerPrice($product, $size, $color),
+                        'sellable_qty' => $this->inventoryLots->hasLotStockOnHand((int) $product->id)
+                            ? $this->inventoryLots->totalSellableQty((int) $product->id, $size, $color)
+                            : null,
+                    ];
+                    $lotDiscount = $this->inventoryLots->storefrontLotDiscountMeta($product, $size, $color);
+                    if ($lotDiscount) {
+                        $variantRow['lot_discount'] = $lotDiscount;
+                    }
+
+                    return $variantRow;
+                },
+                ProductVariantInventory::matrixRows($product),
+            );
+        }
+
+        return response()->json($payload);
+    }
+
+    public function recommendations(Request $request)
+    {
+        $user = Auth::guard('sanctum')->user();
+        $sessionId = $request->header('X-Session-Id') ?: $request->query('session_id');
+        $perPage = (int) $request->input('per_page', 8);
+        $result = $this->recommendationService->recommendations(
+            $user?->id ? (int) $user->id : null,
+            $sessionId ? (string) $sessionId : null,
+            $perPage
+        );
+
+        return response()->json($result);
     }
 
     /**
@@ -512,17 +615,15 @@ class ProductController extends Controller
         if ($request->filled('q')) {
             $term = $request->string('q')->toString();
             $query->where(function ($w) use ($term) {
-                // Case-insensitive search
-                $w->where('name', 'LIKE', "%{$term}%")
-                    ->orWhere('description', 'LIKE', "%{$term}%");
+                $w->where('products.name', 'LIKE', "%{$term}%")
+                    ->orWhere('products.description', 'LIKE', "%{$term}%");
 
-                // Fuzzy search for typos (if 4+ chars)
                 if (strlen($term) >= 4) {
                     $chars = str_split(strtolower($term));
                     foreach ($chars as $i => $char) {
                         if ($i < strlen($term) - 1) {
                             $pattern = substr($term, 0, $i) . substr($term, $i + 1);
-                            $w->orWhere('name', 'LIKE', "%{$pattern}%");
+                            $w->orWhere('products.name', 'LIKE', "%{$pattern}%");
                         }
                     }
                 }
@@ -581,19 +682,50 @@ class ProductController extends Controller
         // Format response with discount info
         $products->getCollection()->transform(function ($product) {
             if ($product->activeDiscount) {
-                $product->discount = [
-                    'type' => $product->activeDiscount->discount_type,
-                    'value' => $product->activeDiscount->discount_value,
-                    'original_price' => (float) $product->price,
-                    'sale_price' => (float) $product->activeDiscount->sale_price,
-                    'discount_percentage' => $this->calculateDiscountPercentage($product),
-                    'end_date' => $product->activeDiscount->end_date,
-                ];
+                $product->discount = $this->formatStorefrontDiscount($product);
             }
+
             return $product;
         });
 
         return response()->json($products);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function enrichStorefrontPricing(array $row, Product $product, ?string $size = null, ?string $color = null): array
+    {
+        $row['storefront_unit_price'] = $this->inventoryLots->resolveStorefrontUnitPrice($product, $size, $color);
+        $row['storefront_customer_price'] = $this->inventoryLots->resolveStorefrontCustomerPrice($product, $size, $color);
+        $lotDiscount = $this->inventoryLots->storefrontLotDiscountMeta($product, $size, $color);
+        if ($lotDiscount) {
+            $row['storefront_lot_discount'] = $lotDiscount;
+        }
+        if ($product->activeDiscount) {
+            $row['discount'] = $this->formatStorefrontDiscount($product);
+        }
+
+        return $row;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatStorefrontDiscount(Product $product): array
+    {
+        $disc = $product->activeDiscount;
+
+        return [
+            'type' => $disc->discount_type,
+            'value' => $disc->discount_value,
+            'original_price' => (float) $product->price,
+            'sale_price' => (float) $disc->sale_price,
+            'quantity' => $disc->quantity,
+            'discount_percentage' => $this->calculateDiscountPercentage($product),
+            'end_date' => $disc->end_date,
+        ];
     }
 
     /**
