@@ -21,4 +21,17 @@ services:
         value: fitandsleek.online,www.fitandsleek.online,fitandsleek-official.vercel.app
       - key: RUN_MIGRATIONS
         value: "false"
-      # Set in Render dashboard (secrets): APP_KEY, DATABASE_URL, RESEND_API_KEY, etc.
+      # Media — Cloudinary (recommended production: CDN + auto resize/WebP)
+      - key: FILESYSTEM_DISK
+        value: cloudinary
+      - key: ADMIN_PROFILE_IMAGE_DISK
+        value: cloudinary
+      - key: MEDIA_FALLBACK_TO_PUBLIC
+        value: "false"
+      - key: ADMIN_PROFILE_IMAGE_FALLBACK_TO_PUBLIC
+        value: "false"
+      - key: CLOUDINARY_CLOUD_NAME
+        value: media-fitandsleek
+      # Secrets (Render dashboard only): APP_KEY, DATABASE_URL, RESEND_API_KEY,
+      # CLOUDINARY_URL, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+      # Optional later: switch to R2 + cdn.fitandsleek.online (see .env.example)
