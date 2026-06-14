@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\UserDeviceSession;
 use App\Models\UserTrustedDevice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class DeviceSessionService
@@ -23,6 +24,20 @@ class DeviceSessionService
      * Device completed login verification recently — skip OTP / 2FA picker on this device.
      */
     public function isTrustedDevice(User $user, Request $request): bool
+    {
+        try {
+            return $this->trustedDeviceCheck($user, $request);
+        } catch (\Throwable $e) {
+            Log::warning('Trusted device check failed', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function trustedDeviceCheck(User $user, Request $request): bool
     {
         $context = $this->resolveDeviceContext($request);
         $deviceId = (string) ($context['device_id'] ?? '');

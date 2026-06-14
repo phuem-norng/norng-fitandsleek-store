@@ -113,6 +113,7 @@ export function AuthProvider({ children }) {
 
       return data;
     } catch (err) {
+      const status = err?.response?.status;
       const data = err?.response?.data;
       if (data?.otp_required || data?.verification_required) {
         return {
@@ -120,6 +121,22 @@ export function AuthProvider({ children }) {
           email,
           purpose: data.purpose || "login",
           email_sent: data.email_sent,
+        };
+      }
+      if (status === 429) {
+        return {
+          error: true,
+          message: data?.message || "Too many login attempts. Please wait a minute and try again.",
+          status,
+        };
+      }
+      if (status >= 500) {
+        return {
+          error: true,
+          message:
+            data?.message ||
+            "Login is temporarily unavailable. Please try again in a minute.",
+          status,
         };
       }
       // Normalize error shape so callers can show a friendly message

@@ -694,29 +694,36 @@ class AuthController extends Controller
     $tokenModel = PersonalAccessToken::query()->find($tokenId);
 
     if ($tokenModel) {
-      $binding = $this->deviceSessionService->bindTokenToDevice($user, $tokenModel, $request);
+      try {
+        $binding = $this->deviceSessionService->bindTokenToDevice($user, $tokenModel, $request);
 
-      if ($markTrusted) {
-        $this->deviceSessionService->markDeviceVerified($user, $request);
-      }
-
-      $event = $binding['is_new_device'] ? 'login.new_device' : 'login.success';
-      $this->securityAudit->record($request, $event, $user, [
-        'token_name' => $tokenName,
-        'new_device' => $binding['is_new_device'],
-      ]);
-
-      if ($binding['is_new_device']) {
-        try {
-          Mail::to($user->email)->send(new NewDeviceLoginAlertMail(
-            $this->securityAudit->mailContextFromDevice($binding['context'])
-          ));
-        } catch (\Throwable $e) {
-          Log::warning('New device login alert email failed', [
-            'email' => $user->email,
-            'error' => $e->getMessage(),
-          ]);
+        if ($markTrusted) {
+          $this->deviceSessionService->markDeviceVerified($user, $request);
         }
+
+        $event = $binding['is_new_device'] ? 'login.new_device' : 'login.success';
+        $this->securityAudit->record($request, $event, $user, [
+          'token_name' => $tokenName,
+          'new_device' => $binding['is_new_device'],
+        ]);
+
+        if ($binding['is_new_device']) {
+          try {
+            Mail::to($user->email)->send(new NewDeviceLoginAlertMail(
+              $this->securityAudit->mailContextFromDevice($binding['context'])
+            ));
+          } catch (\Throwable $e) {
+            Log::warning('New device login alert email failed', [
+              'email' => $user->email,
+              'error' => $e->getMessage(),
+            ]);
+          }
+        }
+      } catch (\Throwable $e) {
+        Log::warning('Device session binding failed during token issue', [
+          'user_id' => $user->id,
+          'error' => $e->getMessage(),
+        ]);
       }
     }
 

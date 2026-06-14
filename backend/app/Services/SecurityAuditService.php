@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SecurityAuditLog;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class SecurityAuditService
 {
@@ -14,32 +15,42 @@ class SecurityAuditService
     ) {
     }
 
-    public function record(Request $request, string $eventType, ?User $user = null, array $metadata = []): SecurityAuditLog
+    public function record(Request $request, string $eventType, ?User $user = null, array $metadata = []): ?SecurityAuditLog
     {
-        $context = $this->deviceSessionService->resolveDeviceContext($request);
-        $geo = $context['geo'] ?? null;
+        try {
+            $context = $this->deviceSessionService->resolveDeviceContext($request);
+            $geo = $context['geo'] ?? null;
 
-        $log = SecurityAuditLog::create([
-            'user_id' => $user?->id,
-            'event_type' => $eventType,
-            'ip_address' => $context['ip_address'] ?? null,
-            'ip_city' => $geo['city'] ?? null,
-            'ip_region' => $geo['region'] ?? null,
-            'ip_country' => $geo['country'] ?? null,
-            'ip_country_code' => $geo['country_code'] ?? null,
-            'device_id' => $context['device_id'] ?? null,
-            'device_name' => $context['device_name'] ?? null,
-            'browser' => $context['browser'] ?? null,
-            'os' => $context['os'] ?? null,
-            'metadata' => $metadata !== [] ? $metadata : null,
-            'created_at' => now(),
-        ]);
+            $log = SecurityAuditLog::create([
+                'user_id' => $user?->id,
+                'event_type' => $eventType,
+                'ip_address' => $context['ip_address'] ?? null,
+                'ip_city' => $geo['city'] ?? null,
+                'ip_region' => $geo['region'] ?? null,
+                'ip_country' => $geo['country'] ?? null,
+                'ip_country_code' => $geo['country_code'] ?? null,
+                'device_id' => $context['device_id'] ?? null,
+                'device_name' => $context['device_name'] ?? null,
+                'browser' => $context['browser'] ?? null,
+                'os' => $context['os'] ?? null,
+                'metadata' => $metadata !== [] ? $metadata : null,
+                'created_at' => now(),
+            ]);
 
-        if ($user && $this->isLoginEvent($eventType)) {
-            $this->maybeRecordSuspiciousCountryChange($user, $log, $metadata);
+            if ($user && $this->isLoginEvent($eventType)) {
+                $this->maybeRecordSuspiciousCountryChange($user, $log, $metadata);
+            }
+
+            return $log;
+        } catch (\Throwable $e) {
+            Log::warning('Security audit log write failed', [
+                'event_type' => $eventType,
+                'user_id' => $user?->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
-
-        return $log;
     }
 
     public function mailContextFromDevice(array $context): array

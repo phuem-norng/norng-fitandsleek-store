@@ -75,7 +75,11 @@ class User extends Authenticatable
             return null;
         }
 
-        return app(\App\Services\AdminPermissionService::class)->getEffectivePermissions($this);
+        try {
+            return app(\App\Services\AdminPermissionService::class)->getEffectivePermissions($this);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function hasTwoFactorEnabled(): bool
