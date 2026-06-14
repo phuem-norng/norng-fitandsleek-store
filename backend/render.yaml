@@ -16,9 +16,9 @@ services:
       - key: APP_URL
         value: https://fitandsleek-official-backend.onrender.com
       - key: FRONTEND_URL
-        value: https://fitandsleek-official.vercel.app
+        value: https://www.fitandsleek.online
       - key: SANCTUM_STATEFUL_DOMAINS
-        value: fitandsleek-official.vercel.app,www.fitandsleek-official.vercel.app
+        value: fitandsleek.online,www.fitandsleek.online,fitandsleek-official.vercel.app
       - key: RUN_MIGRATIONS
         value: "false"
       # Set in Render dashboard (secrets): APP_KEY, DATABASE_URL, RESEND_API_KEY, etc.

@@ -34,11 +34,17 @@ return [
         'https://web-fitandsleek.onrender.com',
         'https://www.web-fitandsleek.onrender.com',
         'https://api-fitandsleek.onrender.com',
+        'https://fitandsleek-official-backend.onrender.com',
+        'https://fitandsleek-official.vercel.app',
+        'https://www.fitandsleek-official.vercel.app',
+        'https://fitandsleek.online',
+        'https://www.fitandsleek.online',
     ]))),
 
     'allowed_origins_patterns' => [
         '~^https://[a-z0-9-]+\.onrender\.com$~i',
         '~^https://[a-z0-9-]+\.vercel\.app$~i',
+        '~^https://([a-z0-9-]+\.)?fitandsleek\.online$~i',
         '~^http://localhost:\d+$~',
         '~^http://127\.0\.0\.1:\d+$~',
         '~^https://localhost:\d+$~',
