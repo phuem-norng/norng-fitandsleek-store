@@ -218,6 +218,13 @@ class AuthController extends Controller
       'challenge_token' => ['nullable', 'string'],
     ]);
 
+    if (! empty($data['challenge_token'])) {
+      $payload = $this->verificationChallenge->get($data['challenge_token']);
+      if (is_array($payload)) {
+        $data['purpose'] = $this->otpPurposeForChallenge($payload);
+      }
+    }
+
     $otp = OtpCode::where('email', $data['email'])
       ->where('purpose', $data['purpose'])
       ->whereNull('consumed_at')
@@ -229,16 +236,10 @@ class AuthController extends Controller
       return response()->json(['message' => 'OTP expired or not found'], 422);
     }
 
-
     $otp->increment('attempts');
 
     if (!Hash::check($data['code'], $otp->code_hash)) {
       return response()->json(['message' => 'Invalid OTP'], 422);
-    }
-
-    // Only consume OTP if not 'forgot' purpose
-    if ($data['purpose'] !== 'forgot') {
-      $otp->update(['consumed_at' => now()]);
     }
 
     $user = User::where('email', $data['email'])->first();
@@ -246,7 +247,25 @@ class AuthController extends Controller
       return response()->json(['message' => 'User not found'], 404);
     }
 
-  if (empty($data['challenge_token'])) {
+    if (! empty($data['challenge_token'])) {
+      $payload = $this->verificationChallenge->get($data['challenge_token']);
+      $expectedPurpose = is_array($payload) ? ($payload['purpose'] ?? $data['purpose']) : $data['purpose'];
+
+      $response = $this->completeVerificationChallenge(
+        $data['challenge_token'],
+        $user,
+        $request,
+        $expectedPurpose,
+        'email'
+      );
+
+      if ($response->getStatusCode() < 400) {
+        $this->consumeOtp($otp, $data['purpose']);
+      }
+
+      return $response;
+    }
+
     if ($data['purpose'] === 'register') {
       $user->update([
         'email_verified_at' => now(),
@@ -257,20 +276,6 @@ class AuthController extends Controller
     if ($data['purpose'] !== 'forgot' && $user->status !== 'active') {
       return response()->json(['message' => 'Account is not active'], 403);
     }
-  }
-
-    if (! empty($data['challenge_token'])) {
-      $payload = $this->verificationChallenge->get($data['challenge_token']);
-      $expectedPurpose = is_array($payload) ? ($payload['purpose'] ?? $data['purpose']) : $data['purpose'];
-
-      return $this->completeVerificationChallenge(
-        $data['challenge_token'],
-        $user,
-        $request,
-        $expectedPurpose,
-        'email'
-      );
-    }
 
     if ($data['purpose'] === 'forgot') {
       return response()->json([
@@ -280,6 +285,8 @@ class AuthController extends Controller
     }
 
     if ($this->twoFactor->isEnabled($user)) {
+      $this->consumeOtp($otp, $data['purpose']);
+
       $challengeToken = $this->twoFactor->createLoginChallenge($user, $request->only([
         'device_id', 'device_name', 'platform', 'app_version',
       ]));
@@ -293,12 +300,22 @@ class AuthController extends Controller
     }
 
     $token = $this->issueDeviceBoundToken($user, 'fitandsleekpro', $request, markTrusted: true);
+    $this->consumeOtp($otp, $data['purpose']);
 
     return response()->json([
       'token' => $token,
       'user' => $user,
       'device_verified' => true,
     ]);
+  }
+
+  private function consumeOtp(OtpCode $otp, string $purpose): void
+  {
+    if ($purpose === 'forgot') {
+      return;
+    }
+
+    $otp->update(['consumed_at' => now()]);
   }
 
   public function resendOtp(Request $request)
@@ -591,13 +608,26 @@ class AuthController extends Controller
     }
 
     $this->verificationChallenge->forget($challengeToken);
-    $token = $this->issueDeviceBoundToken($user, 'fitandsleekpro', $request, markTrusted: true);
 
-    return response()->json([
-      'token' => $token,
-      'user' => $user->fresh(),
-      'device_verified' => true,
-    ]);
+    try {
+      $token = $this->issueDeviceBoundToken($user, 'fitandsleekpro', $request, markTrusted: true);
+
+      return response()->json([
+        'token' => $token,
+        'user' => $user->fresh(),
+        'device_verified' => true,
+      ]);
+    } catch (\Throwable $e) {
+      Log::error('Verification challenge completion failed', [
+        'user_id' => $user->id,
+        'purpose' => $expectedPurpose,
+        'error' => $e->getMessage(),
+      ]);
+
+      return response()->json([
+        'message' => 'We could not finish signing you in. Please try again.',
+      ], 500);
+    }
   }
 
   /** @param array<string, mixed> $payload */
