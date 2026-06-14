@@ -33,10 +33,19 @@ chmod -R ug+rwx storage bootstrap/cache 2>/dev/null || true
 
 case "$1" in
   web)
+    # Render/Railway set PORT; local Docker Compose uses 8000 (see nginx default.conf).
+    PORT="${PORT:-8000}"
+    sed -i "s/listen 8000;/listen ${PORT};/" /etc/nginx/conf.d/default.conf
+    sed -i "s/listen \[::\]:8000;/listen [::]:${PORT};/" /etc/nginx/conf.d/default.conf
+
     rm -rf public/storage
     php artisan storage:link --relative --force
     php artisan config:clear
-    php artisan migrate --force
+
+    if [ "${RUN_MIGRATIONS:-true}" != "false" ]; then
+      php artisan migrate --force
+    fi
+
     php-fpm -D
     exec nginx -g 'daemon off;'
     ;;

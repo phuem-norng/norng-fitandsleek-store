@@ -1,0 +1,24 @@
+# Render Blueprint (optional). Primary fix: entrypoint binds nginx to $PORT.
+services:
+  - type: web
+    name: fitandsleek-official-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: Dockerfile
+    branch: main
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_URL
+        value: https://fitandsleek-official-backend.onrender.com
+      - key: FRONTEND_URL
+        value: https://fitandsleek-official.vercel.app
+      - key: SANCTUM_STATEFUL_DOMAINS
+        value: fitandsleek-official.vercel.app,www.fitandsleek-official.vercel.app
+      - key: RUN_MIGRATIONS
+        value: "false"
+      # Set in Render dashboard (secrets): APP_KEY, DATABASE_URL, RESEND_API_KEY, etc.

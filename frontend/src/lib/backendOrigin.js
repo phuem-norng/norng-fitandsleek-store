@@ -25,6 +25,8 @@ const PUBLIC_STOREFRONT_TO_LARAVEL_ORIGIN = {
     "www.web-fitandsleek.onrender.com": "https://api-fitandsleek.onrender.com",
     "norng-fitandsleek-store.vercel.app": "https://norng-fitandsleek-backend.onrender.com",
     "www.norng-fitandsleek-store.vercel.app": "https://norng-fitandsleek-backend.onrender.com",
+    "fitandsleek-official.vercel.app": "https://fitandsleek-official-backend.onrender.com",
+    "www.fitandsleek-official.vercel.app": "https://fitandsleek-official-backend.onrender.com",
 };
 
 function laravelOriginForPublicStorefrontHostname(hostname) {
