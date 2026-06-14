@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Casts\SafeJsonArray;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -60,7 +61,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'profile_image_updated_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
-            'admin_permissions' => 'array',
+            'admin_permissions' => SafeJsonArray::class,
         ];
     }
 

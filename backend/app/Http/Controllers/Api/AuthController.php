@@ -68,6 +68,22 @@ class AuthController extends Controller
 
   public function login(Request $request)
   {
+    try {
+      return $this->performLogin($request);
+    } catch (\Throwable $e) {
+      Log::error('Login failed', [
+        'email' => $request->input('email'),
+        'error' => $e->getMessage(),
+      ]);
+
+      return response()->json([
+        'message' => 'Server Error',
+      ], 500);
+    }
+  }
+
+  private function performLogin(Request $request)
+  {
     $data = $request->validate([
       'email' => ['required','email'],
       'password' => ['nullable','string'],
@@ -114,7 +130,7 @@ class AuthController extends Controller
       return response()->json([
         'message' => 'Signed in on a trusted device.',
         'token' => $token,
-        'user' => $user,
+        'user' => $this->authUserPayload($user),
         'trusted_device' => true,
       ]);
     }
@@ -249,21 +265,23 @@ class AuthController extends Controller
 
     if (! empty($data['challenge_token'])) {
       $payload = $this->verificationChallenge->get($data['challenge_token']);
-      $expectedPurpose = is_array($payload) ? ($payload['purpose'] ?? $data['purpose']) : $data['purpose'];
+      if (is_array($payload) && (int) ($payload['user_id'] ?? 0) === (int) $user->id) {
+        $expectedPurpose = (string) ($payload['purpose'] ?? $data['purpose']);
 
-      $response = $this->completeVerificationChallenge(
-        $data['challenge_token'],
-        $user,
-        $request,
-        $expectedPurpose,
-        'email'
-      );
+        $response = $this->completeVerificationChallenge(
+          $data['challenge_token'],
+          $user,
+          $request,
+          $expectedPurpose,
+          'email'
+        );
 
-      if ($response->getStatusCode() < 400) {
-        $this->consumeOtp($otp, $data['purpose']);
+        if ($response->getStatusCode() < 400) {
+          $this->consumeOtp($otp, $data['purpose']);
+        }
+
+        return $response;
       }
-
-      return $response;
     }
 
     if ($data['purpose'] === 'register') {
@@ -304,7 +322,7 @@ class AuthController extends Controller
 
     return response()->json([
       'token' => $token,
-      'user' => $user,
+      'user' => $this->authUserPayload($user),
       'device_verified' => true,
     ]);
   }
@@ -614,7 +632,7 @@ class AuthController extends Controller
 
       return response()->json([
         'token' => $token,
-        'user' => $user->fresh(),
+        'user' => $this->authUserPayload($user->fresh()),
         'device_verified' => true,
       ]);
     } catch (\Throwable $e) {
@@ -628,6 +646,25 @@ class AuthController extends Controller
         'message' => 'We could not finish signing you in. Please try again.',
       ], 500);
     }
+  }
+
+  /** @return array<string, mixed> */
+  private function authUserPayload(?User $user): array
+  {
+    if (! $user) {
+      return [];
+    }
+
+    return [
+      'id' => $user->id,
+      'name' => $user->name,
+      'email' => $user->email,
+      'phone' => $user->phone,
+      'role' => $user->role,
+      'status' => $user->status,
+      'address' => $user->address,
+      'profile_image_url' => $user->profile_image_url,
+    ];
   }
 
   /** @param array<string, mixed> $payload */
@@ -719,7 +756,17 @@ class AuthController extends Controller
     Request $request,
     bool $markTrusted = true,
   ): string {
-    $plainTextToken = $user->createToken($tokenName, ['*'], now()->addMonths(6))->plainTextToken;
+    try {
+      $plainTextToken = $user->createToken($tokenName, ['*'], now()->addMonths(6))->plainTextToken;
+    } catch (\Throwable $e) {
+      Log::error('Sanctum token creation failed', [
+        'user_id' => $user->id,
+        'error' => $e->getMessage(),
+      ]);
+
+      throw $e;
+    }
+
     $tokenId = (int) explode('|', $plainTextToken, 2)[0];
     $tokenModel = PersonalAccessToken::query()->find($tokenId);
 
