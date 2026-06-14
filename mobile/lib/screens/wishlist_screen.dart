@@ -1,12 +1,9 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/api_client.dart';
-import '../models/product_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/wishlist_provider.dart';
 import '../services/product_service.dart';
-import '../services/wishlist_service.dart';
 import '../widgets/common/fs_empty_state.dart';
 import '../widgets/product_card.dart';
 import 'login_screen.dart';
@@ -20,48 +17,22 @@ class WishlistScreen extends StatefulWidget {
 }
 
 class _WishlistScreenState extends State<WishlistScreen> {
-  List<ProductModel> _products = [];
-  bool _loading = true;
-  String? _error;
-
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIfNeeded());
   }
 
-  Future<void> _load() async {
+  Future<void> _loadIfNeeded() async {
     final auth = context.read<AuthProvider>();
-    if (!auth.isLoggedIn) {
-      setState(() {
-        _loading = false;
-        _products = [];
-      });
-      return;
-    }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final result = await context.read<WishlistService>().fetchWishlist();
-      if (!mounted) return;
-      setState(() {
-        _products = result.products;
-        _loading = false;
-      });
-    } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = context.read<ApiClient>().apiMessage(e);
-        _loading = false;
-      });
-    }
+    if (!auth.isLoggedIn) return;
+    await context.read<WishlistProvider>().load();
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final wishlist = context.watch<WishlistProvider>();
 
     if (!auth.isLoggedIn) {
       return FsEmptyState(
@@ -75,19 +46,11 @@ class _WishlistScreenState extends State<WishlistScreen> {
       );
     }
 
-    if (_loading) {
+    if (wishlist.loading && wishlist.products.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
-      return FsEmptyState(
-        icon: Icons.cloud_off_outlined,
-        title: 'Could not load wishlist',
-        subtitle: _error,
-        actionLabel: 'Try again',
-        onAction: _load,
-      );
-    }
-    if (_products.isEmpty) {
+
+    if (wishlist.products.isEmpty) {
       return const FsEmptyState(
         icon: Icons.favorite_border,
         title: 'Wishlist is empty',
@@ -96,7 +59,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => context.read<WishlistProvider>().load(),
       child: GridView.builder(
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -105,11 +68,13 @@ class _WishlistScreenState extends State<WishlistScreen> {
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
-        itemCount: _products.length,
+        itemCount: wishlist.products.length,
         itemBuilder: (context, index) {
-          final product = _products[index];
+          final product = wishlist.products[index];
           return ProductCard(
             product: product,
+            isWishlisted: true,
+            onWishlistToggle: () => wishlist.toggle(product.id),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => ProductDetailScreen(

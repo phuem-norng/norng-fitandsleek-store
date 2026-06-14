@@ -11,8 +11,13 @@ class AppConfig {
   static const String _apiFromEnv = String.fromEnvironment('API_BASE_URL');
   static const String _originFromEnv = String.fromEnvironment('BACKEND_ORIGIN');
 
+  /// Production API when no dart-define is passed (release builds on real devices).
+  static const String productionApiBaseUrl = 'https://norng-fitandsleek-backend.onrender.com/api';
+  static const String productionBackendOrigin = 'https://norng-fitandsleek-backend.onrender.com';
+
   /// Default Laravel API (matches frontend `.env.example` proxy target port).
   static String get defaultApiBaseUrl {
+    if (!kDebugMode) return productionApiBaseUrl;
     if (kIsWeb) return 'http://127.0.0.1:8001/api';
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:8001/api';
@@ -21,6 +26,7 @@ class AppConfig {
   }
 
   static String get defaultBackendOrigin {
+    if (!kDebugMode) return productionBackendOrigin;
     if (kIsWeb) return 'http://127.0.0.1:8001';
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:8001';

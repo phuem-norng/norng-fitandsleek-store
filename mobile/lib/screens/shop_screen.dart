@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/api_client.dart';
 import '../models/banner_model.dart';
 import '../models/brand_model.dart';
 import '../models/product_model.dart';
+import '../providers/auth_provider.dart';
+import '../providers/wishlist_provider.dart';
 import '../services/product_service.dart';
 import '../widgets/common/fs_empty_state.dart';
 import '../widgets/home/category_strip.dart';
@@ -286,16 +289,24 @@ class ShopScreenState extends State<ShopScreen> {
                       );
                     }
                     final product = _products[index];
-                    return ProductCard(
-                      product: product,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ProductDetailScreen(
-                            productService: widget.productService,
-                            slug: product.slug,
+                    return Consumer2<AuthProvider, WishlistProvider>(
+                      builder: (context, auth, wishlist, _) {
+                        return ProductCard(
+                          product: product,
+                          isWishlisted: auth.isLoggedIn && wishlist.has(product.id),
+                          onWishlistToggle: auth.isLoggedIn
+                              ? () => wishlist.toggle(product.id)
+                              : null,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ProductDetailScreen(
+                                productService: widget.productService,
+                                slug: product.slug,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     );
                   },
                   childCount: _products.length + (_loadingMore ? 1 : 0),

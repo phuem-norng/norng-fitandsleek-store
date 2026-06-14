@@ -12,6 +12,7 @@ import '../utils/media_url.dart';
 import '../widgets/common/fs_button.dart';
 import '../widgets/common/fs_empty_state.dart';
 import '../widgets/product_image.dart';
+import 'checkout_screen.dart';
 import 'login_screen.dart';
 
 class CartScreen extends StatefulWidget {
@@ -63,6 +64,15 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _remove(int itemId) async {
     await context.read<CartService>().removeItem(itemId);
+    await _load();
+  }
+
+  Future<void> _updateQty(int itemId, int nextQty) async {
+    if (nextQty < 1) {
+      await _remove(itemId);
+      return;
+    }
+    await context.read<CartService>().updateItemQuantity(itemId, nextQty);
     await _load();
   }
 
@@ -142,12 +152,26 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
-                      'Qty ${item.quantity} · ${currency.format(item.unitPrice)} each',
+                      '${currency.format(item.unitPrice)} each',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                      onPressed: () => _remove(item.id),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () => _updateQty(item.id, item.quantity - 1),
+                        ),
+                        Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () => _updateQty(item.id, item.quantity + 1),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                          onPressed: () => _remove(item.id),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -185,7 +209,7 @@ class _CartScreenState extends State<CartScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Complete checkout on the web store for full payment options.',
+                  'Pay with Bakong KHQR after placing your order.',
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -195,8 +219,8 @@ class _CartScreenState extends State<CartScreen> {
                   variant: FsButtonVariant.accent,
                   icon: Icons.lock_outline,
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Open the web storefront to checkout')),
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => CheckoutScreen(cart: cart)),
                     );
                   },
                 ),

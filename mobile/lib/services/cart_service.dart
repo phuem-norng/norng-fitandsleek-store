@@ -29,4 +29,11 @@ class CartService {
   Future<void> removeItem(int itemId) async {
     await _api.dio.delete('/cart/items/$itemId');
   }
+
+  Future<CartModel> updateItemQuantity(int itemId, int quantity) async {
+    final res = await _api.dio.patch('/cart/items/$itemId', data: {
+      'quantity': quantity,
+    });
+    return CartModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
 }

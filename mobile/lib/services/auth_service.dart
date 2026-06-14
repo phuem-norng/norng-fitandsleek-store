@@ -77,4 +77,9 @@ class AuthService {
       await _api.clearToken();
     }
   }
+
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
+    final res = await _api.dio.post('/auth/forgot-password', data: {'email': email});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
 }

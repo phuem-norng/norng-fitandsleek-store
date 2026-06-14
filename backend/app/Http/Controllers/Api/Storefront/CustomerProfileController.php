@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Order;
 use App\Models\Address;
+use App\Models\Product;
 use App\Models\LoyaltyProfile;
 use App\Services\LoyaltyService;
 use App\Support\Media;
@@ -359,6 +360,33 @@ class CustomerProfileController extends Controller
             'ids'   => $products->pluck('id'),
             'count' => $products->count(),
         ]);
+    }
+
+    public function addToWishlist(int $productId)
+    {
+        $user = auth()->user();
+        Product::query()->where('is_active', true)->findOrFail($productId);
+
+        $wishlist = $user->wishlists()->firstOrCreate(
+            ['user_id' => $user->id, 'is_default' => true],
+            ['name' => 'My Wishlist', 'is_default' => true]
+        );
+
+        $wishlist->products()->syncWithoutDetaching([$productId]);
+
+        return $this->getWishlist();
+    }
+
+    public function removeFromWishlist(int $productId)
+    {
+        $user = auth()->user();
+
+        $wishlist = $user->wishlists()->where('is_default', true)->first();
+        if ($wishlist) {
+            $wishlist->products()->detach($productId);
+        }
+
+        return $this->getWishlist();
     }
 
     /**

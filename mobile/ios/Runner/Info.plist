@@ -50,5 +50,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Take photos to search for similar products and scan barcodes at POS.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose photos to search for similar products.</string>
 </dict>
 </plist>

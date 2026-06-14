@@ -11,10 +11,14 @@ class ProductCard extends StatelessWidget {
     super.key,
     required this.product,
     required this.onTap,
+    this.isWishlisted = false,
+    this.onWishlistToggle,
   });
 
   final ProductModel product;
   final VoidCallback onTap;
+  final bool isWishlisted;
+  final VoidCallback? onWishlistToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +59,27 @@ class ProductCard extends StatelessWidget {
                             style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    if (onWishlistToggle != null)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Material(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: onWishlistToggle,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                isWishlisted ? Icons.favorite : Icons.favorite_border,
+                                size: 20,
+                                color: isWishlisted ? AppColors.error : AppColors.textMuted,
+                              ),
+                            ),
                           ),
                         ),
                       ),

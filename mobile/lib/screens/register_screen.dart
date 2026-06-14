@@ -58,6 +58,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         );
+      } else if (auth.isLoggedIn) {
+        Navigator.of(context).pop();
       }
     } on DioException catch (e) {
       if (!mounted) return;

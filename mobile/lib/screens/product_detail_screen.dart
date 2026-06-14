@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/api_client.dart';
 import '../models/product_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/wishlist_provider.dart';
 import '../services/cart_service.dart';
 import '../services/product_service.dart';
 import '../theme/app_colors.dart';
@@ -32,6 +33,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool _loading = true;
   String? _error;
   bool _adding = false;
+  int _quantity = 1;
 
   @override
   void initState() {
@@ -69,7 +71,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
     setState(() => _adding = true);
     try {
-      await context.read<CartService>().addItem(productId: _product!.id);
+      await context.read<CartService>().addItem(
+        productId: _product!.id,
+        quantity: _quantity,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Added to cart')),
@@ -88,7 +93,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
-      appBar: AppBar(title: Text(_product?.name ?? 'Product')),
+      appBar: AppBar(
+        title: Text(_product?.name ?? 'Product'),
+        actions: [
+          if (_product != null)
+            Consumer2<AuthProvider, WishlistProvider>(
+              builder: (context, auth, wishlist, _) {
+                if (!auth.isLoggedIn) return const SizedBox.shrink();
+                final saved = wishlist.has(_product!.id);
+                return IconButton(
+                  icon: Icon(saved ? Icons.favorite : Icons.favorite_border),
+                  color: saved ? AppColors.error : null,
+                  onPressed: () => wishlist.toggle(_product!.id),
+                );
+              },
+            ),
+        ],
+      ),
       body: _buildBody(),
       bottomNavigationBar: _product == null
           ? null
@@ -100,12 +121,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
               child: SafeArea(
                 top: false,
-                child: FsButton(
-                  label: 'Add to cart',
-                  variant: FsButtonVariant.accent,
-                  icon: Icons.add_shopping_cart_outlined,
-                  onPressed: _adding ? null : _addToCart,
-                  loading: _adding,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                        Text('$_quantity', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        IconButton(
+                          onPressed: () => setState(() => _quantity++),
+                          icon: const Icon(Icons.add_circle_outline),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    FsButton(
+                      label: 'Add to cart',
+                      variant: FsButtonVariant.accent,
+                      icon: Icons.add_shopping_cart_outlined,
+                      onPressed: _adding ? null : _addToCart,
+                      loading: _adding,
+                    ),
+                  ],
                 ),
               ),
             ),

@@ -7,10 +7,12 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider(this._auth, this._api);
+  AuthProvider(this._auth, this._api, {this.onSignedIn, this.onSignedOut});
 
   final AuthService _auth;
   final ApiClient _api;
+  final Future<void> Function()? onSignedIn;
+  final VoidCallback? onSignedOut;
 
   UserModel? user;
   bool booted = false;
@@ -73,13 +75,17 @@ class AuthProvider extends ChangeNotifier {
     busy = true;
     notifyListeners();
     try {
-      return await _auth.register(
+      final data = await _auth.register(
         name: name,
         email: email,
         password: password,
         passwordConfirmation: passwordConfirmation,
         phone: phone,
       );
+      if (!authRequiresOtpStep(data)) {
+        await _applyTokenResponse(data);
+      }
+      return data;
     } finally {
       busy = false;
       notifyListeners();
@@ -123,6 +129,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     await _auth.logout();
     user = null;
+    onSignedOut?.call();
     notifyListeners();
   }
 
@@ -136,6 +143,9 @@ class AuthProvider extends ChangeNotifier {
       user = UserModel.fromJson(Map<String, dynamic>.from(userJson));
     } else {
       user = await _auth.fetchMe();
+    }
+    if (onSignedIn != null) {
+      await onSignedIn!();
     }
   }
 }

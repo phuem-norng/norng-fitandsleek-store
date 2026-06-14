@@ -7,6 +7,7 @@ import '../core/auth_flow.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common/fs_button.dart';
+import 'forgot_password_screen.dart';
 import 'otp_screen.dart';
 import 'register_screen.dart';
 
@@ -132,7 +133,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: (v) =>
                       v == null || v.length < 8 ? 'Password must be at least 8 characters' : null,
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                    ),
+                    child: const Text('Forgot password?'),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 FsButton(
                   label: 'Continue',
                   onPressed: auth.busy ? null : _submit,

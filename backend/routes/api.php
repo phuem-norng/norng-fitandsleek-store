@@ -249,6 +249,8 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
     Route::put('/user/addresses/{id}', [CustomerProfileController::class, 'updateAddress']);
     Route::delete('/user/addresses/{id}', [CustomerProfileController::class, 'deleteAddress']);
     Route::get('/user/wishlist', [CustomerProfileController::class, 'getWishlist']);
+    Route::post('/user/wishlist/{productId}', [CustomerProfileController::class, 'addToWishlist']);
+    Route::delete('/user/wishlist/{productId}', [CustomerProfileController::class, 'removeFromWishlist']);
     Route::get('/user/activity', [CustomerProfileController::class, 'getActivity']);
     Route::get('/user/loyalty', [CustomerProfileController::class, 'getLoyalty']);
 

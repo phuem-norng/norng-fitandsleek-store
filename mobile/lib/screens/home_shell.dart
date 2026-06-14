@@ -4,15 +4,16 @@ import 'package:provider/provider.dart';
 import '../core/api_client.dart';
 import '../models/header_settings.dart';
 import '../providers/auth_provider.dart';
+import '../providers/wishlist_provider.dart';
 import '../services/cart_service.dart';
 import '../services/notification_service.dart';
 import '../services/product_service.dart';
 import '../services/storefront_service.dart';
-import '../services/wishlist_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/mobile_store_header.dart';
 import '../widgets/navigation/mobile_bottom_nav.dart';
 import '../widgets/navigation/notifications_sheet.dart';
+import 'image_search_screen.dart';
 import 'cart_screen.dart';
 import 'profile_screen.dart';
 import 'shop_screen.dart';
@@ -81,11 +82,10 @@ class _HomeShellState extends State<HomeShell> {
     final api = context.read<ApiClient>();
     final cartService = context.read<CartService>();
     final notificationService = NotificationService(api);
-    final wishlistService = WishlistService(api);
+    final wishlist = context.read<WishlistProvider>();
 
     var cartCount = 0;
     var notifCount = 0;
-    var wishCount = 0;
 
     notifCount = await notificationService.fetchUnreadCount(isLoggedIn: auth.isLoggedIn);
 
@@ -95,8 +95,7 @@ class _HomeShellState extends State<HomeShell> {
         cartCount = cart.items.fold<int>(0, (sum, i) => sum + i.quantity);
       } catch (_) {}
       try {
-        final wish = await wishlistService.fetchWishlist();
-        wishCount = wish.count;
+        await wishlist.load();
       } catch (_) {}
     }
 
@@ -104,7 +103,7 @@ class _HomeShellState extends State<HomeShell> {
     setState(() {
       _cartBadge = cartCount;
       _notificationBadge = notifCount;
-      _wishlistBadge = wishCount;
+      _wishlistBadge = wishlist.count;
     });
   }
 
@@ -168,8 +167,8 @@ class _HomeShellState extends State<HomeShell> {
             searchController: _searchController,
             onSearch: _runShopSearch,
             onSearchTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Image search — use the web store for now')),
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
               );
             },
             pageTitle: _headerTitle,

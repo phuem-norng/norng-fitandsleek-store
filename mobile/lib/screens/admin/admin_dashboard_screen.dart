@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../services/admin_service.dart';
 import '../../theme/app_colors.dart';
+import 'admin_pos_screen.dart';
+import 'admin_products_screen.dart';
+import 'admin_reports_screen.dart';
 import '../../widgets/common/fs_stat_card.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -133,11 +136,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(height: 12),
             _QuickActionsCard(superStats: _superStats!),
           ],
+          const SizedBox(height: 24),
+          Text('Quick actions', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          _AdminLinkTile(
+            icon: Icons.inventory_2_outlined,
+            title: 'Products',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminProductsScreen()),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _AdminLinkTile(
+            icon: Icons.point_of_sale_outlined,
+            title: 'POS',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminPosScreen()),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _AdminLinkTile(
+            icon: Icons.bar_chart_outlined,
+            title: 'Reports',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
+            ),
+          ),
           const SizedBox(height: 16),
           _InfoBanner(
             icon: Icons.laptop_mac_outlined,
-            title: 'Full admin on web',
-            body: 'Product editing, orders, reports, and POS are available in the web admin panel.',
+            title: 'Advanced admin on web',
+            body: 'Gallery uploads, variant matrix, purchase orders, and invoice PDFs remain on the web admin.',
           ),
         ],
       ),
@@ -180,6 +209,45 @@ class _QuickActionsCard extends StatelessWidget {
         Text(label, style: Theme.of(context).textTheme.bodyMedium),
         Text(value, style: Theme.of(context).textTheme.titleMedium),
       ],
+    );
+  }
+}
+
+class _AdminLinkTile extends StatelessWidget {
+  const _AdminLinkTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceCard,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.primary),
+              const SizedBox(width: 12),
+              Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

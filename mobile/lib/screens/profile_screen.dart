@@ -9,9 +9,13 @@ import '../widgets/common/fs_empty_state.dart';
 import '../widgets/profile/profile_header.dart';
 import '../widgets/profile/settings_tile.dart';
 import 'admin/admin_dashboard_screen.dart';
+import 'admin/admin_pos_screen.dart';
+import 'admin/admin_products_screen.dart';
 import 'admin/admin_profile_edit_screen.dart';
+import 'admin/admin_reports_screen.dart';
 import 'customer_profile_edit_screen.dart';
 import 'login_screen.dart';
+import 'orders_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -54,7 +58,39 @@ class ProfileScreen extends StatelessWidget {
             title: 'Dashboard',
             subtitle: 'Revenue, orders, inventory overview',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  appBar: AppBar(title: const Text('Admin dashboard')),
+                  body: const AdminDashboardScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SettingsTile(
+            icon: Icons.inventory_2_outlined,
+            title: 'Products',
+            subtitle: 'View and edit catalog',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminProductsScreen()),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SettingsTile(
+            icon: Icons.point_of_sale_outlined,
+            title: 'POS',
+            subtitle: 'Scan barcodes and complete in-store sales',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminPosScreen()),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SettingsTile(
+            icon: Icons.bar_chart_outlined,
+            title: 'Reports',
+            subtitle: 'Sales trends and top products',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
             ),
           ),
           const SizedBox(height: 8),
@@ -83,15 +119,21 @@ class ProfileScreen extends StatelessWidget {
         SettingsTile(
           icon: Icons.shopping_bag_outlined,
           title: 'Orders',
-          subtitle: user.isAdmin ? 'Manage orders on the web admin' : 'Track purchases on the web store',
-          onTap: null,
-          trailing: Icon(Icons.open_in_new, size: 20, color: AppColors.textMuted),
+          subtitle: user.isAdmin ? 'View orders in admin dashboard' : 'Track your purchases',
+          onTap: user.isCustomer
+              ? () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const OrdersScreen()),
+                  )
+              : null,
+          trailing: user.isCustomer
+              ? null
+              : Icon(Icons.open_in_new, size: 20, color: AppColors.textMuted),
         ),
         const SizedBox(height: 8),
         SettingsTile(
           icon: Icons.favorite_border,
           title: 'Wishlist',
-          subtitle: 'Saved items from the storefront',
+          subtitle: 'Saved items from the shop',
           onTap: null,
         ),
         const SizedBox(height: 20),
