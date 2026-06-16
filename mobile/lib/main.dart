@@ -11,6 +11,7 @@ import 'services/image_search_service.dart';
 import 'services/order_service.dart';
 import 'services/payment_service.dart';
 import 'services/product_service.dart';
+import 'services/social_auth_service.dart';
 import 'services/wishlist_service.dart';
 
 Future<void> main() async {
