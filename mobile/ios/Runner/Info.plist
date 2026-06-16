@@ -51,9 +51,9 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Take photos to search for similar products and scan barcodes at POS.</string>
+	<string>Take photos for your profile, search for similar products, and scan barcodes at POS.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose photos to search for similar products.</string>
+	<string>Choose photos for your profile and to search for similar products.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
