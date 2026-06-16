@@ -67,8 +67,14 @@ class ApiClient {
       return data['message'].toString();
     }
     if (e.type == DioExceptionType.connectionError) {
-      return 'Cannot reach API at ${AppConfig.apiBaseUrl}. '
-          'Start Laravel and check API_BASE_URL (use your PC IP on a physical device).';
+      return 'Cannot reach API at ${AppConfig.apiBaseUrl}. Check your network or API_BASE_URL.';
+    }
+    if (e.type == DioExceptionType.badResponse && e.response?.data is String) {
+      final body = (e.response!.data as String).trimLeft();
+      if (body.startsWith('<!') || body.startsWith('<html')) {
+        return 'API returned HTML instead of JSON. Use the Laravel backend URL, not the storefront '
+            '(see AppConfig — ${AppConfig.storefrontUrl} is the web shop only).';
+      }
     }
     return e.message ?? 'Request failed';
   }

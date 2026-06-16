@@ -32,6 +32,21 @@ services:
         value: "false"
       - key: CLOUDINARY_CLOUD_NAME
         value: media-fitandsleek
+      # Mail — Resend (set RESEND_API_KEY in Render dashboard; rotate if exposed)
+      - key: MAIL_MAILER
+        value: resend
+      - key: MAIL_FROM_ADDRESS
+        value: onboarding@resend.dev
+      - key: MAIL_FROM_NAME
+        value: FitandSleek
+      # OAuth — same Google/Facebook apps as website; secrets in Render dashboard
+      - key: GOOGLE_REDIRECT_URI
+        value: https://fitandsleek-official-backend.onrender.com/api/auth/google/callback
+      - key: FACEBOOK_REDIRECT_URI
+        value: https://fitandsleek-official-backend.onrender.com/api/auth/facebook/callback
+      - key: MOBILE_OAUTH_CALLBACK_URL
+        value: fitandsleek://oauth/callback
       # Secrets (Render dashboard only): APP_KEY, DATABASE_URL, RESEND_API_KEY,
+      # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, FACEBOOK_CLIENT_ID, FACEBOOK_CLIENT_SECRET,
       # CLOUDINARY_URL, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
       # Optional later: switch to R2 + cdn.fitandsleek.online (see .env.example)

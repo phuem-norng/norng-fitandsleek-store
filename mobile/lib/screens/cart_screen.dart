@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../core/api_client.dart';
 import '../models/cart_model.dart';
 import '../providers/auth_provider.dart';
@@ -83,9 +84,11 @@ class _CartScreenState extends State<CartScreen> {
 
     if (!auth.isLoggedIn) {
       return FsEmptyState(
-        icon: Icons.shopping_bag_outlined,
-        title: 'Your cart is empty',
-        subtitle: 'Sign in to add items and save your bag across devices.',
+        icon: Icons.shopping_cart_outlined,
+        title: AppStrings.cartEmpty,
+        subtitleKm: AppStrings.cartEmptyKm1,
+        subtitle: AppStrings.cartEmptyKm2,
+        minimal: true,
         actionLabel: 'Sign in',
         onAction: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -110,9 +113,11 @@ class _CartScreenState extends State<CartScreen> {
     final cart = _cart;
     if (cart == null || cart.items.isEmpty) {
       return const FsEmptyState(
-        icon: Icons.shopping_bag_outlined,
-        title: 'Your cart is empty',
-        subtitle: 'Browse the shop and add something you love.',
+        icon: Icons.shopping_cart_outlined,
+        title: AppStrings.cartEmpty,
+        subtitleKm: AppStrings.cartEmptyKm1,
+        subtitle: AppStrings.cartEmptyKm2,
+        minimal: true,
       );
     }
 

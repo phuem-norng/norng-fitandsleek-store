@@ -5,12 +5,20 @@ import '../core/api_client.dart';
 import '../core/auth_flow.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/social_auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider(this._auth, this._api, {this.onSignedIn, this.onSignedOut});
+  AuthProvider(
+    this._auth,
+    this._api,
+    this._socialAuth, {
+    this.onSignedIn,
+    this.onSignedOut,
+  });
 
   final AuthService _auth;
   final ApiClient _api;
+  final SocialAuthService _socialAuth;
   final Future<void> Function()? onSignedIn;
   final VoidCallback? onSignedOut;
 
@@ -124,6 +132,18 @@ class AuthProvider extends ChangeNotifier {
       purpose: purpose,
       challengeToken: challengeToken,
     );
+  }
+
+  Future<void> loginWithSocial(String provider) async {
+    busy = true;
+    notifyListeners();
+    try {
+      final data = await _socialAuth.signInWithProvider(provider);
+      await _applyTokenResponse(data);
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> logout() async {

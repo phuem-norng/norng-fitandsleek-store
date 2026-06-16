@@ -21,6 +21,14 @@ class ProductModel {
 
   double get displayPrice => finalPrice ?? price ?? 0;
 
+  bool get hasDiscount =>
+      price != null && finalPrice != null && price! > finalPrice! && price! > 0;
+
+  int? get discountPercent {
+    if (!hasDiscount) return null;
+    return ((1 - finalPrice! / price!) * 100).round();
+  }
+
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final category = json['category'];
     return ProductModel(

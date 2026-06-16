@@ -22,8 +22,10 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final price = NumberFormat.simpleCurrency(name: 'USD').format(product.displayPrice);
+    final currency = NumberFormat.simpleCurrency(name: 'USD');
+    final price = currency.format(product.displayPrice);
     final imageUrl = resolveMediaUrl(product.imageUrl);
+    final discount = product.discountPercent;
 
     return Material(
       color: AppColors.surfaceCard,
@@ -44,21 +46,23 @@ class ProductCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     ProductImage(imageUrl: imageUrl, fit: BoxFit.cover),
-                    if (product.categoryName != null)
+                    if (discount != null)
                       Positioned(
                         top: 8,
                         left: 8,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
+                            color: AppColors.error,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            product.categoryName!,
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            '-$discount%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
@@ -67,7 +71,7 @@ class ProductCard extends StatelessWidget {
                         top: 8,
                         right: 8,
                         child: Material(
-                          color: Colors.white.withValues(alpha: 0.92),
+                          color: Colors.white.withValues(alpha: 0.95),
                           shape: const CircleBorder(),
                           child: InkWell(
                             customBorder: const CircleBorder(),
@@ -101,14 +105,28 @@ class ProductCard extends StatelessWidget {
                           ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      price,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                        letterSpacing: -0.2,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          price,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        if (product.hasDiscount) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            currency.format(product.price!),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),

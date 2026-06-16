@@ -10,7 +10,8 @@ import '../services/notification_service.dart';
 import '../services/product_service.dart';
 import '../services/storefront_service.dart';
 import '../theme/app_colors.dart';
-import '../widgets/mobile_store_header.dart';
+import '../l10n/app_strings.dart';
+import '../widgets/navigation/home_store_header.dart';
 import '../widgets/navigation/mobile_bottom_nav.dart';
 import '../widgets/navigation/notifications_sheet.dart';
 import 'image_search_screen.dart';
@@ -28,7 +29,6 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   MobileNavItem _nav = MobileNavItem.home;
-  bool _notificationsOpen = false;
   HeaderSettings _headerSettings = const HeaderSettings();
   final _searchController = TextEditingController();
   final _homeShopKey = GlobalKey<ShopScreenState>();
@@ -38,25 +38,7 @@ class _HomeShellState extends State<HomeShell> {
   int _notificationBadge = 0;
   int _wishlistBadge = 0;
 
-  int get _pageIndex => switch (_nav) {
-        MobileNavItem.home => 0,
-        MobileNavItem.shop => 1,
-        MobileNavItem.cart => 2,
-        MobileNavItem.wishlist => 3,
-        MobileNavItem.account => 4,
-        MobileNavItem.notifications => 0,
-      };
-
-  String? get _headerTitle => switch (_nav) {
-        MobileNavItem.home || MobileNavItem.shop => null,
-        MobileNavItem.cart => 'Cart',
-        MobileNavItem.wishlist => 'Wishlist',
-        MobileNavItem.account => 'Account',
-        MobileNavItem.notifications => null,
-      };
-
-  bool get _showHeaderSearch =>
-      _nav == MobileNavItem.home || _nav == MobileNavItem.shop;
+  int get _pageIndex => _nav.index;
 
   @override
   void initState() {
@@ -113,22 +95,13 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _openNotifications() async {
-    setState(() => _notificationsOpen = true);
     await showNotificationsSheet(context);
     if (!mounted) return;
-    setState(() => _notificationsOpen = false);
     await _refreshBadges();
   }
 
   void _onNavSelect(MobileNavItem item) {
-    if (item == MobileNavItem.notifications) {
-      _openNotifications();
-      return;
-    }
-    setState(() {
-      _notificationsOpen = false;
-      _nav = item;
-    });
+    setState(() => _nav = item);
     _refreshBadges();
   }
 
@@ -144,6 +117,7 @@ class _HomeShellState extends State<HomeShell> {
         apiClient: apiClient,
         searchController: _searchController,
         showBanner: true,
+        isHomeTab: true,
       ),
       ShopScreen(
         key: _catalogShopKey,
@@ -151,36 +125,46 @@ class _HomeShellState extends State<HomeShell> {
         apiClient: apiClient,
         searchController: _searchController,
         showBanner: false,
+        isHomeTab: false,
       ),
       const CartScreen(),
       const WishlistScreen(),
       const ProfileScreen(),
     ];
 
+    final showHomeHeader = _nav == MobileNavItem.home || _nav == MobileNavItem.shop;
+    final showWishlistHeader = _nav == MobileNavItem.wishlist;
+
     return Scaffold(
       backgroundColor: AppColors.surface,
       body: Column(
         children: [
-          MobileStoreHeader(
-            settings: _headerSettings,
-            showSearch: _showHeaderSearch,
-            searchController: _searchController,
-            onSearch: _runShopSearch,
-            onSearchTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
-              );
-            },
-            pageTitle: _headerTitle,
-          ),
+          if (showHomeHeader)
+            HomeStoreHeader(
+              settings: _headerSettings,
+              searchController: _searchController,
+              onSearch: _runShopSearch,
+              onCameraTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
+                );
+              },
+              onNotificationsTap: _openNotifications,
+              onCartTap: () => _onNavSelect(MobileNavItem.cart),
+              cartBadge: _cartBadge,
+              notificationBadge: _notificationBadge,
+            )
+          else if (showWishlistHeader)
+            const InnerPageHeader(
+              title: AppStrings.wishlistTitle,
+              leadingIcon: Icons.favorite_border,
+            ),
           Expanded(child: IndexedStack(index: _pageIndex, children: pages)),
         ],
       ),
       bottomNavigationBar: MobileBottomNav(
         selected: _nav,
-        notificationsActive: _notificationsOpen,
         cartBadge: _cartBadge,
-        notificationBadge: _notificationBadge,
         wishlistBadge: _wishlistBadge,
         onSelect: _onNavSelect,
       ),

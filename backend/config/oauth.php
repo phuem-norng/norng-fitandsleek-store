@@ -51,6 +51,8 @@ return [
         'https://www.web-fitandsleek.onrender.com',
         'https://norng-fitandsleek-store.vercel.app',
         'https://www.norng-fitandsleek-store.vercel.app',
+        'https://fitandsleek.online',
+        'https://www.fitandsleek.online',
     ]))),
 
     /*
@@ -79,6 +81,7 @@ return [
         'https://fitandsleekapp.kalapak-team.space',
         'https://api-fitandsleek.onrender.com',
         'https://norng-fitandsleek-backend.onrender.com',
+        'https://fitandsleek-official-backend.onrender.com',
         ...$extraApiOrigins,
     ]))),
 
@@ -90,5 +93,12 @@ return [
         env('OAUTH_TRUST_ONRENDER_API_HOSTS', true),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /*
+    | Deep-link callbacks for Flutter / native apps (e.g. fitandsleek://oauth/callback).
+    */
+    'allowed_mobile_callback_urls' => array_values(array_unique(array_filter([
+        rtrim((string) env('MOBILE_OAUTH_CALLBACK_URL', 'fitandsleek://oauth/callback'), '/'),
+    ]))),
 
 ];

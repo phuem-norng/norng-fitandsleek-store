@@ -9,6 +9,8 @@ import '../models/product_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wishlist_provider.dart';
 import '../services/product_service.dart';
+import '../theme/app_colors.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/common/fs_empty_state.dart';
 import '../widgets/home/category_strip.dart';
 import '../widgets/home/home_banner_carousel.dart';
@@ -22,12 +24,14 @@ class ShopScreen extends StatefulWidget {
     required this.apiClient,
     required this.searchController,
     this.showBanner = true,
+    this.isHomeTab = false,
   });
 
   final ProductService productService;
   final ApiClient apiClient;
   final TextEditingController searchController;
   final bool showBanner;
+  final bool isHomeTab;
 
   @override
   State<ShopScreen> createState() => ShopScreenState();
@@ -201,6 +205,7 @@ class ShopScreenState extends State<ShopScreen> {
     if (_selectedBrandName != null) return _selectedBrandName!;
     final q = widget.searchController.text.trim();
     if (q.isNotEmpty) return 'Results for "$q"';
+    if (widget.isHomeTab) return AppStrings.newArrivals;
     return 'All products';
   }
 
@@ -229,26 +234,47 @@ class ShopScreenState extends State<ShopScreen> {
         slivers: [
           if (widget.showBanner)
             SliverToBoxAdapter(child: HomeBannerCarousel(banners: _banners)),
-          SliverToBoxAdapter(
-            child: CategoryStrip(
-              brands: _brands,
-              selectedId: _selectedBrandId,
-              onSelected: _onBrandSelected,
+          if (widget.showBanner && _brands.isNotEmpty)
+            SliverToBoxAdapter(
+              child: CategoryStrip(
+                brands: _brands,
+                selectedId: _selectedBrandId,
+                onSelected: _onBrandSelected,
+              ),
             ),
-          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      _productsSectionTitle,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _productsSectionTitle,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        if (widget.isHomeTab && _products.isNotEmpty)
+                          Text(
+                            'ថ្មីៗ • ${_products.length} items',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.textMuted,
+                                ),
                           ),
+                      ],
                     ),
                   ),
+                  if (widget.isHomeTab)
+                    TextButton(
+                      onPressed: () {},
+                      child: const Text(
+                        '${AppStrings.seeAll} >',
+                        style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   if (_loading)
                     const SizedBox(
                       width: 18,

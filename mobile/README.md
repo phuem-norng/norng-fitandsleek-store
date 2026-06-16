@@ -5,7 +5,7 @@ Flutter storefront for **FitandSleek Pro**, using the same Laravel API as `backe
 ## Prerequisites
 
 - Flutter 3.9+ ([install](https://docs.flutter.dev/get-started/install))
-- Laravel API running (see project root `README.md`), typically `http://127.0.0.1:8001`
+- Network access to the live API at [https://www.fitandsleek.online](https://www.fitandsleek.online/)
 
 ## Quick start
 
@@ -15,18 +15,22 @@ flutter pub get
 flutter run
 ```
 
-### API URL (important)
+### API URL
 
-| Environment | `API_BASE_URL` | `BACKEND_ORIGIN` (images) |
-|-------------|----------------|---------------------------|
-| Android emulator | `http://10.0.2.2:8001/api` (default) | `http://10.0.2.2:8001` |
-| iOS simulator / desktop | `http://127.0.0.1:8001/api` (default) | `http://127.0.0.1:8001` |
-| Physical phone (same Wi‑Fi) | `http://<your-pc-ip>:8001/api` | `http://<your-pc-ip>:8001` |
+**Default API** (paired with [fitandsleek.online](https://www.fitandsleek.online/) storefront):
 
-Override defaults:
+| Setting | Value |
+|---------|--------|
+| Storefront | `https://www.fitandsleek.online` |
+| `API_BASE_URL` | `https://fitandsleek-official-backend.onrender.com/api` |
+| `BACKEND_ORIGIN` | `https://fitandsleek-official-backend.onrender.com` |
+
+The web shop hostname serves React only — do not call `/api` on `www.fitandsleek.online` (returns HTML).
+
+Override for local backend:
 
 ```bash
-flutter run --dart-define=API_BASE_URL=http://192.168.1.42:8001/api --dart-define=BACKEND_ORIGIN=http://192.168.1.42:8001
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8001/api --dart-define=BACKEND_ORIGIN=http://127.0.0.1:8001
 ```
 
 ## Features (v1)

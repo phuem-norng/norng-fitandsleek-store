@@ -19,11 +19,13 @@ Future<void> main() async {
   final deviceHeaders = await DeviceHeaders.load();
   final apiClient = ApiClient(deviceHeaders: deviceHeaders);
   final authService = AuthService(apiClient);
+  final socialAuthService = SocialAuthService(apiClient);
   final wishlistService = WishlistService(apiClient);
   final wishlistProvider = WishlistProvider(wishlistService);
   final authProvider = AuthProvider(
     authService,
     apiClient,
+    socialAuthService,
     onSignedIn: wishlistProvider.load,
     onSignedOut: wishlistProvider.clear,
   );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../providers/auth_provider.dart';
 import '../providers/wishlist_provider.dart';
 import '../services/product_service.dart';
@@ -53,8 +54,10 @@ class _WishlistScreenState extends State<WishlistScreen> {
     if (wishlist.products.isEmpty) {
       return const FsEmptyState(
         icon: Icons.favorite_border,
-        title: 'Wishlist is empty',
-        subtitle: 'Tap the heart on products in the shop to save them here.',
+        title: AppStrings.wishlistEmpty,
+        subtitleKm: AppStrings.wishlistEmptyKm,
+        subtitle: AppStrings.wishlistEmptyEn,
+        minimal: true,
       );
     }
 

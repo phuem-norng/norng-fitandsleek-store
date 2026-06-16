@@ -54,5 +54,16 @@
 	<string>Take photos to search for similar products and scan barcodes at POS.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose photos to search for similar products.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.fitandsleek.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fitandsleek</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

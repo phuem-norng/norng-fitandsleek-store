@@ -6,6 +6,8 @@ import '../core/api_client.dart';
 import '../core/auth_flow.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/common/fs_button.dart';
+import '../widgets/auth/auth_social_buttons.dart';
+import '../services/social_auth_service.dart';
 import 'otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -65,6 +67,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(api.apiMessage(e))),
+      );
+    }
+  }
+
+  Future<void> _socialSignIn(String provider) async {
+    final auth = context.read<AuthProvider>();
+    try {
+      await auth.loginWithSocial(provider);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      final message = socialAuthErrorMessage(e);
+      if (message.isEmpty) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
       );
     }
   }
@@ -151,6 +169,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onPressed: auth.busy ? null : _submit,
                   loading: auth.busy,
                   variant: FsButtonVariant.accent,
+                ),
+                const AuthSocialDivider(),
+                AuthSocialButtons(
+                  disabled: auth.busy,
+                  onGoogle: () => _socialSignIn('google'),
+                  onFacebook: () => _socialSignIn('facebook'),
                 ),
               ],
             ),

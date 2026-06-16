@@ -7,6 +7,8 @@ import '../core/auth_flow.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common/fs_button.dart';
+import '../widgets/auth/auth_social_buttons.dart';
+import '../services/social_auth_service.dart';
 import 'forgot_password_screen.dart';
 import 'otp_screen.dart';
 import 'register_screen.dart';
@@ -59,6 +61,22 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(api.apiMessage(e))),
+      );
+    }
+  }
+
+  Future<void> _socialSignIn(String provider) async {
+    final auth = context.read<AuthProvider>();
+    try {
+      await auth.loginWithSocial(provider);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      final message = socialAuthErrorMessage(e);
+      if (message.isEmpty) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
       );
     }
   }
@@ -149,6 +167,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: auth.busy ? null : _submit,
                   loading: auth.busy,
                   icon: Icons.arrow_forward_rounded,
+                ),
+                const AuthSocialDivider(),
+                AuthSocialButtons(
+                  disabled: auth.busy,
+                  onGoogle: () => _socialSignIn('google'),
+                  onFacebook: () => _socialSignIn('facebook'),
                 ),
                 const SizedBox(height: 12),
                 TextButton(

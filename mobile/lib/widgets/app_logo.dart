@@ -4,12 +4,12 @@ import '../config/app_config.dart';
 import '../utils/media_url.dart';
 import 'product_image.dart';
 
-/// Storefront logo — image from backend (`/logo.png`) with header-safe text fallback.
-class AppLogo extends StatelessWidget {
+/// Storefront logo — image from API / site static `/logo.png` (same as web [Logo.jsx]).
+class AppLogo extends StatefulWidget {
   const AppLogo({
     super.key,
     this.logoUrl,
-    this.height = 56,
+    this.height = 48,
     this.logoText = 'FitandSleek',
     this.onColoredHeader = false,
   });
@@ -17,86 +17,90 @@ class AppLogo extends StatelessWidget {
   final String? logoUrl;
   final double height;
   final String logoText;
-  /// White typography on sage header when the image fails to load.
   final bool onColoredHeader;
 
-  String get _resolvedUrl {
-    final raw = logoUrl?.trim();
-    if (raw == null || raw.isEmpty || raw == '/logo.png' || raw.endsWith('/logo.png')) {
-      return resolveMediaUrl(AppConfig.siteLogoPath);
+  @override
+  State<AppLogo> createState() => _AppLogoState();
+}
+
+class _AppLogoState extends State<AppLogo> {
+  int _candidateIndex = 0;
+
+  List<String> get _candidates {
+    final urls = <String>[];
+    final raw = widget.logoUrl?.trim();
+    if (raw != null && raw.isNotEmpty) {
+      urls.add(resolveMediaUrl(raw));
     }
-    return resolveMediaUrl(raw);
+    urls.add('${AppConfig.storefrontUrl}${AppConfig.siteLogoPath}');
+    urls.add('${AppConfig.backendOrigin}${AppConfig.siteLogoPath}');
+    return urls.where((u) => u.isNotEmpty).toList();
+  }
+
+  String get _currentUrl {
+    final list = _candidates;
+    if (list.isEmpty) return '';
+    final i = _candidateIndex.clamp(0, list.length - 1);
+    return list[i];
+  }
+
+  void _tryNextUrl() {
+    final list = _candidates;
+    if (_candidateIndex + 1 < list.length) {
+      setState(() => _candidateIndex++);
+    }
+  }
+
+  @override
+  void didUpdateWidget(AppLogo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.logoUrl != widget.logoUrl) {
+      _candidateIndex = 0;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: height, maxWidth: height * 2.4),
+      child: SizedBox(
+        height: widget.height,
+        width: widget.height * 2.75,
         child: ProductImage(
-          imageUrl: _resolvedUrl,
+          key: ValueKey(_currentUrl),
+          imageUrl: _currentUrl,
           fit: BoxFit.contain,
-          error: onColoredHeader ? _headerTextFallback() : _defaultTextFallback(context),
+          error: _buildError(context),
         ),
       ),
     );
   }
 
-  Widget _headerTextFallback() {
-    final title = _displayTitle(logoText);
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: height * 0.26,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
-            height: 1.05,
+  Widget _buildError(BuildContext context) {
+    if (_candidateIndex + 1 < _candidates.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _tryNextUrl();
+      });
+      return SizedBox(
+        height: widget.height,
+        child: const Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
           ),
         ),
-        Text(
-          'GYM CLOTHING',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.88),
-            fontSize: height * 0.155,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.45,
-            height: 1.1,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _defaultTextFallback(BuildContext context) {
-    return Text(
-      logoText,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-    );
-  }
-
-  static String _displayTitle(String raw) {
-    final t = raw.trim();
-    if (t.isEmpty) return 'FIT & SLEEK';
-    final upper = t.toUpperCase();
-    if (upper.contains('&') || upper.contains(' ')) return upper;
-    if (upper.contains('FIT') && upper.contains('SLEEK')) {
-      return upper.replaceAll(RegExp(r'FITANDSLEEK|FITAND SLEEK', caseSensitive: false), 'FIT & SLEEK');
+      );
     }
-    return upper;
+
+    if (widget.onColoredHeader) {
+      return Icon(
+        Icons.storefront_rounded,
+        size: widget.height * 0.55,
+        color: Colors.white.withValues(alpha: 0.9),
+      );
+    }
+
+    return Icon(Icons.storefront_outlined, size: widget.height * 0.5, color: Colors.grey);
   }
 }

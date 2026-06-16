@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/app_strings.dart';
 import '../../models/brand_model.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/media_url.dart';
@@ -71,15 +72,34 @@ class _CategoryStripState extends State<CategoryStrip> {
   Widget build(BuildContext context) {
     if (widget.brands.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: ColoredBox(
-        color: const Color(0xFFF3F4F6),
-        child: SizedBox(
-          height: 72,
-          child: Stack(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListView.separated(
+              Text(
+                AppStrings.topBrands,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                AppStrings.topBrandsKm,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ColoredBox(
+            color: const Color(0xFFF3F4F6),
+            child: SizedBox(
+              height: 72,
+              child: Stack(
+                children: [
+                  ListView.separated(
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -139,6 +159,8 @@ class _CategoryStripState extends State<CategoryStrip> {
           ),
         ),
       ),
+      ),
+      ],
     );
   }
 }

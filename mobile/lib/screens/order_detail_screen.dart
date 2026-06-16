@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../utils/media_url.dart';
 import '../widgets/common/fs_button.dart';
 import '../widgets/product_image.dart';
+import 'order_tracking_screen.dart';
 import 'payment_screen.dart';
 
 class OrderDetailScreen extends StatelessWidget {
@@ -88,6 +89,14 @@ class OrderDetailScreen extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          FsButton(
+            label: 'Track order',
+            icon: Icons.local_shipping_outlined,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => OrderTrackingScreen(order: order)),
+            ),
+          ),
         ],
       ),
     );

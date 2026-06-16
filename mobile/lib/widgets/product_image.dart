@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../utils/media_url.dart' show isDataUri;
 
@@ -27,6 +28,16 @@ class ProductImage extends StatelessWidget {
     dotAll: true,
   );
 
+  static bool isSvgUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('.svg')) return true;
+    try {
+      return Uri.parse(url).path.toLowerCase().endsWith('.svg');
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (imageUrl.isEmpty) {
@@ -39,6 +50,16 @@ class ProductImage extends StatelessWidget {
         return error ?? _defaultError();
       }
       return Image.memory(bytes, fit: fit, gaplessPlayback: true);
+    }
+
+    // Web `<img>` renders SVG; Flutter needs flutter_svg (Nike, ZARA, UNIQLO, etc.).
+    if (isSvgUrl(imageUrl)) {
+      return SvgPicture.network(
+        imageUrl,
+        fit: fit,
+        placeholderBuilder: (_) => placeholder ?? _defaultPlaceholder(),
+        errorBuilder: (_, __, ___) => error ?? _defaultError(),
+      );
     }
 
     // Flutter web decodes images via canvas; cross-origin /storage needs CORS.

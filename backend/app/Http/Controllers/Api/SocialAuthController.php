@@ -164,11 +164,41 @@ class SocialAuthController extends Controller
         return (array) config('oauth.allowed_frontend_origins', []);
     }
 
+    protected function allowedMobileCallbackUrls(): array
+    {
+        return (array) config('oauth.allowed_mobile_callback_urls', []);
+    }
+
+    protected function isAllowedMobileCallbackUrl(string $url): bool
+    {
+        $url = rtrim(trim($url), '/');
+        if ($url === '') {
+            return false;
+        }
+
+        foreach ($this->allowedMobileCallbackUrls() as $allowed) {
+            $allowed = rtrim((string) $allowed, '/');
+            if ($allowed !== '' && strcasecmp($url, $allowed) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     protected function isAllowedFrontendCallbackUrl(string $url): bool
     {
         $url = rtrim(trim($url), '/');
 
-        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+        if ($url === '') {
+            return false;
+        }
+
+        if ($this->isAllowedMobileCallbackUrl($url)) {
+            return true;
+        }
+
+        if (! filter_var($url, FILTER_VALIDATE_URL)) {
             return false;
         }
 
