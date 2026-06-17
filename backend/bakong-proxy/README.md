@@ -1,13 +1,16 @@
 # Bakong NBC Proxy
 
-NBC blocks `check_transaction_by_md5` from outside Cambodia (**errorCode 15**). Render (US) needs a Cambodia egress proxy for status polling.
+NBC blocks `check_transaction_by_md5` from outside Cambodia (**errorCode 15**). Render (US) cannot poll status directly.
 
-| Option | File | Render env |
-|--------|------|------------|
-| **Cloudflare Worker** (recommended) | [`worker-forward.js`](./worker-forward.js) | `BAKONG_PROXY_STYLE=forward` |
-| **PHP on Cambodia VPS** | [`index.php`](./index.php) | `BAKONG_PROXY_STYLE=legacy` |
+**Recommended without local Mac proxy:** register NBC **webhook** → `https://fitandsleek-official-backend.onrender.com/api/payments/khqr/webhook` and set `BAKONG_WEBHOOK_SECRET` on Render. The app marks orders paid when NBC POSTs (polling is backup only).
 
-Webhook (`/api/payments/khqr/webhook`) does **not** need this proxy.
+| Option | File | When |
+|--------|------|------|
+| **NBC webhook → Render** | — | Best default (no proxy) |
+| **PHP on Cambodia VPS** | [`index.php`](./index.php) | Faster polling backup; `BAKONG_PROXY_STYLE=legacy` |
+| ~~Cloudflare Worker~~ | — | **Blocked by NBC** — do not use |
+
+Webhook (`/api/payments/khqr/webhook`) does **not** need a Cambodia proxy.
 
 ---
 

@@ -25,6 +25,10 @@ class OrderObserver
 
     public function updated(Order $order): void
     {
+        if ($order->wasChanged('status') && in_array($order->status, ['completed', 'delivered'], true)) {
+            $this->handleOrderCompleted($order);
+        }
+
         $statusPaid = $order->wasChanged('status') && $order->status === 'paid';
         $paymentPaid = $order->wasChanged('payment_status') && $order->payment_status === 'paid';
 
@@ -104,6 +108,31 @@ class OrderObserver
                 'order_id' => $order->id,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    private function handleOrderCompleted(Order $order): void
+    {
+        $order->loadMissing('shipment');
+
+        if ($order->shipment && $order->shipment->status !== 'delivered') {
+            ShipmentTrackingEvent::create([
+                'shipment_id' => $order->shipment->id,
+                'status' => 'delivered',
+                'note' => 'Order marked as completed.',
+                'event_time' => now(),
+            ]);
+
+            $order->shipment->update([
+                'status' => 'delivered',
+                'delivered_at' => $order->shipment->delivered_at ?? now(),
+            ]);
+
+            return;
+        }
+
+        if (! $order->shipment) {
+            $this->telegramService->notifyOrderDeliveredForOrder($order);
         }
     }
 

@@ -374,9 +374,21 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
+            $payment->refresh();
+            $order->refresh();
+
+            if ($payment->status === 'paid' || $order->payment_status === 'paid') {
+                return response()->json([
+                    'payment' => $this->sanitizePayment($payment),
+                ]);
+            }
+
             return response()->json([
-                'message' => 'Failed to check KHQR status. Please try again.',
-            ], 500);
+                'payment' => $this->sanitizePayment($payment),
+                'message' => blank(config('services.bakong.proxy_url'))
+                    ? 'Waiting for payment confirmation. Keep this screen open after you pay in your banking app.'
+                    : 'Failed to check KHQR status. Please try again.',
+            ]);
         }
     }
 

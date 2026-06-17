@@ -143,6 +143,16 @@ class TelegramService
             return;
         }
 
+        $this->notifyOrderDeliveredForOrder($order);
+    }
+
+    public function notifyOrderDeliveredForOrder(Order $order): void
+    {
+        if (! $this->isEnabled()) {
+            return;
+        }
+
+        $order->loadMissing('user');
         $label = $order->order_number ?: '#'.$order->id;
 
         $message = "🎉 *Order delivered*\n\n"
@@ -157,6 +167,26 @@ class TelegramService
         );
 
         $this->notifyOrderRecipients($order, $message);
+        $this->notifyAdminOrderDelivered($order);
+    }
+
+    public function notifyAdminOrderDelivered(Order $order): void
+    {
+        $chatId = config('services.telegram.admin_chat_id');
+        if (! filled($chatId)) {
+            return;
+        }
+
+        $order->loadMissing('user');
+        $label = $order->order_number ?: '#'.$order->id;
+        $customer = $order->user?->name ?: 'Guest';
+
+        $message = "✅ *Order completed*\n\n"
+            ."Order: `{$label}`\n"
+            ."Customer: {$customer}\n"
+            ."Marked as delivered/completed.";
+
+        $this->sendMessage((string) $chatId, $message);
     }
 
     public function notifyAdminOfNewOrder(Order $order): void

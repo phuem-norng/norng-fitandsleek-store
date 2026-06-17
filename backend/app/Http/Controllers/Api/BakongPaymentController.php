@@ -178,13 +178,25 @@ class BakongPaymentController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            return response()->json(array_merge(
+            $payment->refresh();
+            $order->refresh();
+            if ($payment->status === 'paid' || $order->payment_status === 'paid') {
+                return response()->json(array_merge(
+                    $this->formatPaymentResponse($payment),
+                    ['status' => 'paid']
+                ));
+            }
+
+            $pendingPayload = array_merge(
                 $this->formatPaymentResponse($payment),
-                [
-                    'status' => 'pending',
-                    'message' => 'Payment status check is temporarily unavailable. Keep this screen open.',
-                ]
-            ));
+                ['status' => 'pending']
+            );
+
+            $pendingPayload['message'] = blank(config('services.bakong.proxy_url'))
+                ? 'Waiting for payment confirmation. Keep this screen open after you pay in your banking app.'
+                : 'Payment status check is temporarily unavailable. Keep this screen open.';
+
+            return response()->json($pendingPayload);
         }
 
         $responseCode = $response['responseCode'] ?? $response['response_code'] ?? null;
