@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../models/banner_model.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/media_url.dart';
@@ -116,6 +116,7 @@ class _DefaultHeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -138,9 +139,9 @@ class _DefaultHeroBanner extends StatelessWidget {
                     color: AppColors.accent.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text(
-                    AppStrings.heroBadge,
-                    style: TextStyle(
+                  child: Text(
+                    l10n.heroBadge,
+                    style: const TextStyle(
                       color: AppColors.accent,
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -149,9 +150,9 @@ class _DefaultHeroBanner extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  AppStrings.heroTitleKm,
-                  style: TextStyle(
+                Text(
+                  l10n.heroTitle,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -160,7 +161,7 @@ class _DefaultHeroBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  AppStrings.heroTitleEn,
+                  l10n.heroTitleSecondary,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13),
                 ),
                 const SizedBox(height: 12),
@@ -170,9 +171,9 @@ class _DefaultHeroBanner extends StatelessWidget {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text(
-                    AppStrings.shopNow,
-                    style: TextStyle(
+                  child: Text(
+                    l10n.shopNow,
+                    style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,

@@ -30,8 +30,9 @@ class ProductController extends Controller
         $this->applyStorefrontListingFilters($q, $request);
 
         $perPage = min((int) $request->get('per_page', 12), 200);
-        $sort = strtolower(trim((string) $request->input('sort', '')));
-        if ($sort !== '' && $sort !== 'recommend') {
+        $sort = strtolower(trim((string) $request->input('sort', 'recommend')));
+
+        if ($sort !== 'recommend') {
             $this->applySortFilter($q, $request);
         } elseif (!$this->applyTabFilter($q, $request)) {
             $q->orderByDesc('products.id');
@@ -524,7 +525,7 @@ class ProductController extends Controller
 
     public function show(string $slug)
     {
-        $product = Product::with(['category', 'activeDiscount'])->where('slug', $slug)->firstOrFail();
+        $product = Product::with(['category', 'brand', 'activeDiscount'])->where('slug', $slug)->firstOrFail();
         if ($product->activeDiscount) {
             $product->discount = $this->formatStorefrontDiscount($product);
         }

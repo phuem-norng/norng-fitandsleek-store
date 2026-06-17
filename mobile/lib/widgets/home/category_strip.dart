@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../models/brand_model.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/media_url.dart';
@@ -81,12 +81,8 @@ class _CategoryStripState extends State<CategoryStrip> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                AppStrings.topBrands,
+                context.l10n.topBrands,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              Text(
-                AppStrings.topBrandsKm,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
               ),
             ],
           ),

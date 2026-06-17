@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../l10n/app_strings.dart';
 import '../../models/header_settings.dart';
 import '../../theme/app_colors.dart';
 import '../app_logo.dart';
 
-/// Home / Shop sage header — brand, location, bell, cart, Khmer search pill.
+/// Logo height in the centered home/shop header row.
+const double kHomeHeaderLogoHeight = 80;
+
+/// Home / Shop sage header — brand, bell, cart.
 class HomeStoreHeader extends StatelessWidget {
   const HomeStoreHeader({
     super.key,
     required this.settings,
-    this.searchController,
-    this.onSearch,
-    this.onCameraTap,
     this.onNotificationsTap,
     this.onCartTap,
     this.cartBadge = 0,
@@ -20,9 +19,6 @@ class HomeStoreHeader extends StatelessWidget {
   });
 
   final HeaderSettings settings;
-  final TextEditingController? searchController;
-  final VoidCallback? onSearch;
-  final VoidCallback? onCameraTap;
   final VoidCallback? onNotificationsTap;
   final VoidCallback? onCartTap;
   final int cartBadge;
@@ -53,38 +49,40 @@ class HomeStoreHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    AppLogo(
-                      logoUrl: settings.logoUrl,
-                      logoText: settings.logoText,
-                      height: 48,
-                      onColoredHeader: true,
-                    ),
-                    const Spacer(),
-                    _HeaderIconButton(
-                      icon: Icons.notifications_outlined,
-                      badge: notificationBadge,
-                      onTap: onNotificationsTap,
-                    ),
-                    const SizedBox(width: 2),
-                    _HeaderIconButton(
-                      icon: Icons.shopping_cart_outlined,
-                      badge: cartBadge,
-                      onTap: onCartTap,
-                    ),
-                  ],
-                ),
-                if (settings.searchEnabled) ...[
-                  const SizedBox(height: 10),
-                  _SearchPill(
-                    controller: searchController,
-                    placeholder: AppStrings.searchPlaceholder,
-                    onSubmitted: onSearch,
-                    onCameraTap: onCameraTap,
+                SizedBox(
+                  height: kHomeHeaderLogoHeight,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      AppLogo(
+                        logoUrl: settings.logoUrl,
+                        logoText: settings.logoText,
+                        height: kHomeHeaderLogoHeight,
+                        onColoredHeader: true,
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: StoreHeaderIconButton(
+                          icon: Icons.notifications_outlined,
+                          badge: notificationBadge,
+                          onTap: onNotificationsTap,
+                        ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: StoreHeaderIconButton(
+                          icon: Icons.shopping_cart_outlined,
+                          badge: cartBadge,
+                          onTap: onCartTap,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ],
             ),
           ),
@@ -101,6 +99,8 @@ class InnerPageHeader extends StatelessWidget {
     this.subtitle,
     this.leadingIcon,
     this.onBack,
+    this.onCartTap,
+    this.cartBadge = 0,
     this.backgroundColor = AppColors.storeHeader,
   });
 
@@ -108,6 +108,8 @@ class InnerPageHeader extends StatelessWidget {
   final String? subtitle;
   final IconData? leadingIcon;
   final VoidCallback? onBack;
+  final VoidCallback? onCartTap;
+  final int cartBadge;
   final Color backgroundColor;
 
   @override
@@ -142,6 +144,12 @@ class InnerPageHeader extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (onCartTap != null)
+                    StoreHeaderIconButton(
+                      icon: Icons.shopping_cart_outlined,
+                      badge: cartBadge,
+                      onTap: onCartTap,
+                    ),
                 ],
               ),
               if (subtitle != null)
@@ -164,16 +172,19 @@ class InnerPageHeader extends StatelessWidget {
   }
 }
 
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
+class StoreHeaderIconButton extends StatelessWidget {
+  const StoreHeaderIconButton({
+    super.key,
     required this.icon,
     this.badge = 0,
     this.onTap,
+    this.iconColor = Colors.white,
   });
 
   final IconData icon;
   final int badge;
   final VoidCallback? onTap;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +193,7 @@ class _HeaderIconButton extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onTap,
-          icon: Icon(icon, color: Colors.white, size: 24),
+          icon: Icon(icon, color: iconColor, size: 24),
           visualDensity: VisualDensity.compact,
         ),
         if (badge > 0)
@@ -201,60 +212,6 @@ class _HeaderIconButton extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _SearchPill extends StatelessWidget {
-  const _SearchPill({
-    this.controller,
-    required this.placeholder,
-    this.onSubmitted,
-    this.onCameraTap,
-  });
-
-  final TextEditingController? controller;
-  final String placeholder;
-  final VoidCallback? onSubmitted;
-  final VoidCallback? onCameraTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 42,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 12),
-          Icon(Icons.search_rounded, size: 20, color: Colors.white.withValues(alpha: 0.9)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              onSubmitted: (_) => onSubmitted?.call(),
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(fontSize: 13, color: Colors.white, height: 1.25),
-              cursorColor: Colors.white,
-              decoration: InputDecoration(
-                isCollapsed: true,
-                hintText: placeholder,
-                hintStyle: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.75)),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 11),
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: onCameraTap,
-            icon: Icon(Icons.photo_camera_outlined, size: 20, color: Colors.white.withValues(alpha: 0.9)),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
     );
   }
 }

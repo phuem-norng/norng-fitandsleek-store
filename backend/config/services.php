@@ -84,6 +84,8 @@ return [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'bot_name' => env('TELEGRAM_BOT_NAME'),
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+        'webhook_url' => env('TELEGRAM_WEBHOOK_URL'),
+        'admin_chat_id' => env('TELEGRAM_ADMIN_CHAT_ID'),
         'broadcast_messages_per_second' => (int) env('TELEGRAM_BROADCAST_MESSAGES_PER_SECOND', 25),
         'broadcast_chunk_size' => (int) env('TELEGRAM_BROADCAST_CHUNK_SIZE', 100),
         'broadcast_retry_attempts' => (int) env('TELEGRAM_BROADCAST_RETRY_ATTEMPTS', 3),

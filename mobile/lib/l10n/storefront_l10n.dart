@@ -208,6 +208,15 @@ class StorefrontL10n {
   String get ordersEmptySub => _t('Your purchases will appear here after checkout.', 'ការបញ្ជាទិញនឹងបង្ហាញនៅទីនេះបន្ទាប់ពីទូទាត់។');
   String get ordersUnavailable => _t('Could not load orders', 'មិនអាចផ្ទុកការបញ្ជាទិញ');
 
+  // Telegram
+  String get connectTelegram => _t('Connect Telegram', 'ភ្ជាប់ Telegram');
+  String get telegramOrderUpdates => _t('Get delivery updates on Telegram', 'ទទួលការដឹកជញ្ជូនតាម Telegram');
+  String get telegramNotificationsTitle => _t('Telegram notifications', 'ការជូនដំណឹង Telegram');
+  String get telegramNotificationsHint => _t(
+        'Connect once to receive order, shipping, and delivery updates in Telegram.',
+        'ភ្ជាប់ម្តងដើម្បីទទួលការបញ្ជាទិញ ការដឹកជញ្ជូន និងការដឹកជញ្ជូនតាម Telegram។',
+      );
+
   // Filters
   String get priceRange => _t('Price Range', 'ជួរតម្លៃ');
   String get gender => _t('Gender', 'ភេទ');

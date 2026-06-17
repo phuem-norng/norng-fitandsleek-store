@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/api_client.dart';
+import 'providers/app_settings_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/cart_provider.dart';
 import 'providers/wishlist_provider.dart';
 import 'screens/home_shell.dart';
 import 'services/auth_service.dart';
-import 'services/cart_service.dart';
-import 'services/notification_service.dart';
+import 'services/customer_account_service.dart';
 import 'services/image_search_service.dart';
+import 'services/notification_service.dart';
 import 'services/order_service.dart';
 import 'services/payment_service.dart';
 import 'services/product_service.dart';
+import 'services/storefront_content_service.dart';
+import 'services/telegram_service.dart';
 import 'services/wishlist_service.dart';
 import 'theme/app_theme.dart';
 
@@ -20,8 +24,9 @@ class FitandSleekApp extends StatelessWidget {
     super.key,
     required this.apiClient,
     required this.authProvider,
+    required this.appSettingsProvider,
     required this.productService,
-    required this.cartService,
+    required this.cartProvider,
     required this.orderService,
     required this.paymentService,
     required this.imageSearchService,
@@ -30,8 +35,9 @@ class FitandSleekApp extends StatelessWidget {
 
   final ApiClient apiClient;
   final AuthProvider authProvider;
+  final AppSettingsProvider appSettingsProvider;
   final ProductService productService;
-  final CartService cartService;
+  final CartProvider cartProvider;
   final OrderService orderService;
   final PaymentService paymentService;
   final ImageSearchService imageSearchService;
@@ -43,14 +49,18 @@ class FitandSleekApp extends StatelessWidget {
       providers: [
         Provider<ApiClient>.value(value: apiClient),
         ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ChangeNotifierProvider<AppSettingsProvider>.value(value: appSettingsProvider),
         ChangeNotifierProvider<WishlistProvider>.value(value: wishlistProvider),
+        ChangeNotifierProvider<CartProvider>.value(value: cartProvider),
         Provider<ProductService>.value(value: productService),
-        Provider<CartService>.value(value: cartService),
         Provider<OrderService>.value(value: orderService),
         Provider<PaymentService>.value(value: paymentService),
         Provider<ImageSearchService>.value(value: imageSearchService),
+        Provider<StorefrontContentService>(
+          create: (_) => StorefrontContentService(apiClient),
+        ),
         Provider<NotificationService>(
-          create: (_) => NotificationService(apiClient),
+          create: (ctx) => NotificationService(apiClient),
         ),
         Provider<WishlistService>(
           create: (_) => WishlistService(apiClient),
@@ -58,12 +68,24 @@ class FitandSleekApp extends StatelessWidget {
         Provider<AuthService>(
           create: (_) => AuthService(apiClient),
         ),
+        Provider<CustomerAccountService>(
+          create: (_) => CustomerAccountService(apiClient),
+        ),
+        Provider<TelegramService>(
+          create: (_) => TelegramService(apiClient),
+        ),
       ],
-      child: MaterialApp(
-        title: 'FitandSleek',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        home: const _RootGate(),
+      child: Consumer<AppSettingsProvider>(
+        builder: (context, settings, _) {
+          return MaterialApp(
+            title: 'FitandSleek',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: settings.themeMode,
+            home: const _RootGate(),
+          );
+        },
       ),
     );
   }

@@ -12,6 +12,7 @@ import '../models/payment_model.dart';
 import '../services/payment_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common/fs_button.dart';
+import '../widgets/telegram_connect_button.dart';
 
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({
@@ -198,7 +199,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
                   ),
                   child: QrImageView(
                     data: _payment!.qrString!,
@@ -247,6 +247,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 loading: _creating,
               ),
             if (_status == 'paid') ...[
+              const SizedBox(height: 12),
+              TelegramConnectButton(orderNumber: widget.orderNumber),
               const SizedBox(height: 12),
               FsButton(
                 label: 'Done',

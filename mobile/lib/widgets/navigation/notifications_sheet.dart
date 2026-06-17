@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_colors.dart';
@@ -11,7 +12,7 @@ Future<void> showNotificationsSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -58,6 +59,12 @@ class _NotificationsSheetBodyState extends State<_NotificationsSheetBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
+    final border = theme.dividerTheme.color ?? theme.colorScheme.outline;
+
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.55,
@@ -73,7 +80,7 @@ class _NotificationsSheetBodyState extends State<_NotificationsSheetBody> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
+                  color: border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -84,16 +91,17 @@ class _NotificationsSheetBodyState extends State<_NotificationsSheetBody> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Notifications',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      l10n.menuNotifications,
+                      style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w700,
+                            color: onSurface,
                           ),
                     ),
                   ),
                   if (_unread > 0)
                     TextButton(
                       onPressed: _markAllRead,
-                      child: const Text('Mark all read'),
+                      child: Text(l10n.markAllRead),
                     ),
                 ],
               ),
@@ -102,47 +110,50 @@ class _NotificationsSheetBodyState extends State<_NotificationsSheetBody> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _items.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
-                            'No notifications yet',
-                            style: TextStyle(color: AppColors.textMuted),
+                            l10n.notificationsEmpty,
+                            style: TextStyle(color: onSurfaceVariant),
                           ),
                         )
                       : ListView.separated(
                           controller: scrollController,
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           itemCount: _items.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          separatorBuilder: (_, __) => Divider(height: 1, color: border),
                           itemBuilder: (context, i) {
                             final n = _items[i];
                             return ListTile(
                               contentPadding: const EdgeInsets.symmetric(vertical: 6),
                               leading: CircleAvatar(
-                                backgroundColor:
-                                    n.isRead ? AppColors.surface : AppColors.primary,
+                                backgroundColor: n.isRead
+                                    ? theme.colorScheme.surfaceContainerHighest
+                                    : AppColors.storeHeader,
                                 child: Icon(
                                   Icons.notifications_outlined,
                                   size: 20,
-                                  color: n.isRead ? AppColors.textMuted : Colors.white,
+                                  color: n.isRead ? onSurfaceVariant : Colors.white,
                                 ),
                               ),
                               title: Text(
                                 n.title,
                                 style: TextStyle(
                                   fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700,
+                                  color: onSurface,
                                 ),
                               ),
                               subtitle: Text(
                                 n.message,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: onSurfaceVariant),
                               ),
                               trailing: n.createdAt != null
                                   ? Text(
                                       DateFormat.MMMd().format(n.createdAt!),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 11,
-                                        color: AppColors.textMuted,
+                                        color: onSurfaceVariant,
                                       ),
                                     )
                                   : null,

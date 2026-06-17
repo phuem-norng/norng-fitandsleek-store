@@ -11,9 +11,9 @@ class OrderService {
     return OrderPage.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
-  Future<Map<String, dynamic>> trackOrder(String orderNumber) async {
+  Future<OrderTrackModel> trackOrder(String orderNumber) async {
     final res = await _api.dio.get('/orders/$orderNumber/track');
-    return Map<String, dynamic>.from(res.data as Map);
+    return OrderTrackModel.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<OrderModel> checkout({

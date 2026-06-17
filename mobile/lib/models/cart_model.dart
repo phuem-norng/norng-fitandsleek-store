@@ -9,6 +9,7 @@ class CartItemModel {
     this.product,
     this.size,
     this.color,
+    this.guestKey,
   });
 
   final int id;
@@ -18,8 +19,12 @@ class CartItemModel {
   final ProductModel? product;
   final String? size;
   final String? color;
+  /// Local guest-cart line key (web: `${productId}::size::color`).
+  final String? guestKey;
 
   double get lineTotal => unitPrice * quantity;
+
+  bool get isGuest => guestKey != null && guestKey!.isNotEmpty;
 
   factory CartItemModel.fromJson(Map<String, dynamic> json) {
     final productJson = json['product'];

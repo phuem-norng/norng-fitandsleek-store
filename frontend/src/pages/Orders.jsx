@@ -8,6 +8,7 @@ import { ShoppingCart } from "lucide-react";
 import Swal, { closeSwal, errorAlert, loadingAlert, toastSuccess } from "../lib/swal";
 import ReplacementRequestModal from "../components/ReplacementRequestModal.jsx";
 import ExternalCourierTrackButton from "../components/ExternalCourierTrackButton.jsx";
+import TelegramConnectButton from "../components/TelegramConnectButton.jsx";
 
 function Money({ value }) {
   const n = Number(value || 0);
@@ -187,6 +188,14 @@ export default function Orders() {
                   ) : null}
                 </div>
               ) : null}
+
+              <div className="mt-4">
+                <TelegramConnectButton
+                  orderNumber={o.order_number || String(o.id)}
+                  compact
+                  className="inline-flex items-center gap-2 rounded-full bg-[#229ED9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                />
+              </div>
 
               <div className="mt-4 flex flex-wrap gap-2 justify-end">
                 <button

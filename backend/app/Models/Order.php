@@ -73,4 +73,18 @@ class Order extends Model
     {
         return $this->hasMany(Order::class, 'parent_order_id');
     }
+
+    public static function findByPublicKey(string $key): ?self
+    {
+        $order = static::query()->where('order_number', $key)->first();
+        if ($order) {
+            return $order;
+        }
+
+        if (ctype_digit($key)) {
+            return static::query()->find((int) $key);
+        }
+
+        return null;
+    }
 }

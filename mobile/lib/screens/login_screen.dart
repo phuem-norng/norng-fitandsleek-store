@@ -98,9 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primary, AppColors.primaryLight],
-                    ),
+                    color: AppColors.storeHeader,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Column(

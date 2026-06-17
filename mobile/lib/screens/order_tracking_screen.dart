@@ -1,54 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../l10n/app_strings.dart';
+import '../l10n/l10n_extension.dart';
 import '../models/order_model.dart';
+import '../services/order_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/media_url.dart';
 import '../widgets/navigation/home_store_header.dart';
 import '../widgets/product_image.dart';
 
-class OrderTrackingScreen extends StatelessWidget {
+class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.order});
 
   final OrderModel order;
 
   @override
-  Widget build(BuildContext context) {
-    final currency = NumberFormat.simpleCurrency(name: 'USD');
-    final firstItem = order.items.isNotEmpty ? order.items.first : null;
-    final activeStep = _activeStepIndex(order.status);
+  State<OrderTrackingScreen> createState() => _OrderTrackingScreenState();
+}
 
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InnerPageHeader(
-            title: AppStrings.orderTrackingTitle,
-            subtitle: order.orderNumber,
-            onBack: () => Navigator.of(context).pop(),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (firstItem != null) _ProductSummaryCard(item: firstItem, currency: currency),
-                const SizedBox(height: 16),
-                _TimelineCard(activeStep: activeStep, order: order),
-                const SizedBox(height: 16),
-                _AddressCard(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
+  OrderTrackModel? _track;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final track = await context.read<OrderService>().trackOrder(widget.order.orderNumber);
+      if (!mounted) return;
+      setState(() {
+        _track = track;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
   }
 
   int _activeStepIndex(String status) {
     switch (status.toLowerCase()) {
       case 'pending':
+      case 'pending_payment':
         return 0;
       case 'processing':
       case 'paid':
@@ -62,6 +69,94 @@ class OrderTrackingScreen extends StatelessWidget {
         return 1;
     }
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat.simpleCurrency(name: 'USD');
+    final order = widget.order;
+    final track = _track;
+    final firstItem = order.items.isNotEmpty ? order.items.first : null;
+    final status = track?.status ?? order.status;
+    final activeStep = _activeStepIndex(status);
+
+    return Scaffold(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InnerPageHeader(
+            title: l10n.orderTrackingTitle,
+            subtitle: order.orderNumber,
+            onBack: () => Navigator.of(context).pop(),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_error!, textAlign: TextAlign.center),
+                              const SizedBox(height: 12),
+                              FilledButton(onPressed: _load, child: Text(l10n.retry)),
+                            ],
+                          ),
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            if (firstItem != null)
+                              _ProductSummaryCard(item: firstItem, currency: currency),
+                            if (track?.trackingNumber != null || order.shipment?.trackingCode != null) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${l10n.trackingNumber}: ${track?.trackingNumber ?? order.shipment?.trackingCode}',
+                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                    if (order.shipment?.externalTrackingUrl != null)
+                                      IconButton(
+                                        onPressed: () async {
+                                          final uri = Uri.tryParse(order.shipment!.externalTrackingUrl!);
+                                          if (uri != null) {
+                                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                          }
+                                        },
+                                        icon: const Icon(Icons.open_in_new),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _TimelineCard(activeStep: activeStep, order: order, status: status),
+                            const SizedBox(height: 16),
+                            _AddressCard(
+                              address: track?.shippingAddress ?? order.formattedShippingAddress,
+                            ),
+                          ],
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ProductSummaryCard extends StatelessWidget {
@@ -72,13 +167,15 @@ class _ProductSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final imageUrl = resolveMediaUrl(item.imageUrl);
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
@@ -96,16 +193,19 @@ class _ProductSummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                Text(
+                  item.name,
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: onSurface),
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  'Qty: ${item.quantity}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  l10n.qtyLabel(item.quantity),
+                  style: TextStyle(color: onSurfaceVariant, fontSize: 13),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   currency.format(item.price),
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: onSurface),
                 ),
               ],
             ),
@@ -117,53 +217,64 @@ class _ProductSummaryCard extends StatelessWidget {
 }
 
 class _TimelineCard extends StatelessWidget {
-  const _TimelineCard({required this.activeStep, required this.order});
+  const _TimelineCard({
+    required this.activeStep,
+    required this.order,
+    required this.status,
+  });
 
   final int activeStep;
   final OrderModel order;
+  final String status;
 
-  static const _steps = [
-    ('ការបញ្ជាទិញ', 'Order Placed', Icons.check),
-    ('ការបង់ប្រាក់', 'Payment Confirmed', Icons.check),
-    ('ការវេចខ្ចប់', 'Packing', Icons.inventory_2_outlined),
-    ('ការដឹកជញ្ជូន', 'Shipped', Icons.local_shipping_outlined),
-    ('ការដឹកជញ្ជូនបាន', 'Delivered', Icons.check_circle_outline),
+  static const _stepIcons = [
+    Icons.check,
+    Icons.check,
+    Icons.inventory_2_outlined,
+    Icons.local_shipping_outlined,
+    Icons.check_circle_outline,
   ];
 
   @override
   Widget build(BuildContext context) {
-    final date = order.createdAt ?? '2025-06-15 · 09:30 AM';
+    final l10n = context.l10n;
+    final steps = l10n.orderTrackingSteps;
+    final date = order.createdAt ?? '';
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(AppStrings.orderTrackingHeading, style: Theme.of(context).textTheme.titleMedium),
+          Text(l10n.orderTrackingHeading, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            status.replaceAll('_', ' '),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 20),
-          ...List.generate(_steps.length, (i) {
-            final (km, en, icon) = _steps[i];
+          ...List.generate(steps.length, (i) {
+            final label = steps[i];
+            final icon = _stepIcons[i];
             final completed = i < activeStep;
             final active = i == activeStep;
             final upcoming = i > activeStep;
             return _TimelineStep(
-              km: km,
-              en: en,
+              label: label,
               icon: icon,
               completed: completed,
               active: active,
               upcoming: upcoming,
-              isLast: i == _steps.length - 1,
+              isLast: i == steps.length - 1,
               subtitle: completed
                   ? date
                   : active
-                      ? 'In progress…'
-                      : 'Estimated Jun 16',
+                      ? l10n.inProgress
+                      : l10n.estimatedDelivery,
             );
           }),
         ],
@@ -174,8 +285,7 @@ class _TimelineCard extends StatelessWidget {
 
 class _TimelineStep extends StatelessWidget {
   const _TimelineStep({
-    required this.km,
-    required this.en,
+    required this.label,
     required this.icon,
     required this.completed,
     required this.active,
@@ -184,8 +294,7 @@ class _TimelineStep extends StatelessWidget {
     required this.subtitle,
   });
 
-  final String km;
-  final String en;
+  final String label;
   final IconData icon;
   final bool completed;
   final bool active;
@@ -195,12 +304,16 @@ class _TimelineStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
+    final border = theme.dividerTheme.color ?? theme.colorScheme.outline;
     final nodeColor = completed
         ? AppColors.storeHeader
         : active
             ? AppColors.accent
             : Colors.transparent;
-    final borderColor = upcoming ? AppColors.border : nodeColor;
+    final borderColor = upcoming ? border : nodeColor;
 
     return IntrinsicHeight(
       child: Row(
@@ -219,12 +332,12 @@ class _TimelineStep extends StatelessWidget {
                 child: Icon(
                   completed ? Icons.check : icon,
                   size: 16,
-                  color: completed || active ? Colors.white : AppColors.textMuted,
+                  color: completed || active ? Colors.white : onSurfaceVariant,
                 ),
               ),
               if (!isLast)
                 Expanded(
-                  child: Container(width: 2, color: AppColors.border),
+                  child: Container(width: 2, color: border),
                 ),
             ],
           ),
@@ -236,21 +349,14 @@ class _TimelineStep extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$km / $en',
+                    label,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: active ? AppColors.accent : AppColors.textPrimary,
+                      color: active ? AppColors.accent : onSurface,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: active ? AppColors.textSecondary : AppColors.textMuted,
-                      fontFamily: active ? 'monospace' : null,
-                    ),
-                  ),
+                  Text(subtitle, style: TextStyle(color: onSurfaceVariant, fontSize: 12)),
                 ],
               ),
             ),
@@ -262,37 +368,43 @@ class _TimelineStep extends StatelessWidget {
 }
 
 class _AddressCard extends StatelessWidget {
+  const _AddressCard({this.address});
+
+  final String? address;
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            AppStrings.deliveryAddress,
+            l10n.deliveryAddress,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: AppColors.textMuted,
+              color: onSurfaceVariant,
               letterSpacing: 0.8,
             ),
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.location_on_outlined, size: 18, color: AppColors.textMuted),
-              SizedBox(width: 8),
+              Icon(Icons.location_on_outlined, size: 18, color: onSurfaceVariant),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'ផ្ទះលេខ ១២៣ ផ្លូវ ២៧១ សង្កាត់ទឹកល្អក់ ខណ្ឌទឹកល្អក់ ភ្នំពេញ',
-                  style: TextStyle(color: AppColors.textSecondary, height: 1.45),
+                  address?.trim().isNotEmpty == true ? address! : '—',
+                  style: TextStyle(color: onSurface.withValues(alpha: 0.85), height: 1.45),
                 ),
               ),
             ],

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import TelegramConnectButton from "../TelegramConnectButton.jsx";
 
 /* Inject keyframes once */
 const STYLE_ID = "psa-keyframes";
@@ -99,6 +100,12 @@ export default function PaymentSuccessAlert({ orderNumber = "—", total = "—"
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs">
             A receipt and tracking updates will be saved to your account.
           </p>
+          <div className="mt-4 w-full max-w-sm">
+            <TelegramConnectButton
+              orderNumber={orderNumber !== "—" ? orderNumber : null}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#229ED9] px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+            />
+          </div>
         </div>
 
         {/* ── order details card ── */}

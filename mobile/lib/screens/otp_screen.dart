@@ -88,7 +88,7 @@ class _OtpScreenState extends State<OtpScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(Icons.mark_email_read_outlined, size: 56, color: AppColors.accent),
+              Icon(Icons.mark_email_read_outlined, size: 56, color: AppColors.storeHeader),
               const SizedBox(height: 16),
               Text(
                 'Check your inbox',

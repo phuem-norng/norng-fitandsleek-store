@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../l10n/app_strings.dart';
+import '../../l10n/l10n_extension.dart';
 import '../../theme/app_colors.dart';
 
 enum MobileNavItem {
   home,
+  search,
   shop,
-  cart,
   wishlist,
   account,
 }
@@ -16,34 +16,41 @@ class MobileBottomNav extends StatelessWidget {
     super.key,
     required this.selected,
     required this.onSelect,
-    this.cartBadge = 0,
     this.wishlistBadge = 0,
   });
 
   final MobileNavItem selected;
   final ValueChanged<MobileNavItem> onSelect;
-  final int cartBadge;
   final int wishlistBadge;
 
-  static const _items = [
-    (MobileNavItem.home, AppStrings.navHome, Icons.home_outlined),
-    (MobileNavItem.shop, AppStrings.navShop, Icons.storefront_outlined),
-    (MobileNavItem.cart, AppStrings.navCart, Icons.shopping_cart_outlined),
-    (MobileNavItem.wishlist, AppStrings.navWishlist, Icons.favorite_border),
-    (MobileNavItem.account, AppStrings.navAccount, Icons.person_outline),
+  static const _itemDefs = [
+    (MobileNavItem.home, Icons.home_outlined),
+    (MobileNavItem.search, Icons.search_rounded),
+    (MobileNavItem.shop, Icons.storefront_outlined),
+    (MobileNavItem.wishlist, Icons.favorite_border),
+    (MobileNavItem.account, Icons.person_outline),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final labels = {
+      MobileNavItem.home: l10n.navHome,
+      MobileNavItem.search: l10n.navSearch,
+      MobileNavItem.shop: l10n.navShop,
+      MobileNavItem.wishlist: l10n.navWishlist,
+      MobileNavItem.account: l10n.navAccount,
+    };
+    final surface = Theme.of(context).colorScheme.surface;
+
     return Material(
-      color: Colors.white,
+      color: surface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.08))),
+              color: surface,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.04),
@@ -57,13 +64,12 @@ class MobileBottomNav extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
                 child: Row(
-                  children: _items.map((entry) {
+                  children: _itemDefs.map((entry) {
                     final item = entry.$1;
-                    final label = entry.$2;
-                    final icon = entry.$3;
+                    final label = labels[item]!;
+                    final icon = entry.$2;
                     final active = selected == item;
                     final badge = switch (item) {
-                      MobileNavItem.cart => cartBadge,
                       MobileNavItem.wishlist => wishlistBadge,
                       _ => 0,
                     };
@@ -79,13 +85,6 @@ class MobileBottomNav extends StatelessWidget {
                   }).toList(),
                 ),
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              AppStrings.footerBrand,
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
             ),
           ),
         ],
@@ -111,6 +110,8 @@ class _NavCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final inactive = Theme.of(context).colorScheme.onSurfaceVariant;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -132,7 +133,7 @@ class _NavCell extends StatelessWidget {
                 Icon(
                   icon,
                   size: 22,
-                  color: active ? AppColors.storeHeader : const Color(0xFF71717A),
+                  color: active ? AppColors.storeHeader : inactive,
                 ),
                 if (badge > 0)
                   Positioned(
@@ -150,7 +151,7 @@ class _NavCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                color: active ? AppColors.storeHeader : const Color(0xFF71717A),
+                color: active ? AppColors.storeHeader : inactive,
                 height: 1.1,
               ),
             ),

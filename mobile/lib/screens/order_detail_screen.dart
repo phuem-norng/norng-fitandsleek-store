@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_extension.dart';
 import '../models/order_model.dart';
-import '../theme/app_colors.dart';
 import '../utils/media_url.dart';
 import '../widgets/common/fs_button.dart';
 import '../widgets/product_image.dart';
+import '../widgets/telegram_connect_button.dart';
 import 'order_tracking_screen.dart';
 import 'payment_screen.dart';
+import 'replacement_request_sheet.dart';
 
 class OrderDetailScreen extends StatelessWidget {
   const OrderDetailScreen({super.key, required this.order});
@@ -17,12 +20,18 @@ class OrderDetailScreen extends StatelessWidget {
   bool get _needsPayment =>
       order.paymentStatus == 'pending' && order.paymentMethod == 'bakong_khqr';
 
+  bool get _canReplace {
+    final status = order.status.toLowerCase();
+    return status == 'delivered' || status == 'completed' || status == 'shipped';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final currency = NumberFormat.simpleCurrency(name: 'USD');
 
     return Scaffold(
-      appBar: AppBar(title: Text('Order #${order.orderNumber}')),
+      appBar: AppBar(title: Text('#${order.orderNumber}')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -32,6 +41,8 @@ class OrderDetailScreen extends StatelessWidget {
               _Row('Payment', order.paymentStatus.replaceAll('_', ' ')),
               if (order.paymentMethod != null) _Row('Method', order.paymentMethod!),
               _Row('Total', currency.format(order.total)),
+              if (order.shipment?.trackingCode != null)
+                _Row(l10n.trackingNumber, order.shipment!.trackingCode!),
             ],
           ),
           const SizedBox(height: 16),
@@ -43,9 +54,8 @@ class OrderDetailScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.surfaceCard,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
               ),
               child: Row(
                 children: [
@@ -63,8 +73,17 @@ class OrderDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text('Qty ${item.quantity} · ${currency.format(item.price)}'),
+                        Text(
+                          item.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          '${l10n.qtyLabel(item.quantity)} · ${currency.format(item.price)}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                       ],
                     ),
                   ),
@@ -91,12 +110,41 @@ class OrderDetailScreen extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           FsButton(
-            label: 'Track order',
+            label: l10n.trackOrder,
             icon: Icons.local_shipping_outlined,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => OrderTrackingScreen(order: order)),
             ),
           ),
+          const SizedBox(height: 8),
+          TelegramConnectButton(orderNumber: order.orderNumber),
+          if (_canReplace) ...[
+            const SizedBox(height: 8),
+            FsButton(
+              label: l10n.requestReplacement,
+              variant: FsButtonVariant.outline,
+              icon: Icons.sync_alt_rounded,
+              onPressed: () async {
+                final submitted = await ReplacementRequestSheet.show(context, order: order);
+                if (submitted == true && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.replacementSubmitted)),
+                  );
+                }
+              },
+            ),
+          ],
+          if (order.shipment?.externalTrackingUrl != null) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(order.shipment!.externalTrackingUrl!);
+                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: Text(l10n.openTrackingLink),
+            ),
+          ],
         ],
       ),
     );
@@ -113,9 +161,8 @@ class _InfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceCard,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
       ),
       child: Column(children: children),
     );
@@ -136,7 +183,16 @@ class _Row extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
         ],
       ),
     );

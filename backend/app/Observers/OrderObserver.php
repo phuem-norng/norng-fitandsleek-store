@@ -9,6 +9,7 @@ use App\Models\ShipmentTrackingEvent;
 use App\Models\User;
 use App\Services\LoyaltyService;
 use App\Services\StorefrontEventService;
+use App\Services\TelegramService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -17,7 +18,8 @@ class OrderObserver
 {
     public function __construct(
         private LoyaltyService $loyaltyService,
-        private StorefrontEventService $eventService
+        private StorefrontEventService $eventService,
+        private TelegramService $telegramService
     ) {
     }
 
@@ -58,6 +60,10 @@ class OrderObserver
 
         if ($paymentPaid) {
             $this->sendPaymentSuccessEmails($order);
+        }
+
+        if ($paymentPaid || $statusPaid) {
+            $this->telegramService->notifyOrderPaid($order->fresh(['user', 'items', 'shipment']));
         }
     }
 

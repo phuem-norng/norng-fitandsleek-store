@@ -25,6 +25,10 @@ class FsEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -32,28 +36,31 @@ class FsEmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (minimal)
-              Icon(icon, size: 72, color: AppColors.textMuted)
+              Icon(icon, size: 72, color: onSurfaceVariant)
             else
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.08),
+                  color: AppColors.storeHeader.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 40, color: AppColors.accentDark),
+                child: Icon(icon, size: 40, color: AppColors.storeHeader),
               ),
             const SizedBox(height: 20),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: onSurface,
+              ),
             ),
             if (subtitleKm != null) ...[
               const SizedBox(height: 8),
               Text(
                 subtitleKm!,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                style: theme.textTheme.bodyMedium?.copyWith(color: onSurfaceVariant),
               ),
             ],
             if (subtitle != null) ...[
@@ -61,7 +68,7 @@ class FsEmptyState extends StatelessWidget {
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+                style: theme.textTheme.bodyMedium?.copyWith(color: onSurfaceVariant),
               ),
             ],
             if (actionLabel != null && onAction != null) ...[

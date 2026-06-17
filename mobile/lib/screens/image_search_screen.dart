@@ -175,7 +175,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              childAspectRatio: 0.68,
+              childAspectRatio: productCardGridAspectRatio,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
@@ -185,9 +185,14 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                 return Consumer2<AuthProvider, WishlistProvider>(
                   builder: (context, auth, wishlist, _) {
                     return ProductCard(
+                      layout: ProductCardLayout.imageFocus,
                       product: product,
-                      isWishlisted: auth.isLoggedIn && wishlist.has(product.id),
-                      onWishlistToggle: auth.isLoggedIn ? () => wishlist.toggle(product.id) : null,
+                      isWishlisted: wishlist.has(product.id),
+                      onWishlistToggle: () => wishlist.toggle(
+                        product.id,
+                        isLoggedIn: auth.isLoggedIn,
+                        product: product,
+                      ),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => ProductDetailScreen(

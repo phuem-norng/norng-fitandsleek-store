@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import TelegramConnectButton from "../TelegramConnectButton.jsx";
 
 /* ── brand tokens ── */
 const KHQR_RED  = "#C0272D";
@@ -231,15 +232,21 @@ export default function KhqrSuccessModal({
           </div>
 
           {/* close / view orders button */}
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="ks-fade-3 w-full rounded-2xl py-3 text-sm font-bold text-white shadow-md transition-opacity hover:opacity-90"
-              style={{ background: `linear-gradient(135deg, ${KHQR_RED}, #8b1a1e)` }}
-            >
-              View My Orders
-            </button>
-          )}
+          <div className="ks-fade-3 space-y-3">
+            <TelegramConnectButton
+              orderNumber={orderNumber !== "—" ? orderNumber : null}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#229ED9] px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+            />
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="w-full rounded-2xl py-3 text-sm font-bold text-white shadow-md transition-opacity hover:opacity-90"
+                style={{ background: `linear-gradient(135deg, ${KHQR_RED}, #8b1a1e)` }}
+              >
+                View My Orders
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

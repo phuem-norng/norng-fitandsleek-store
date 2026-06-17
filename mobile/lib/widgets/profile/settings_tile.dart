@@ -22,10 +22,13 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive ? AppColors.error : AppColors.primary;
+    final colorScheme = Theme.of(context).colorScheme;
+    final cardColor = Theme.of(context).cardTheme.color ?? colorScheme.surface;
+    final color = destructive ? AppColors.error : colorScheme.onSurface;
+    final onSurfaceVariant = colorScheme.onSurfaceVariant;
 
     return Material(
-      color: AppColors.surfaceCard,
+      color: cardColor,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -59,7 +62,7 @@ class SettingsTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: onSurfaceVariant),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -70,7 +73,7 @@ class SettingsTile extends StatelessWidget {
               trailing ??
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: AppColors.textMuted,
+                    color: onSurfaceVariant,
                   ),
             ],
           ),

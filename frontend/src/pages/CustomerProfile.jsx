@@ -12,6 +12,7 @@ import ReplacementRequestModal, { ReplacementCaseItemsList } from "../components
 import OrderTrackingCard from "../components/OrderTrackingCard.jsx";
 import TrustedDeviceSessionsList from "../components/security/TrustedDeviceSessionsList.jsx";
 import ExternalCourierTrackButton from "../components/ExternalCourierTrackButton.jsx";
+import TelegramAccountConnectCard from "../components/profile/TelegramAccountConnectCard.jsx";
 
 const createEmptyAddress = () => ({
   label: "Home",
@@ -1134,6 +1135,10 @@ export default function CustomerProfile() {
                 <div className="space-y-6">
                   <div className="border-b border-gray-200 pb-6">
                     <TwoFactorSettings variant="customer" />
+                  </div>
+
+                  <div className="border-b border-gray-200 pb-6">
+                    <TelegramAccountConnectCard t={t} />
                   </div>
 
                   <div className="border-b border-gray-200 pb-6">

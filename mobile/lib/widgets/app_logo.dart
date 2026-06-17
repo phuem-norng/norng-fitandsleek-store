@@ -62,7 +62,7 @@ class _AppLogoState extends State<AppLogo> {
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: widget.onColoredHeader ? Alignment.center : Alignment.centerLeft,
       child: SizedBox(
         height: widget.height,
         width: widget.height * 2.75,

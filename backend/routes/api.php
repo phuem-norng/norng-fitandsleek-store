@@ -37,7 +37,8 @@ use App\Http\Controllers\Api\Storefront\TermsPageController;
 use App\Http\Controllers\Api\Storefront\CookiesPageController;
 use App\Http\Controllers\Api\Storefront\DeliveryFeeController;
 use App\Http\Controllers\Api\Storefront\PublicMediaController;
-use App\Http\Controllers\Api\Storefront\PersonalizationController;
+use App\Http\Controllers\Api\Storefront\TelegramController;
+use App\Http\Controllers\Api\TelegramWebhookController;
 use App\Http\Controllers\Api\Admin\ChatbotSettingsController;
 
 // Admin
@@ -174,6 +175,10 @@ Route::post('/vision/search', [ImageSearchController::class, 'search'])->middlew
 // Public shipment tracking
 Route::get('/shipments/track', [ShipmentTrackingController::class, 'track']);
 
+Route::get('/telegram/settings', [TelegramController::class, 'settings']);
+Route::post('/telegram/webhook/{secret}', [TelegramWebhookController::class, 'handle'])
+    ->middleware('throttle:api-sensitive');
+
 // Contact Form (public)
 Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:api-sensitive');
 Route::get('/legal-content', [LegalContentController::class, 'index']);
@@ -208,6 +213,8 @@ Route::middleware(['auth:sanctum', 'device.bound'])->group(function () {
     Route::post('/checkout', [OrderController::class, 'checkout']);
     Route::get('/orders', [OrderController::class, 'myOrders']);
     Route::get('/orders/{orderNumber}/track', [OrderController::class, 'trackOrder']);
+    Route::get('/telegram/status', [TelegramController::class, 'status']);
+    Route::get('/telegram/orders/{orderNumber}/link', [TelegramController::class, 'orderLink']);
     Route::get('/orders/{order}', [PaymentController::class, 'show']);
 
     Route::post('/driver/update-status', [ShipmentDriverController::class, 'updateStatus'])

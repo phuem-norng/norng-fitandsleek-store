@@ -68,7 +68,7 @@ class FsButton extends StatelessWidget {
         return SizedBox(
           width: expand ? double.infinity : null,
           child: FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.storeHeader),
             onPressed: enabled ? onPressed : null,
             child: child,
           ),
@@ -76,7 +76,11 @@ class FsButton extends StatelessWidget {
       case FsButtonVariant.primary:
         return SizedBox(
           width: expand ? double.infinity : null,
-          child: FilledButton(onPressed: enabled ? onPressed : null, child: child),
+          child: FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.storeHeader),
+            onPressed: enabled ? onPressed : null,
+            child: child,
+          ),
         );
     }
   }
