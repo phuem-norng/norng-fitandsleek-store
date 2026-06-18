@@ -1,0 +1,40 @@
+# Bakong NBC proxy + Cloudflare named tunnel (fitandsleek-bakong-proxy).
+#
+# Requires Cambodia egress (Mac in Cambodia, or VPS in Cambodia).
+# Cloudflare route must use http://127.0.0.1:8787 (cloudflared shares bakong-proxy network).
+#
+#   cp env.docker.example .env.docker   # fill secrets — do not commit
+#   docker compose --env-file .env.docker up -d
+#   docker compose --env-file .env.docker logs -f cloudflared
+#   docker compose --env-file .env.docker down
+
+services:
+  bakong-proxy:
+    image: php:8.2-cli-alpine
+    container_name: fitandsleek_bakong_proxy
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+    environment:
+      BAKONG_TOKEN: ${BAKONG_TOKEN:?Set BAKONG_TOKEN in .env.docker}
+      BAKONG_PROXY_SECRET: ${BAKONG_PROXY_SECRET:-}
+      BAKONG_BASE_URL: ${BAKONG_BASE_URL:-https://api-bakong.nbc.gov.kh}
+    command: php -S 0.0.0.0:8787 -t /app
+    ports:
+      - "${BAKONG_PROXY_PORT:-8787}:8787"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fitandsleek_bakong_tunnel
+    restart: unless-stopped
+    depends_on:
+      bakong-proxy:
+        condition: service_started
+    network_mode: service:bakong-proxy
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env.docker}
