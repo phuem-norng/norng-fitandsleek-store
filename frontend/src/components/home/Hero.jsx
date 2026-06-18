@@ -8,12 +8,9 @@ import { filterStorefrontMedia } from "../../lib/catalogContent.js";
 
 function HeroPlaceholder() {
   return (
-    <section
-      className="container-safe fs-hero-shell"
-      aria-label="Hero banner"
-    >
+    <section className="fs-hero-shell" aria-label="Hero banner">
       <div
-        className="fs-hero-banner relative overflow-hidden border border-zinc-200/80 bg-gradient-to-br from-zinc-300 via-zinc-200 to-zinc-100"
+        className="fs-hero-banner relative overflow-hidden bg-gradient-to-br from-zinc-300 via-zinc-200 to-zinc-100"
         aria-hidden
       >
         <div className="fs-hero-banner__frame" />
@@ -267,8 +264,8 @@ export default function Hero() {
 
   if (loading) {
     return (
-      <section className="container-safe fs-hero-shell">
-        <div className="fs-hero-banner relative overflow-hidden border border-zinc-200 bg-gradient-to-r from-zinc-100 via-zinc-50 to-white animate-pulse">
+      <section className="fs-hero-shell">
+        <div className="fs-hero-banner relative overflow-hidden bg-gradient-to-r from-zinc-100 via-zinc-50 to-white animate-pulse">
           <div className="fs-hero-banner__frame">
           <div className="absolute inset-0 flex items-end p-4 md:p-10">
             <div className="w-full max-w-xl">
@@ -334,8 +331,8 @@ export default function Hero() {
   };
 
   return (
-    <section className="container-safe fs-hero-shell">
-      <div className="fs-hero-banner relative overflow-hidden bg-white shadow-sm ring-1 ring-black/5">
+    <section className="fs-hero-shell">
+      <div className="fs-hero-banner relative overflow-hidden bg-zinc-900">
         <div
           className="fs-hero-banner__frame overflow-hidden cursor-grab active:cursor-grabbing"
           onTouchStart={handleTouchStart}
@@ -380,7 +377,7 @@ export default function Hero() {
                   animate="visible"
                   exit="exit"
                   variants={textContainerVariants}
-                  className="p-4 md:p-6 lg:p-10 max-w-xl text-white w-full"
+                  className="p-6 sm:p-8 md:p-10 lg:p-14 xl:p-16 max-w-2xl text-white w-full"
                 >
                   {active.show_badge && active.badge ? (
                     <motion.span

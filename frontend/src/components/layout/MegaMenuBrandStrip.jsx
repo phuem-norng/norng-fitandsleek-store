@@ -27,7 +27,7 @@ function BrandTile({ name, image }) {
 }
 
 /**
- * Homepage-style brand/category logo row for the mega menu "Brands & Categories" panel.
+ * Homepage-style brand logo row for the mega menu "Brands" panel.
  */
 export default function MegaMenuBrandStrip({ items = [], onItemClick, emptyMessage = "Not available yet" }) {
   const scrollerRef = useRef(null);

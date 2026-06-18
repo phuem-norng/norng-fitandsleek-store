@@ -137,16 +137,12 @@ const defaultLeftMenu = [
  ],
  },
  {
- title: 'Brands & Categories',
+ title: 'Brands',
  items: [
- { label: 'Brand Logos', to: '/search', image: '/placeholder.svg' },
- { label: 'Categories', to: '/search', image: '/placeholder.svg' },
  { label: 'Nike', to: '/search?q=Nike', image: '/placeholder.svg' },
  { label: 'Adidas', to: '/search?q=Adidas', image: '/placeholder.svg' },
  { label: 'Puma', to: '/search?q=Puma', image: '/placeholder.svg' },
  { label: 'Zara', to: '/search?q=Zara', image: '/placeholder.svg' },
- { label: 'Clothes', to: '/search?q=Clothes', image: '/placeholder.svg' },
- { label: 'Accessories', to: '/search?q=Accessories', image: '/placeholder.svg' },
  ],
  },
 ];

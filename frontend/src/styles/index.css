@@ -329,40 +329,38 @@ select:focus {
   }
 }
 
+/* Nike-style edge-to-edge hero: full width, no side/top gutter, viewport height below chrome */
+.fs-site {
+  --fs-storefront-chrome-mobile: 6.5rem;
+  --fs-storefront-chrome-desktop: 8.25rem;
+}
+
 .fs-hero-shell {
-  padding-top: clamp(0.375rem, 0.8vw, 0.875rem);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .fs-hero-banner {
-  border-radius: clamp(0.75rem, 1.2vw, 1.25rem);
+  width: 100%;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .fs-hero-banner__frame {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  min-height: 20rem;
+  aspect-ratio: auto;
+  min-height: calc(100svh - var(--fs-storefront-chrome-mobile));
+  height: calc(100svh - var(--fs-storefront-chrome-mobile));
 }
 
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
   .fs-hero-banner__frame {
-    aspect-ratio: 3 / 2;
-    min-height: 34rem;
-  }
-}
-
-@media (min-width: 768px) {
-  .fs-hero-banner__frame {
-    aspect-ratio: auto;
-    min-height: clamp(32rem, 52vh, 44rem);
-    height: clamp(32rem, 52vh, 44rem);
-  }
-}
-
-@media (min-width: 1280px) {
-  .fs-hero-banner__frame {
-    min-height: clamp(36rem, 58vh, 52rem);
-    height: clamp(36rem, 58vh, 52rem);
+    min-height: calc(100svh - var(--fs-storefront-chrome-desktop));
+    height: calc(100svh - var(--fs-storefront-chrome-desktop));
   }
 }
 

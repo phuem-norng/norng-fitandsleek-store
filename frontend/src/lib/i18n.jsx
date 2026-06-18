@@ -53,7 +53,7 @@ const translations = {
     newProduct: 'New Product',
     productTrending: 'Product Trending',
     productDiscounts: 'Product Discounts',
-    brandsCategories: 'Brands & Categories',
+    brandsCategories: 'Brands',
     megaMenuNothingYet: 'Not available yet',
 
     // Navigation dropdowns
@@ -726,7 +726,7 @@ const translations = {
     newProduct: 'ផលិតផលថ្មី',
     productTrending: 'ផលិតផលពេញនិយម',
     productDiscounts: 'ផលិតផលបញ្ចុះតម្លៃ',
-    brandsCategories: 'ម៉ាក និងប្រភេទ',
+    brandsCategories: 'ម៉ាក',
     megaMenuNothingYet: 'មិនទាន់មាន',
 
     // Navigation dropdowns

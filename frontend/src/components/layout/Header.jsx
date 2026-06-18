@@ -14,6 +14,7 @@ import LoginDialog from "../dialogs/LoginDialog.jsx";
 import RegisterDialog from "../dialogs/RegisterDialog.jsx";
 import SmartSearchModal from "../search/SmartSearchModal.jsx";
 import MegaMenuEmptyState from "./MegaMenuEmptyState.jsx";
+import MegaMenuScrollArea from "./MegaMenuScrollArea.jsx";
 import { storefrontSearchUrl as navSearch } from "../../lib/storefrontNavLinks.js";
 import { mergeTopNavDropdowns } from "../../lib/defaultTopNavDropdowns.js";
 import { resolveHeaderChromeStyle } from "../../lib/storefrontChrome.js";
@@ -376,7 +377,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     newProduct: [],
     trending: [],
     discounts: [],
-    brandsCategories: [],
+    brands: [],
   });
 
   useEffect(() => {
@@ -485,14 +486,10 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     {
       title: t('brandsCategories'),
       items: [
-        { label: t('brandLogos'), to: '/search', image: '/placeholder.svg' },
-        { label: t('categoriesLabel'), to: '/search', image: '/placeholder.svg' },
         { label: 'Nike', to: '/search?q=Nike', image: '/placeholder.svg' },
         { label: 'Adidas', to: '/search?q=Adidas', image: '/placeholder.svg' },
         { label: 'Puma', to: '/search?q=Puma', image: '/placeholder.svg' },
         { label: 'Zara', to: '/search?q=Zara', image: '/placeholder.svg' },
-        { label: t('clothes'), to: '/search?q=Clothes', image: '/placeholder.svg' },
-        { label: t('accessories'), to: '/search?q=Accessories', image: '/placeholder.svg' },
       ],
     },
   ];
@@ -508,17 +505,15 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     let mounted = true;
     const loadAutoMenu = async () => {
       try {
-        const [productsRes, discountsRes, brandsRes, categoriesRes] = await Promise.all([
+        const [productsRes, discountsRes, brandsRes] = await Promise.all([
           api.get("/products"),
           api.get("/products/discounts"),
           api.get("/brands"),
-          api.get("/categories"),
         ]);
 
         const products = productsRes?.data?.data || [];
         const discounts = discountsRes?.data?.data || [];
         const brands = brandsRes?.data?.data || [];
-        const categories = Array.isArray(categoriesRes?.data) ? categoriesRes.data : [];
 
         const newProductItems = products.slice(0, 6).map((p) => ({
           label: p.name,
@@ -544,18 +539,12 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
           image: b.logo_url || null,
         }));
 
-        const categoryItems = categories.map((c) => ({
-          label: c.name,
-          to: c.slug ? `/category/${c.slug}` : c.id ? `/search?category_id=${c.id}` : "/search",
-          image: c.image_url || null,
-        }));
-
         if (mounted) {
           setAutoLeftMenu({
             newProduct: newProductItems,
             trending: trendingItems.length ? trendingItems : newProductItems,
             discounts: discountItems,
-            brandsCategories: [...brandItems, ...categoryItems],
+            brands: brandItems,
           });
         }
       } catch {
@@ -564,7 +553,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             newProduct: [],
             trending: [],
             discounts: [],
-            brandsCategories: [],
+            brands: [],
           });
         }
       }
@@ -589,6 +578,11 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     return merged;
   };
 
+  const isBrandsSectionTitle = (title) => {
+    const key = String(title || "").toLowerCase();
+    return key === "brands" || key === "brands & categories" || key === "brands and categories";
+  };
+
   const leftMenuWithAuto = useMemo(() => {
     const normalized = (leftMenu || []).map((section) => {
       const title = String(section?.title || "").toLowerCase();
@@ -601,14 +595,16 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       if (title === "product discounts") {
         return { ...section, items: autoLeftMenu.discounts };
       }
-      if (title === "brands & categories") {
-        return { ...section, items: autoLeftMenu.brandsCategories };
+      if (isBrandsSectionTitle(title)) {
+        return { ...section, title: t("brandsCategories"), items: autoLeftMenu.brands };
       }
       return section;
     });
 
     const findByTitle = (title) =>
       normalized.find((s) => String(s?.title || "").toLowerCase() === title);
+
+    const findBrandsSection = () => normalized.find((s) => isBrandsSectionTitle(s?.title));
 
     const ensureSection = (title, fallbackItems, autoItems) => {
       const existing = findByTitle(title);
@@ -624,23 +620,43 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       };
     };
 
+    const ensureBrandsSection = (fallbackItems, autoItems) => {
+      const existing = findBrandsSection();
+      if (existing) {
+        return {
+          ...existing,
+          title: t("brandsCategories"),
+          items: autoItems || fallbackItems,
+        };
+      }
+      return {
+        title: t("brandsCategories"),
+        items: autoItems || fallbackItems,
+      };
+    };
+
     const defaultByTitle = (title) =>
       (defaultLeftMenu || []).find((s) => String(s?.title || "").toLowerCase() === title)?.items || [];
+
+    const defaultBrandsItems =
+      (defaultLeftMenu || []).find((s) => isBrandsSectionTitle(s?.title))?.items || [];
 
     const ensured = [
       ensureSection("new product", defaultByTitle("new product"), autoLeftMenu.newProduct),
       ensureSection("product trending", defaultByTitle("product trending"), autoLeftMenu.trending),
       ensureSection("product discounts", defaultByTitle("product discounts"), autoLeftMenu.discounts),
-      ensureSection("brands & categories", defaultByTitle("brands & categories"), autoLeftMenu.brandsCategories),
+      ensureBrandsSection(defaultBrandsItems, autoLeftMenu.brands),
     ];
 
     const ensuredTitles = new Set(ensured.map((s) => String(s?.title || "").toLowerCase()));
     const remaining = normalized.filter(
-      (s) => !ensuredTitles.has(String(s?.title || "").toLowerCase())
+      (s) =>
+        !ensuredTitles.has(String(s?.title || "").toLowerCase()) &&
+        !isBrandsSectionTitle(s?.title)
     );
 
     return [...remaining, ...ensured];
-  }, [leftMenu, autoLeftMenu]);
+  }, [leftMenu, autoLeftMenu, t]);
 
   const getLeftMenuTitle = (title) => {
     const key = String(title || '').toLowerCase();
@@ -648,7 +664,9 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
       'new product': 'newProduct',
       'product trending': 'productTrending',
       'product discounts': 'productDiscounts',
+      'brands': 'brandsCategories',
       'brands & categories': 'brandsCategories',
+      'brands and categories': 'brandsCategories',
     };
     const tKey = map[key];
     return tKey ? t(tKey) : title;
@@ -660,10 +678,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
     setShowLeftMenu(false);
   }, [location.pathname, location.search]);
 
-  const isBrandsCategoriesSection = (section) => {
-    const key = String(section?.title || "").toLowerCase();
-    return key === "brands & categories" || key === "brands and categories";
-  };
+  const isBrandsSection = (section) => isBrandsSectionTitle(section?.title);
 
   const renderMegaMenuItems = (activeItems, { compact = false } = {}) => {
     const emptyLabel = t("megaMenuNothingYet") || "មិនទាន់មាន";
@@ -673,7 +688,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
 
     if (compact) {
       return (
-        <div className="max-h-[440px] overflow-y-auto pr-2 scrollbar-hide">
+        <MegaMenuScrollArea className="max-h-[min(360px,60vh)]">
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
             {activeItems.map((item, i) => (
               <Link
@@ -704,12 +719,12 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
               </Link>
             ))}
           </div>
-        </div>
+        </MegaMenuScrollArea>
       );
     }
 
     return (
-      <div className="max-h-[440px] overflow-y-auto pr-2 scrollbar-hide">
+      <MegaMenuScrollArea className="max-h-[min(360px,60vh)]">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {activeItems.map((item, i) => {
             const isBrandLink = String(item.to || "").startsWith("/brands/");
@@ -749,7 +764,7 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
             );
           })}
         </div>
-      </div>
+      </MegaMenuScrollArea>
     );
   };
 
@@ -857,190 +872,190 @@ export default function Header({ onOpenCart, onOpenNotifications, notificationsU
         </button>
       </div>
 
-      {/* Desktop: 3-column grid — scales on 13"–ultrawide (must stay hidden below lg) */}
+      {/* Desktop header + nav + mega menu share one hover zone */}
       <div
-        className="fs-header-bar fs-header-bar--desktop hidden min-h-[5rem] py-1.5 lg:grid"
+        className="hidden lg:block relative"
         onMouseLeave={() => setShowLeftMenu(false)}
       >
-        <div className="flex min-w-0 items-center justify-start gap-1 lg:gap-1.5">
-          {headerSettings.search_enabled && (
-            <>
-              <button
-                type="button"
-                className="fs-btn fs-btn-sm bg-transparent hover:bg-transparent hidden lg:flex shrink-0 border-0"
-                onMouseEnter={() => setShowLeftMenu(true)}
-              >
-                <Menu className="w-4 h-4" />
-                <span className="hidden xl:inline">{t('menu')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSearchDialog(true)}
-                className="fs-header-bar__search min-w-0 shrink"
-              >
-                <div className="relative">
-                  <div className="fs-header-search w-full h-9 rounded-full border pl-10 pr-10 text-xs outline-none flex items-center">
-                    <span className="truncate font-medium">{searchPlaceholder}</span>
+        <div className="fs-header-bar fs-header-bar--desktop min-h-[5rem] py-1.5 lg:grid">
+          <div className="flex min-w-0 items-center justify-start gap-1 lg:gap-1.5">
+            {headerSettings.search_enabled && (
+              <>
+                <button
+                  type="button"
+                  className="fs-btn fs-btn-sm bg-transparent hover:bg-transparent hidden lg:flex shrink-0 border-0"
+                  onMouseEnter={() => setShowLeftMenu(true)}
+                >
+                  <Menu className="w-4 h-4" />
+                  <span className="hidden xl:inline">{t('menu')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSearchDialog(true)}
+                  className="fs-header-bar__search min-w-0 shrink"
+                >
+                  <div className="relative">
+                    <div className="fs-header-search w-full h-9 rounded-full border pl-10 pr-10 text-xs outline-none flex items-center">
+                      <span className="truncate font-medium">{searchPlaceholder}</span>
+                    </div>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                      <Icon name="search" />
+                    </span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <Camera className="w-3.5 h-3.5" />
+                    </span>
                   </div>
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2">
-                    <Icon name="search" />
-                  </span>
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <Camera className="w-3.5 h-3.5" />
-                  </span>
+                </button>
+              </>
+            )}
+          </div>
+
+          <Link to="/" className="flex shrink-0 justify-self-center px-1">
+            <Logo className="fs-header-bar__logo" src={headerSettings.logo_url || "/logo.png"} />
+          </Link>
+
+          <div className="fs-header-actions flex min-w-0 items-center justify-end gap-1 lg:gap-1.5 overflow-visible">
+            {headerSettings.language_enabled && (
+              <div className="relative group flex">
+                <button
+                  onClick={toggleLanguage}
+                  className="fs-lang-pill"
+                  title={t('language')}
+                  aria-label={t('language')}
+                >
+                  <img
+                    src={language === "km" ? "https://flagcdn.com/kh.svg" : "https://flagcdn.com/gb.svg"}
+                    alt=""
+                    className="fs-lang-pill__flag"
+                    aria-hidden="true"
+                  />
+                  <span>{language === "km" ? "KM" : "EN"}</span>
+                </button>
+                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 pointer-events-none">
+                  {language === "km" ? t('english') : t('khmer')}
                 </div>
-              </button>
-            </>
-          )}
-        </div>
-
-        <Link to="/" className="flex shrink-0 justify-self-center px-1">
-          <Logo className="fs-header-bar__logo" src={headerSettings.logo_url || "/logo.png"} />
-        </Link>
-
-        <div className="fs-header-actions flex min-w-0 items-center justify-end gap-1 lg:gap-1.5 overflow-visible">
-          {headerSettings.language_enabled && (
-            <div className="relative group flex">
-              <button
-                onClick={toggleLanguage}
-                className="fs-lang-pill"
-                title={t('language')}
-                aria-label={t('language')}
-              >
-                <img
-                  src={language === "km" ? "https://flagcdn.com/kh.svg" : "https://flagcdn.com/gb.svg"}
-                  alt=""
-                  className="fs-lang-pill__flag"
-                  aria-hidden="true"
-                />
-                <span>{language === "km" ? "KM" : "EN"}</span>
-              </button>
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 pointer-events-none">
-                {language === "km" ? t('english') : t('khmer')}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Desktop dark mode toggle */}
-          <button
-            onClick={toggleStorefrontMode}
-            className="fs-iconbtn-header group"
-            aria-label={storefrontMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
-          >
-            {storefrontMode === "dark"
-              ? <Sun className="w-[18px] h-[18px]" strokeWidth={2} />
-              : <Moon className="w-[18px] h-[18px]" strokeWidth={2} />
-            }
-          </button>
-
-          <span className="fs-header-divider" aria-hidden="true" />
-
-          <button
-            onClick={onOpenNotifications}
-            className="fs-iconbtn-header group"
-            aria-label={t('notifications')}
-          >
-            <Bell className="w-[18px] h-[18px]" strokeWidth={2} />
-            <Badge value={notificationsUnread} accent />
-          </button>
-
-          {headerSettings.wishlist_enabled && (
-            <Link
-              className="fs-iconbtn-header group"
-              to="/search?tab=wishlist"
-              aria-label={t('wishlist')}
-            >
-              <Icon name="heart" />
-              <Badge value={wishlist.count} accent />
-            </Link>
-          )}
-
-          {headerSettings.cart_enabled && (
+            {/* Desktop dark mode toggle */}
             <button
+              onClick={toggleStorefrontMode}
               className="fs-iconbtn-header group"
-              onClick={onOpenCart}
-              aria-label={t('cart')}
+              aria-label={storefrontMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={storefrontMode === "dark" ? "Light mode" : "Dark mode"}
             >
-              <Icon name="bag" />
-              <Badge value={count} />
+              {storefrontMode === "dark"
+                ? <Sun className="w-[18px] h-[18px]" strokeWidth={2} />
+                : <Moon className="w-[18px] h-[18px]" strokeWidth={2} />
+              }
             </button>
-          )}
 
-          <span className="fs-header-divider" aria-hidden="true" />
+            <span className="fs-header-divider" aria-hidden="true" />
 
-          <ProfileMenu user={user} onLogout={logout} t={t} />
+            <button
+              onClick={onOpenNotifications}
+              className="fs-iconbtn-header group"
+              aria-label={t('notifications')}
+            >
+              <Bell className="w-[18px] h-[18px]" strokeWidth={2} />
+              <Badge value={notificationsUnread} accent />
+            </button>
 
-          {user ? null : (
-            <div className="hidden xl:flex items-center gap-2 ml-1 shrink-0">
-              <button
-                onClick={() => setShowLoginDialog(true)}
-                className="fs-btn fs-btn-secondary fs-btn-sm"
+            {headerSettings.wishlist_enabled && (
+              <Link
+                className="fs-iconbtn-header group"
+                to="/search?tab=wishlist"
+                aria-label={t('wishlist')}
               >
-                {t('login')}
-              </button>
+                <Icon name="heart" />
+                <Badge value={wishlist.count} accent />
+              </Link>
+            )}
+
+            {headerSettings.cart_enabled && (
               <button
-                onClick={() => setShowRegisterDialog(true)}
-                className="fs-btn fs-btn-primary fs-btn-sm"
+                className="fs-iconbtn-header group"
+                onClick={onOpenCart}
+                aria-label={t('cart')}
               >
-                {t('register')}
+                <Icon name="bag" />
+                <Badge value={count} />
               </button>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
 
-      {/* Desktop Navigation Row */}
-      <div className="hidden lg:block border-b fs-chrome-border relative">
-        <NavBar navItems={navItems} />
-      </div>
+            <span className="fs-header-divider" aria-hidden="true" />
 
-      {/* Desktop Left Mega Menu Panel */}
-      {showLeftMenu && (
-        <div
-          className="hidden lg:block absolute left-0 right-0 top-16 bg-white shadow-xl border-t border-zinc-200/60 z-40"
-          onMouseEnter={() => setShowLeftMenu(true)}
-          onMouseLeave={() => setShowLeftMenu(false)}
-        >
-          <div className="container-safe py-6">
-            {leftMenuWithAuto.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
-                <div className="max-h-[440px] overflow-y-auto pr-3 scrollbar-hide border-r border-zinc-100 space-y-1">
-                  {leftMenuWithAuto.map((section, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onMouseEnter={() => setActiveLeftSection(idx)}
-                      className={cn(
-                        "relative w-full text-left px-4 py-3 rounded-lg fs-nav-link-typo",
-                        activeLeftSection === idx
-                          ? "bg-zinc-50 text-zinc-900"
-                          : "text-zinc-700 hover:bg-zinc-100/70 hover:text-zinc-900"
-                      )}
-                    >
-                      {activeLeftSection === idx && (
-                        <span className="absolute left-0 top-0 h-full w-1 bg-zinc-900 rounded-r" />
-                      )}
-                      <span className="block whitespace-normal leading-tight">
-                        {getLeftMenuTitle(section.title)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+            <ProfileMenu user={user} onLogout={logout} t={t} />
 
-                <div className="min-w-0">
-                  <div className="mb-4 fs-nav-link-typo text-zinc-500">
-                    {getLeftMenuTitle(leftMenuWithAuto[activeLeftSection]?.title)}
-                  </div>
-                  {renderMegaMenuItems(leftMenuWithAuto[activeLeftSection]?.items || [], {
-                    compact: isBrandsCategoriesSection(leftMenuWithAuto[activeLeftSection]),
-                  })}
-                </div>
+            {user ? null : (
+              <div className="hidden xl:flex items-center gap-2 ml-1 shrink-0">
+                <button
+                  onClick={() => setShowLoginDialog(true)}
+                  className="fs-btn fs-btn-secondary fs-btn-sm"
+                >
+                  {t('login')}
+                </button>
+                <button
+                  onClick={() => setShowRegisterDialog(true)}
+                  className="fs-btn fs-btn-primary fs-btn-sm"
+                >
+                  {t('register')}
+                </button>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
-      )}
+
+        {/* Desktop Navigation Row */}
+        <div className="border-b fs-chrome-border relative">
+          <NavBar navItems={navItems} />
+        </div>
+
+        {/* Desktop Left Mega Menu Panel — height fits content */}
+        {showLeftMenu && (
+          <div className="absolute left-0 right-0 top-full z-40 pt-px">
+            <div className="bg-white shadow-xl border-t border-zinc-200/60">
+              <div className="container-safe py-4">
+                {leftMenuWithAuto.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-5 items-start">
+                    <div className="max-h-[min(440px,70vh)] overflow-y-auto pr-3 scrollbar-hide border-r border-zinc-100 space-y-1">
+                      {leftMenuWithAuto.map((section, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onMouseEnter={() => setActiveLeftSection(idx)}
+                          className={cn(
+                            "relative w-full text-left px-4 py-3 rounded-lg fs-nav-link-typo",
+                            activeLeftSection === idx
+                              ? "bg-zinc-50 text-zinc-900"
+                              : "text-zinc-700 hover:bg-zinc-100/70 hover:text-zinc-900"
+                          )}
+                        >
+                          {activeLeftSection === idx && (
+                            <span className="absolute left-0 top-0 h-full w-1 bg-zinc-900 rounded-r" />
+                          )}
+                          <span className="block whitespace-normal leading-tight">
+                            {getLeftMenuTitle(section.title)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="mb-3 fs-nav-link-typo text-zinc-500">
+                        {getLeftMenuTitle(leftMenuWithAuto[activeLeftSection]?.title)}
+                      </div>
+                      {renderMegaMenuItems(leftMenuWithAuto[activeLeftSection]?.items || [], {
+                        compact: isBrandsSection(leftMenuWithAuto[activeLeftSection]),
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <SmartSearchModal
         open={showSearchDialog}

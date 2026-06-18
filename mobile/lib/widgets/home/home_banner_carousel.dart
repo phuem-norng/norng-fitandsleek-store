@@ -63,12 +63,13 @@ class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: SizedBox(
-        width: double.infinity,
-        height: 180,
-        child: Stack(
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final bannerHeight = (viewportHeight * 0.58).clamp(280.0, 520.0);
+
+    return SizedBox(
+      width: double.infinity,
+      height: bannerHeight,
+      child: Stack(
           fit: StackFit.expand,
           children: [
             PageView.builder(
@@ -106,7 +107,6 @@ class _HomeBannerCarouselState extends State<HomeBannerCarousel> {
               ),
           ],
         ),
-      ),
     );
   }
 }
